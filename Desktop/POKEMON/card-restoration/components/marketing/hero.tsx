@@ -12,14 +12,14 @@ export function Hero() {
 
       {/* ── MOBILE layout ── */}
       <div className="lg:hidden">
-        {/* Image fills top, edge to edge */}
-        <div className="relative w-full">
-          <div className="absolute inset-6 bg-primary/15 rounded-3xl blur-3xl" />
+        {/* Image */}
+        <div className="relative px-6 pt-8">
+          <div className="absolute inset-10 bg-primary/15 rounded-3xl blur-3xl" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/before-after-hero.png"
             alt="Before and after card restoration — Charmander"
-            className="relative w-full h-auto"
+            className="relative w-full h-auto rounded-2xl drop-shadow-xl"
           />
         </div>
 
