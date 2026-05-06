@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusUpdater } from "./status-updater";
+import { PhotoUploader } from "./photo-uploader";
 
 export default async function AdminOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -48,6 +49,16 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             <div className="bg-white rounded-xl border border-border p-6">
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Order Status</h2>
               <StatusUpdater orderId={order.id} currentStatus={order.status} />
+            </div>
+
+            {/* Restoration photos */}
+            <div className="bg-white rounded-xl border border-border p-6">
+              <h2 className="font-heading font-black text-lg text-foreground mb-4">Restoration Photos</h2>
+              <p className="text-sm text-muted-foreground mb-4">Upload photos of the finished cards — customers will see these when tracking their order.</p>
+              <PhotoUploader
+                orderId={order.id}
+                existingPhotos={(order.restoration_photos as string[]) ?? []}
+              />
             </div>
 
             {/* Cards */}

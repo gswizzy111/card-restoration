@@ -56,6 +56,21 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
         </div>
       </div>
 
+      {/* Restoration photos */}
+      {order.restoration_photos?.length > 0 && (
+        <div className="bg-white rounded-xl border border-border p-6 mb-5">
+          <h2 className="font-heading font-black text-lg text-foreground mb-4">Your Restored Cards</h2>
+          <div className="flex flex-wrap gap-3">
+            {(order.restoration_photos as string[]).map((url: string, i: number) => (
+              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="Restored card" className="w-28 h-28 object-cover rounded-xl border border-border hover:opacity-90 transition-opacity" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Cards */}
       <div className="bg-white rounded-xl border border-border p-6 mb-5">
         <h2 className="font-heading font-black text-lg text-foreground mb-4">Your Cards ({cards?.length ?? 0})</h2>
