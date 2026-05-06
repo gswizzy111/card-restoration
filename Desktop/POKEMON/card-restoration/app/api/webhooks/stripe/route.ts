@@ -23,10 +23,21 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
 
-    await admin
+    const { data: updated, error } = await admin
       .from("orders")
       .update({ status: "awaiting_cards", payment_status: "paid" })
-      .eq("id", orderId);
+      .eq("id", orderId)
+      .select();
+
+    if (error) {
+      console.error("Supabase update error:", JSON.stringify(error));
+      return Response.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!updated || updated.length === 0) {
+      console.error("No order found with id:", orderId);
+      return Response.json({ error: `Order not found: ${orderId}` }, { status: 404 });
+    }
 
     await admin.from("order_events").insert({
       order_id: orderId,
