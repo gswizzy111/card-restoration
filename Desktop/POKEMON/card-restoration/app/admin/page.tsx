@@ -34,6 +34,13 @@ export default async function AdminPage() {
   }
 
   const allOrders = orders ?? [];
+  const totalRevenue = allOrders.reduce((sum, o) => sum + (o.total_cents ?? 0), 0);
+  const thisMonth = allOrders.filter((o) => {
+    const d = new Date(o.created_at);
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const monthRevenue = thisMonth.reduce((sum, o) => sum + (o.total_cents ?? 0), 0);
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -55,6 +62,26 @@ export default async function AdminPage() {
             <form action="/api/admin/logout" method="POST">
               <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign out</button>
             </form>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white rounded-xl border border-border p-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Orders</p>
+            <p className="font-heading font-black text-3xl text-foreground">{allOrders.length}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-border p-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Revenue</p>
+            <p className="font-heading font-black text-3xl text-primary">{formatCurrency(totalRevenue)}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-border p-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">This Month</p>
+            <p className="font-heading font-black text-3xl text-foreground">{thisMonth.length}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-border p-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Monthly Revenue</p>
+            <p className="font-heading font-black text-3xl text-primary">{formatCurrency(monthRevenue)}</p>
           </div>
         </div>
 
