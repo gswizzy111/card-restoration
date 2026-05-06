@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     await admin
       .from("orders")
-      .update({ status: "awaiting_cards", payment_status: "paid", stripe_payment_intent: session.payment_intent as string })
+      .update({ status: "awaiting_cards", payment_status: "paid" })
       .eq("id", orderId);
 
     await admin.from("order_events").insert({
