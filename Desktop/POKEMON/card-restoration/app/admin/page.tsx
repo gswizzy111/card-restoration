@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { RevenueChart } from "./revenue-chart";
 
 const STATUS_COLORS: Record<string, string> = {
   awaiting_payment: "bg-gray-100 text-gray-600",
@@ -34,13 +35,26 @@ export default async function AdminPage() {
   }
 
   const allOrders = orders ?? [];
-  const totalRevenue = allOrders.reduce((sum, o) => sum + (o.total_cents ?? 0), 0);
+  const now = new Date();
   const thisMonth = allOrders.filter((o) => {
     const d = new Date(o.created_at);
-    const now = new Date();
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
   const monthRevenue = thisMonth.reduce((sum, o) => sum + (o.total_cents ?? 0), 0);
+
+  // Build last 6 months of data for chart
+  const monthlyData = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    const monthOrders = allOrders.filter((o) => {
+      const od = new Date(o.created_at);
+      return od.getMonth() === d.getMonth() && od.getFullYear() === d.getFullYear();
+    });
+    return {
+      month: d.toLocaleString("default", { month: "short" }),
+      revenue: Math.round(monthOrders.reduce((s, o) => s + (o.total_cents ?? 0), 0)) / 100,
+      orders: monthOrders.length,
+    };
+  });
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -66,23 +80,20 @@ export default async function AdminPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Orders</p>
-            <p className="font-heading font-black text-3xl text-foreground">{allOrders.length}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Revenue</p>
-            <p className="font-heading font-black text-3xl text-primary">{formatCurrency(totalRevenue)}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">This Month</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Orders This Month</p>
             <p className="font-heading font-black text-3xl text-foreground">{thisMonth.length}</p>
           </div>
           <div className="bg-white rounded-xl border border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Monthly Revenue</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Revenue This Month</p>
             <p className="font-heading font-black text-3xl text-primary">{formatCurrency(monthRevenue)}</p>
           </div>
+        </div>
+
+        {/* Chart */}
+        <div className="mb-8">
+          <RevenueChart data={monthlyData} />
         </div>
 
         {allOrders.length === 0 && (
