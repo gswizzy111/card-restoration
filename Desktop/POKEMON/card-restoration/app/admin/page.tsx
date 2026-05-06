@@ -43,9 +43,19 @@ export default async function AdminPage() {
             <h1 className="font-heading font-black text-3xl text-foreground">Orders</h1>
             <p className="text-muted-foreground text-sm mt-1">{allOrders.length} total</p>
           </div>
-          <form action="/api/admin/logout" method="POST">
-            <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign out</button>
-          </form>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://analytics.google.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              Analytics →
+            </a>
+            <form action="/api/admin/logout" method="POST">
+              <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign out</button>
+            </form>
+          </div>
         </div>
 
         {allOrders.length === 0 && (
