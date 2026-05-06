@@ -72,7 +72,7 @@ export function Nav() {
             <Menu className="h-5 w-5" />
           </SheetTrigger>
           <SheetContent side="right" className="w-72">
-            <div className="flex flex-col gap-6 pt-8">
+            <div className="flex flex-col gap-6 pt-8 px-6">
               <Link href="/" onClick={() => setOpen(false)} className="flex items-center gap-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/card-doctor.jpg" alt="The Card Doc" className="w-10 h-10 rounded-full object-cover border-2 border-primary" />

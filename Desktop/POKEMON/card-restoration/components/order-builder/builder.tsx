@@ -209,16 +209,18 @@ export function OrderBuilder({ services }: { services: Service[] }) {
           </div>
         </div>
 
-        {/* Order summary */}
+        {/* Order summary — hidden on step 1 */}
         <div className="lg:col-span-1">
           <div className="sticky top-24">
-            <OrderSummary
-              services={services}
-              selectedServiceIds={selectedServiceIds}
-              cards={cards}
-              shippingMethod={shippingMethod}
-              selectedRate={selectedRate}
-            />
+            {step > 1 && (
+              <OrderSummary
+                services={services}
+                selectedServiceIds={selectedServiceIds}
+                cards={cards}
+                shippingMethod={shippingMethod}
+                selectedRate={selectedRate}
+              />
+            )}
           </div>
         </div>
       </div>
