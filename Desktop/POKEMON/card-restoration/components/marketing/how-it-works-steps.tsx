@@ -10,7 +10,7 @@ const steps = [
   {
     icon: Truck,
     title: "Ship to us",
-    description: "Print a prepaid label or use your own carrier. Insured tracking included on everything.",
+    description: "Print a prepaid label or use your own carrier. Tracking included on everything.",
   },
   {
     icon: Sparkles,

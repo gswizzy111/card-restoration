@@ -2,7 +2,7 @@ export function TrustBar() {
   const stats = [
     { number: "500+", label: "Cards Restored" },
     { number: "5–8 days", label: "Turnaround" },
-    { number: "100%", label: "Insured Transit" },
+    { number: "100%", label: "Satisfaction Guaranteed" },
     { number: "4.9★", label: "Customer Rating" },
   ];
 

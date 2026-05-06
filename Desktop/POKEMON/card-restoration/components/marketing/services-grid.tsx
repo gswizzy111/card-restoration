@@ -15,7 +15,7 @@ const serviceDetails: Record<string, { bullets: string[] }> = {
   "PSA Prep": {
     bullets: [
       "Cleaned with distilled water & all-natural card solution",
-      "Full surface polish to remove fingerprints and residue",
+      "Full surface polish to remove fingerprints, residue, and buff out scratches",
       "Minor dents and small creases corrected",
       "Clamped flat and inspected — ready for PSA submission",
     ],
