@@ -20,22 +20,11 @@ export function Hero() {
           </span>
         </div>
 
-        {/* Headline + image side by side */}
-        <div className="flex items-center gap-4 mb-6">
-          <h1 className="font-heading font-black text-4xl text-foreground leading-[1.05] tracking-tight flex-1">
-            Your Cards.<br />
-            <span className="text-primary">Restored.</span>
-          </h1>
-          <div className="relative w-[45%] flex-shrink-0">
-            <div className="absolute inset-2 bg-primary/20 rounded-2xl blur-2xl" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/before-after-hero.png"
-              alt="Before and after card restoration — Charmander"
-              className="relative w-full h-auto rounded-xl drop-shadow-lg"
-            />
-          </div>
-        </div>
+        {/* Headline */}
+        <h1 className="font-heading font-black text-4xl text-foreground leading-[1.05] tracking-tight mb-6">
+          Your Cards.<br />
+          <span className="text-primary">Restored.</span>
+        </h1>
 
         {/* Description */}
         <p className="text-base text-muted-foreground leading-relaxed mb-7">
