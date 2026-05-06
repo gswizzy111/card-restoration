@@ -21,8 +21,7 @@ export default async function AdminPage() {
     .select("id, order_number, customer_name, customer_email, total_cents, status, created_at, inbound_method")
     .order("created_at", { ascending: false });
 
-  const paid = orders?.filter((o) => o.status !== "awaiting_payment") ?? [];
-  const pending = orders?.filter((o) => o.status === "awaiting_payment") ?? [];
+  const allOrders = orders ?? [];
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -30,21 +29,21 @@ export default async function AdminPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="font-heading font-black text-3xl text-foreground">Orders</h1>
-            <p className="text-muted-foreground text-sm mt-1">{paid.length} active · {pending.length} unpaid</p>
+            <p className="text-muted-foreground text-sm mt-1">{allOrders.length} total</p>
           </div>
           <form action="/api/admin/logout" method="POST">
             <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign out</button>
           </form>
         </div>
 
-        {paid.length === 0 && (
+        {allOrders.length === 0 && (
           <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
             No orders yet.
           </div>
         )}
 
         <div className="flex flex-col gap-3">
-          {paid.map((order) => (
+          {allOrders.map((order) => (
             <Link
               key={order.id}
               href={`/admin/orders/${order.id}`}
