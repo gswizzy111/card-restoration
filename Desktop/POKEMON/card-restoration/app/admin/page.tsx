@@ -19,6 +19,7 @@ export default async function AdminPage() {
   const { data: orders } = await admin
     .from("orders")
     .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method")
+    .neq("status", "awaiting_payment")
     .order("created_at", { ascending: false });
 
   const orderIds = orders?.map((o) => o.id) ?? [];
