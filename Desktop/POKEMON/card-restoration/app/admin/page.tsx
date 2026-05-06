@@ -18,8 +18,19 @@ export default async function AdminPage() {
   const admin = createAdminClient();
   const { data: orders } = await admin
     .from("orders")
-    .select("id, order_number, customer_name, customer_email, total_cents, status, created_at, inbound_method")
+    .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method")
     .order("created_at", { ascending: false });
+
+  const orderIds = orders?.map((o) => o.id) ?? [];
+  const { data: allCards } = orderIds.length > 0
+    ? await admin.from("cards").select("order_id, card_name").in("order_id", orderIds)
+    : { data: [] };
+
+  const cardsByOrder: Record<string, string[]> = {};
+  for (const card of allCards ?? []) {
+    if (!cardsByOrder[card.order_id]) cardsByOrder[card.order_id] = [];
+    cardsByOrder[card.order_id].push(card.card_name);
+  }
 
   const allOrders = orders ?? [];
 
@@ -58,6 +69,10 @@ export default async function AdminPage() {
                 </div>
                 <p className="font-medium text-foreground">{order.customer_name}</p>
                 <p className="text-sm text-muted-foreground">{order.customer_email}</p>
+                {order.customer_phone && <p className="text-sm text-muted-foreground">{order.customer_phone}</p>}
+                {cardsByOrder[order.id]?.length > 0 && (
+                  <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
+                )}
               </div>
               <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
                 <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
