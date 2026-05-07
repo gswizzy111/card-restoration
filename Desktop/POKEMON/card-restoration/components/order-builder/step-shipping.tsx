@@ -114,6 +114,9 @@ export function StepShipping({
                   {ratesError && (
                     <p className="text-sm text-destructive">{ratesError}</p>
                   )}
+                  {!loadingRates && rates.length > 0 && (
+                    <p className="text-xs text-muted-foreground mb-1">Price covers shipping to us + return shipping back to you.</p>
+                  )}
                   {!loadingRates &&
                     rates.map((rate) => (
                       <button
@@ -121,7 +124,7 @@ export function StepShipping({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onRateChange(rate);
+                          onRateChange({ ...rate, amount_cents: rate.amount_cents * 2 });
                         }}
                         className={`w-full text-left rounded-lg border px-4 py-3 flex items-center justify-between transition-colors ${
                           selectedRate?.object_id === rate.object_id
@@ -135,12 +138,12 @@ export function StepShipping({
                           </p>
                           {rate.days && (
                             <p className="text-xs text-muted-foreground">
-                              Est. {rate.days} business days
+                              Est. {rate.days} business days each way
                             </p>
                           )}
                         </div>
                         <span className="font-medium text-foreground">
-                          {formatCurrency(rate.amount_cents)}
+                          {formatCurrency(rate.amount_cents * 2)}
                         </span>
                       </button>
                     ))}
