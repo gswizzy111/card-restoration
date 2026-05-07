@@ -56,6 +56,22 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
         </div>
       </div>
 
+      {/* Prepaid shipping label */}
+      {order.inbound_method === "buy_label" && order.shipping_label_url && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-5">
+          <h2 className="font-heading font-black text-lg text-blue-900 mb-2">Your Prepaid Shipping Label</h2>
+          <p className="text-sm text-blue-800 mb-4">Print this label, attach it to your package, and drop it off at the carrier.</p>
+          <a
+            href={order.shipping_label_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Download Label (PDF)
+          </a>
+        </div>
+      )}
+
       {/* Restoration photos */}
       {order.restoration_photos?.length > 0 && (
         <div className="bg-white rounded-xl border border-border p-6 mb-5">

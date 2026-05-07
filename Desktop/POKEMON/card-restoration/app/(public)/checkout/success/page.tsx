@@ -9,13 +9,13 @@ export default async function CheckoutSuccessPage({
   searchParams: Promise<{ session_id?: string }>;
 }) {
   const { session_id } = await searchParams;
-  let order: { order_number: string; customer_email: string } | null = null;
+  let order: { order_number: string; customer_email: string; inbound_method: string; shipping_label_url: string | null } | null = null;
 
   if (session_id) {
     const admin = createAdminClient();
     const { data } = await admin
       .from("orders")
-      .select("order_number, customer_email")
+      .select("order_number, customer_email, inbound_method, shipping_label_url")
       .eq("stripe_session_id", session_id)
       .single();
     order = data;
@@ -36,6 +36,28 @@ export default async function CheckoutSuccessPage({
         <p className="text-muted-foreground">
           Thank you! We&apos;ll be in touch soon with next steps.
         </p>
+
+        {order?.inbound_method === "buy_label" && (
+          <div className="w-full bg-blue-50 border border-blue-200 rounded-xl p-4 text-left">
+            <p className="font-bold text-blue-900 text-sm mb-1">Your prepaid shipping label</p>
+            {order.shipping_label_url ? (
+              <>
+                <p className="text-blue-800 text-sm mb-3">Print this label, attach it to your package, and drop it off at the carrier.</p>
+                <a
+                  href={order.shipping_label_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Download Label (PDF)
+                </a>
+              </>
+            ) : (
+              <p className="text-blue-800 text-sm">Your label is being generated — check back on your order tracking page in a moment.</p>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-col gap-3 w-full">
           {order?.order_number && (
             <Button

@@ -1,5 +1,6 @@
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { shippo } from "@/lib/shippo";
 
 export async function POST(request: Request) {
   const body = await request.text();
@@ -23,9 +24,32 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
 
+    // Purchase prepaid label if customer selected that option
+    let shippingLabelUrl: string | null = null;
+    const rateObjectId = session.metadata?.shipping_rate_object_id;
+    if (rateObjectId) {
+      try {
+        const transaction = await shippo.transactions.create({
+          rate: rateObjectId,
+          labelFileType: "PDF",
+          async: false,
+        });
+        if (transaction.status === "SUCCESS" && transaction.labelUrl) {
+          shippingLabelUrl = transaction.labelUrl;
+        } else {
+          console.error("Shippo label purchase failed:", transaction.messages);
+        }
+      } catch (err) {
+        console.error("Shippo transaction error:", err);
+      }
+    }
+
+    const updatePayload: Record<string, unknown> = { status: "awaiting_cards", payment_status: "paid" };
+    if (shippingLabelUrl) updatePayload.shipping_label_url = shippingLabelUrl;
+
     const { data: updated, error } = await admin
       .from("orders")
-      .update({ status: "awaiting_cards", payment_status: "paid" })
+      .update(updatePayload)
       .eq("id", orderId)
       .select();
 
@@ -42,7 +66,9 @@ export async function POST(request: Request) {
     await admin.from("order_events").insert({
       order_id: orderId,
       event_type: "payment_received",
-      description: "Payment confirmed via Stripe",
+      description: shippingLabelUrl
+        ? "Payment confirmed — prepaid shipping label generated"
+        : "Payment confirmed via Stripe",
       is_customer_visible: true,
     });
   }
