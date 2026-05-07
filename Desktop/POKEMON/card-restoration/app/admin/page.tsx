@@ -4,6 +4,8 @@ import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { RevenueChart } from "./revenue-chart";
 
+export const dynamic = "force-dynamic";
+
 const STATUS_COLORS: Record<string, string> = {
   awaiting_payment: "bg-gray-100 text-gray-600",
   awaiting_cards: "bg-yellow-100 text-yellow-700",
