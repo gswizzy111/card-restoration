@@ -73,6 +73,27 @@ export async function POST(request: Request) {
       is_customer_visible: true,
     });
 
+    // Notify admin of new order
+    const adminEmail = process.env.ADMIN_NOTIFY_EMAIL ?? "gavinfraiman33@gmail.com";
+    const appUrl2 = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
+    try {
+      await resend.emails.send({
+        from: fromEmail,
+        to: adminEmail,
+        subject: `🛒 New Order #${updated[0].order_number} — ${updated[0].customer_name}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
+            <h1 style="font-size:20px;font-weight:900">New order received!</h1>
+            <p><strong>${updated[0].customer_name}</strong> just placed order <strong>#${updated[0].order_number}</strong>.</p>
+            <p style="color:#666;font-size:14px">${updated[0].customer_email} · ${updated[0].customer_phone ?? ""}</p>
+            <a href="${appUrl2}/admin/orders/${orderId}" style="display:inline-block;background:#c0392b;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">View Order</a>
+          </div>
+        `,
+      });
+    } catch (err) {
+      console.error("Failed to send admin new order email:", err);
+    }
+
     // Send confirmation email
     const order = updated[0];
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
