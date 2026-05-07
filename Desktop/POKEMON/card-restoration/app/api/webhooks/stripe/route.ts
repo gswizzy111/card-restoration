@@ -1,6 +1,7 @@
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
+import { resend, fromEmail, businessName } from "@/lib/resend";
 
 export async function POST(request: Request) {
   const body = await request.text();
@@ -71,6 +72,52 @@ export async function POST(request: Request) {
         : "Payment confirmed via Stripe",
       is_customer_visible: true,
     });
+
+    // Send confirmation email
+    const order = updated[0];
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
+    const trackingUrl = `${appUrl}/orders/${order.order_number}`;
+
+    const shippingSection = shippingLabelUrl
+      ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:20px;margin:24px 0">
+          <p style="margin:0 0 8px;font-weight:700;color:#1e3a8a">Your Prepaid Shipping Label</p>
+          <p style="margin:0 0 16px;color:#1e40af;font-size:14px">Print this label, attach it to your package, and drop it off at the carrier. It covers your shipment to us — we'll use the return credit to send your cards back when they're done.</p>
+          <a href="${shippingLabelUrl}" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Download Label (PDF)</a>
+        </div>`
+      : `<div style="background:#fefce8;border:1px solid #fde68a;border-radius:12px;padding:20px;margin:24px 0">
+          <p style="margin:0 0 8px;font-weight:700;color:#78350f">Ship Your Cards To Us</p>
+          <p style="margin:0 0 4px;color:#92400e;font-size:14px">Please send your cards to the address below using a tracked, insured method:</p>
+          <p style="margin:8px 0 0;color:#78350f;font-weight:600;font-size:14px">
+            The Card Doc<br>
+            ${process.env.BUSINESS_SHIPPING_STREET1 ?? ""}<br>
+            ${process.env.BUSINESS_SHIPPING_CITY ?? ""}, ${process.env.BUSINESS_SHIPPING_STATE ?? ""} ${process.env.BUSINESS_SHIPPING_ZIP ?? ""}
+          </p>
+        </div>`;
+
+    try {
+      await resend.emails.send({
+        from: fromEmail,
+        to: order.customer_email,
+        subject: `Order Confirmed — ${businessName} #${order.order_number}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
+            <h1 style="font-size:24px;font-weight:900;margin-bottom:4px">Order Confirmed ✓</h1>
+            <p style="color:#666;margin-top:0">Order <strong>#${order.order_number}</strong></p>
+
+            <p>Hi ${order.customer_name?.split(" ")[0] ?? "there"}, thanks for your order! We've received your payment and will keep you updated every step of the way.</p>
+
+            ${shippingSection}
+
+            <a href="${trackingUrl}" style="display:inline-block;background:#c0392b;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;margin:8px 0 24px">Track Your Order</a>
+
+            <p style="font-size:13px;color:#666">Questions? Reply to this email or reach us at <a href="mailto:gavinfraiman33@gmail.com" style="color:#c0392b">gavinfraiman33@gmail.com</a></p>
+            <p style="font-size:13px;color:#999">${businessName}</p>
+          </div>
+        `,
+      });
+    } catch (err) {
+      console.error("Failed to send confirmation email:", err);
+    }
   }
 
   return Response.json({ received: true });
