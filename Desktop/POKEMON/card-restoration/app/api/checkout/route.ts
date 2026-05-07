@@ -47,8 +47,10 @@ const BodySchema = z.object({
 export async function POST(request: Request) {
   const body = await request.json();
   const parsed = BodySchema.safeParse(body);
-  if (!parsed.success)
-    return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+  if (!parsed.success) {
+    console.error("Checkout validation failed:", JSON.stringify(parsed.error.flatten()));
+    return Response.json({ error: "Invalid order data. Please go back and check your information." }, { status: 400 });
+  }
 
   const data = parsed.data;
   const admin = createAdminClient();
@@ -59,7 +61,10 @@ export async function POST(request: Request) {
     .from("services")
     .select("id, name, price_cents, turnaround_days")
     .in("id", serviceIds);
-  if (svcErr || !dbServices) return Response.json({ error: "Failed to load services" }, { status: 500 });
+  if (svcErr || !dbServices) {
+    console.error("Failed to load services:", svcErr);
+    return Response.json({ error: "Failed to load services. Please try again." }, { status: 500 });
+  }
 
   const serviceMap = Object.fromEntries(dbServices.map((s) => [s.id, s]));
 
@@ -116,7 +121,10 @@ export async function POST(request: Request) {
     })
     .select("id, order_number")
     .single();
-  if (orderErr || !order) return Response.json({ error: "Failed to create order" }, { status: 500 });
+  if (orderErr || !order) {
+    console.error("Failed to create order:", orderErr);
+    return Response.json({ error: "Failed to save order. Please try again." }, { status: 500 });
+  }
 
   // Insert order_services (aggregated by service)
   const orderServicesRows = Object.entries(countPerService).map(([sid, qty]) => ({
@@ -178,18 +186,24 @@ export async function POST(request: Request) {
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    customer_email: data.customer.email,
-    line_items: lineItems,
-    success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl}/checkout/cancel`,
-    metadata: {
-      order_id: order.id,
-      order_number: order.order_number ?? "",
-      shipping_rate_object_id: data.shipping_rate?.object_id ?? "",
-    },
-  });
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: data.customer.email,
+      line_items: lineItems,
+      success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/checkout/cancel`,
+      metadata: {
+        order_id: order.id,
+        order_number: order.order_number ?? "",
+        shipping_rate_object_id: data.shipping_rate?.object_id ?? "",
+      },
+    });
+  } catch (err) {
+    console.error("Stripe session creation failed:", err);
+    return Response.json({ error: "Payment provider error. Please try again." }, { status: 500 });
+  }
 
   // Save Stripe session ID
   await admin.from("orders").update({ stripe_session_id: session.id }).eq("id", order.id);

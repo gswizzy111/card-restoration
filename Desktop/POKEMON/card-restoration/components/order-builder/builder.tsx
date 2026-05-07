@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,29 @@ function defaultCard(serviceIds: string[]): CardEntry {
 
 function emptyCustomer(): CustomerInfo {
   return { name: "", email: "", phone: "", street1: "", street2: "", city: "", state: "", zip: "", country: "US" };
+}
+
+function InAppBrowserBanner() {
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    if (/Instagram|FBAN|FBAV|FB_IAB|Twitter|TikTok/i.test(ua)) {
+      setShow(true);
+    }
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-sm">
+      <p className="font-bold text-amber-900 mb-1">⚠️ Open in Safari or Chrome to pay</p>
+      <p className="text-amber-800">
+        Instagram&apos;s browser doesn&apos;t support Stripe payments. Tap the <strong>···</strong> menu at the top right
+        of Instagram and choose <strong>&quot;Open in browser&quot;</strong>, then complete your order.
+      </p>
+    </div>
+  );
 }
 
 export function OrderBuilder({ services }: { services: Service[] }) {
@@ -124,10 +147,12 @@ export function OrderBuilder({ services }: { services: Service[] }) {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        toast.error(data.error?.message ?? "Something went wrong. Please try again.");
+        const msg = typeof data.error === "string" ? data.error : "Something went wrong. Please try again.";
+        toast.error(msg);
         setSubmitting(false);
       }
-    } catch {
+    } catch (err) {
+      console.error("Checkout fetch error:", err);
       toast.error("Network error. Please try again.");
       setSubmitting(false);
     }
@@ -135,6 +160,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
 
   return (
     <div className="max-w-6xl mx-auto px-6 md:px-8 py-12">
+      <InAppBrowserBanner />
       <div className="mb-10">
         <ProgressIndicator currentStep={step} />
       </div>
