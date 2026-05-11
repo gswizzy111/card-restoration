@@ -67,6 +67,9 @@ export default async function AdminPage() {
             <p className="text-muted-foreground text-sm mt-1">{allOrders.length} total</p>
           </div>
           <div className="flex items-center gap-4">
+            <Link href="/admin/products" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+              Products →
+            </Link>
             <a
               href="https://analytics.google.com"
               target="_blank"

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
-import { getPriceCentsForService } from "@/lib/pricing";
+import { getPriceCents } from "@/lib/pricing";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -68,21 +68,8 @@ export async function POST(request: Request) {
 
   const serviceMap = Object.fromEntries(dbServices.map((s) => [s.id, s]));
 
-  // Compute subtotal using tiered pricing based on card count per service
-  const countPerService: Record<string, number> = {};
-  for (const card of data.cards) {
-    for (const sid of card.service_ids) {
-      countPerService[sid] = (countPerService[sid] ?? 0) + 1;
-    }
-  }
-  let subtotalCents = 0;
-  for (const [sid, count] of Object.entries(countPerService)) {
-    const svc = serviceMap[sid];
-    if (svc) {
-      const pricePer = getPriceCentsForService(svc.name, count);
-      subtotalCents += pricePer * count;
-    }
-  }
+  // Compute subtotal: $120 first card, $100 each after
+  const subtotalCents = getPriceCents(data.cards.length);
 
   const shippingCents = data.shipping_method === "buy_label" && data.shipping_rate
     ? data.shipping_rate.amount_cents
@@ -126,15 +113,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "Failed to save order. Please try again." }, { status: 500 });
   }
 
-  // Insert order_services (aggregated by service)
-  const orderServicesRows = Object.entries(countPerService).map(([sid, qty]) => ({
+  // Insert order_services
+  const serviceId = data.services[0]?.id;
+  const svc = serviceId ? serviceMap[serviceId] : null;
+  await admin.from("order_services").insert([{
     order_id: order.id,
-    service_id: sid,
-    service_name: serviceMap[sid]?.name ?? sid,
-    price_cents: serviceMap[sid]?.price_cents ?? 0,
-    quantity: qty,
-  }));
-  await admin.from("order_services").insert(orderServicesRows);
+    service_id: serviceId ?? "",
+    service_name: svc?.name ?? "Full Restoration & PSA Prep",
+    price_cents: 12000,
+    quantity: data.cards.length,
+  }]);
 
   // Insert cards
   const cardRows = data.cards.map((c) => ({
@@ -159,20 +147,26 @@ export async function POST(request: Request) {
   });
 
   // Build Stripe line items
-  const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [];
-  for (const [sid, qty] of Object.entries(countPerService)) {
-    const svc = serviceMap[sid];
-    if (svc) {
-      const pricePer = getPriceCentsForService(svc.name, qty);
-      lineItems.push({
-        price_data: {
-          currency: "usd",
-          product_data: { name: `${svc.name} (${qty} card${qty !== 1 ? "s" : ""})` },
-          unit_amount: pricePer,
-        },
-        quantity: qty,
-      });
-    }
+  const cardCount = data.cards.length;
+  const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [
+    {
+      price_data: {
+        currency: "usd",
+        product_data: { name: `Full Restoration & PSA Prep — first card` },
+        unit_amount: 12000,
+      },
+      quantity: 1,
+    },
+  ];
+  if (cardCount > 1) {
+    lineItems.push({
+      price_data: {
+        currency: "usd",
+        product_data: { name: `Full Restoration & PSA Prep — additional cards` },
+        unit_amount: 10000,
+      },
+      quantity: cardCount - 1,
+    });
   }
   if (shippingCents > 0 && data.shipping_rate) {
     lineItems.push({

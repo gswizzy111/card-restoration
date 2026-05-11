@@ -1,9 +1,8 @@
 const STEPS = [
-  { n: 1, label: "Services" },
-  { n: 2, label: "Cards" },
-  { n: 3, label: "Your Info" },
-  { n: 4, label: "Shipping" },
-  { n: 5, label: "Review" },
+  { n: 1, label: "Cards" },
+  { n: 2, label: "Your Info" },
+  { n: 3, label: "Shipping" },
+  { n: 4, label: "Review" },
 ];
 
 export function ProgressIndicator({ currentStep }: { currentStep: number }) {
