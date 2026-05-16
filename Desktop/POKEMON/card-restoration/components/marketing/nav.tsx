@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Menu, ShoppingCart } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Menu, ShoppingCart, X } from "lucide-react";
 import { useCart } from "@/lib/cart-context";
 
 const links = [
@@ -28,80 +26,91 @@ export function Nav() {
 
   return (
     <header
-      className={`sticky top-0 z-50 transition-all duration-200 ${
-        scrolled ? "bg-white/95 backdrop-blur shadow-md border-b border-border" : "bg-white"
+      className={`sticky top-0 z-50 bg-background transition-shadow duration-200 ${
+        scrolled ? "shadow-sm border-b border-border" : "border-b border-border/50"
       }`}
     >
-      <div className="h-1 bg-primary w-full" />
-
-      <nav className="max-w-6xl mx-auto px-6 md:px-8 h-16 flex items-center justify-between">
+      <nav className="max-w-7xl mx-auto px-6 md:px-10 h-[70px] flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-3 shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/card-doctor.jpg" alt="The Card Doc" className="w-10 h-10 rounded-full object-cover border-2 border-primary" />
-          <span className="font-heading font-black text-xl text-foreground tracking-tight">The Card Doc</span>
+          <img src="/card-doctor.jpg" alt="The Card Doc" className="w-9 h-9 rounded-full object-cover" />
+          <span className="font-heading text-xl font-bold text-foreground">The Card Doc</span>
         </Link>
 
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-8">
           {links.map((l) => (
-            <Link key={l.href} href={l.href} className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors duration-200">
+            <Link
+              key={l.href}
+              href={l.href}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-150"
+            >
               {l.label}
             </Link>
           ))}
         </div>
 
-        {/* Desktop right: cart + CTA */}
-        <div className="hidden md:flex items-center gap-3">
-          <Link href="/cart" className="relative p-2 text-muted-foreground hover:text-primary transition-colors">
+        {/* Desktop right */}
+        <div className="hidden md:flex items-center gap-4 shrink-0">
+          <Link href="/cart" className="relative p-1.5 text-muted-foreground hover:text-foreground transition-colors">
             <ShoppingCart className="h-5 w-5" />
             {itemCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
                 {itemCount}
               </span>
             )}
           </Link>
-          <Button render={<Link href="/order" />} className="font-bold">
+          <Link
+            href="/restoration"
+            className="text-sm font-semibold text-primary border border-primary/50 px-4 py-2 hover:bg-primary hover:text-primary-foreground transition-colors duration-150"
+          >
             Book Restoration
-          </Button>
+          </Link>
         </div>
 
         {/* Mobile */}
-        <div className="flex items-center gap-2 md:hidden">
-          <Link href="/cart" className="relative p-2 text-muted-foreground hover:text-primary transition-colors">
+        <div className="flex items-center gap-3 md:hidden">
+          <Link href="/cart" className="relative p-1.5 text-muted-foreground hover:text-foreground transition-colors">
             <ShoppingCart className="h-5 w-5" />
             {itemCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
                 {itemCount}
               </span>
             )}
           </Link>
-          <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger className="p-2 text-foreground" aria-label="Open menu">
-              <Menu className="h-5 w-5" />
-            </SheetTrigger>
-            <SheetContent side="right" className="w-72">
-              <div className="flex flex-col gap-6 pt-8 px-6">
-                <Link href="/" onClick={() => setOpen(false)} className="flex items-center gap-2.5">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/card-doctor.jpg" alt="The Card Doc" className="w-10 h-10 rounded-full object-cover border-2 border-primary" />
-                  <span className="font-heading font-black text-xl text-primary">The Card Doc</span>
-                </Link>
-                <div className="flex flex-col gap-4">
-                  {links.map((l) => (
-                    <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className="text-base font-medium text-muted-foreground hover:text-primary transition-colors">
-                      {l.label}
-                    </Link>
-                  ))}
-                </div>
-                <Button render={<Link href="/order" onClick={() => setOpen(false)} />} className="mt-2 font-bold">
-                  Book Restoration
-                </Button>
-              </div>
-            </SheetContent>
-          </Sheet>
+          <button
+            onClick={() => setOpen(!open)}
+            className="p-1.5 text-foreground"
+            aria-label={open ? "Close menu" : "Open menu"}
+          >
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
       </nav>
+
+      {/* Mobile dropdown */}
+      {open && (
+        <div className="md:hidden bg-background border-t border-border px-6 py-6 flex flex-col gap-5">
+          {links.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="text-base font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {l.label}
+            </Link>
+          ))}
+          <Link
+            href="/restoration"
+            onClick={() => setOpen(false)}
+            className="text-sm font-semibold text-primary border border-primary/50 px-4 py-3 text-center hover:bg-primary hover:text-primary-foreground transition-colors"
+          >
+            Book Restoration
+          </Link>
+        </div>
+      )}
     </header>
   );
 }

@@ -27,24 +27,25 @@ export default async function ShopPage({
   const { data: products } = await query;
 
   return (
-    <div className="max-w-6xl mx-auto px-6 md:px-8 py-12">
-      <div className="mb-8">
-        <h1 className="font-heading font-black text-3xl md:text-4xl text-foreground mb-2">Shop</h1>
-        <p className="text-muted-foreground">Professional card cleaning supplies and tools.</p>
+    <div className="max-w-7xl mx-auto px-6 md:px-10 py-14">
+      {/* Header */}
+      <div className="mb-10">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary mb-3">The Card Doc</p>
+        <h1 className="font-heading text-4xl md:text-5xl text-foreground">Shop</h1>
       </div>
 
-      {/* Category filters */}
-      <div className="flex flex-wrap gap-2 mb-8">
+      {/* Category filters — editorial underline style */}
+      <div className="flex gap-8 border-b border-border mb-10">
         {CATEGORIES.map((cat) => {
           const active = (!category && cat === "All") || category === cat;
           return (
             <a
               key={cat}
               href={cat === "All" ? "/shop" : `/shop?category=${cat}`}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+              className={`text-sm font-medium pb-3 border-b-2 -mb-px transition-colors ${
                 active
-                  ? "bg-primary text-white border-primary"
-                  : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               {cat}
@@ -53,51 +54,58 @@ export default async function ShopPage({
         })}
       </div>
 
+      {/* Empty state */}
       {products?.length === 0 && (
-        <div className="text-center py-24 text-muted-foreground">
-          <p className="text-4xl mb-4">🛍️</p>
-          <p className="font-medium">Products coming soon!</p>
+        <div className="border border-border py-24 text-center">
+          <p className="font-heading text-xl text-muted-foreground">Products coming soon.</p>
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-        {products?.map((product) => (
-          <div key={product.id} className="bg-white border border-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-sm transition-all flex flex-col">
-            <a href={`/shop/${product.slug}`} className="block">
-              <div className="aspect-square bg-secondary/40 flex items-center justify-center">
-                {product.images?.[0] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-4xl">🧴</span>
-                )}
-              </div>
-            </a>
-            <div className="p-4 flex flex-col flex-1 gap-2">
+      {/* Product grid */}
+      {products && products.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 bg-border" style={{ gap: "1px" }}>
+          {products.map((product) => (
+            <div key={product.id} className="bg-card flex flex-col group">
               <a href={`/shop/${product.slug}`} className="block">
-                <p className="font-heading font-black text-foreground text-sm leading-tight">{product.name}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 capitalize">{product.category}</p>
+                <div className="aspect-square bg-secondary overflow-hidden">
+                  {product.images?.[0] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={product.images[0]}
+                      alt={product.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-secondary" />
+                  )}
+                </div>
               </a>
-              <div className="flex items-center justify-between mt-auto pt-2">
-                <span className="font-bold text-primary">{formatCurrency(product.price_cents)}</span>
-                {product.inventory_count === 0 ? (
-                  <span className="text-xs text-muted-foreground">Out of stock</span>
-                ) : (
-                  <AddToCartButton
-                    product={{
-                      id: product.id,
-                      name: product.name,
-                      price_cents: product.price_cents,
-                      slug: product.slug,
-                      image: product.images?.[0],
-                    }}
-                  />
-                )}
+              <div className="p-4 flex flex-col flex-1 gap-3">
+                <a href={`/shop/${product.slug}`} className="block flex-1">
+                  <p className="font-heading font-bold text-foreground text-sm leading-tight">{product.name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 capitalize">{product.category}</p>
+                </a>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-primary text-sm">{formatCurrency(product.price_cents)}</span>
+                  {product.inventory_count === 0 ? (
+                    <span className="text-xs text-muted-foreground">Out of stock</span>
+                  ) : (
+                    <AddToCartButton
+                      product={{
+                        id: product.id,
+                        name: product.name,
+                        price_cents: product.price_cents,
+                        slug: product.slug,
+                        image: product.images?.[0],
+                      }}
+                    />
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

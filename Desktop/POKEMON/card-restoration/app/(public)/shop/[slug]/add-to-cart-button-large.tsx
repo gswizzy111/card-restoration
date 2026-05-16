@@ -27,8 +27,8 @@ export function AddToCartButtonLarge({ product }: Props) {
   return (
     <button
       onClick={handleAdd}
-      className={`w-full flex items-center justify-center gap-2 h-12 rounded-xl font-bold text-base transition-colors ${
-        added ? "bg-green-600 text-white" : "bg-primary text-white hover:bg-primary/90"
+      className={`w-full flex items-center justify-center gap-2 h-12 font-semibold text-sm tracking-wide transition-opacity ${
+        added ? "bg-secondary text-foreground" : "bg-primary text-primary-foreground hover:opacity-90"
       }`}
     >
       <ShoppingCart className="h-5 w-5" />

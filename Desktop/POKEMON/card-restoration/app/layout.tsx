@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Nunito } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 
@@ -9,17 +9,17 @@ const inter = Inter({
   display: "swap",
 });
 
-const nunito = Nunito({
+const playfair = Playfair_Display({
   variable: "--font-heading",
   subsets: ["latin"],
   display: "swap",
-  weight: ["800", "900"],
+  weight: ["400", "700", "900"],
 });
 
 export const metadata: Metadata = {
-  title: "The Card Doc — PSA Prep & Card Restoration",
+  title: "The Card Doc — Card Cleaning Kits & Restoration",
   description:
-    "Professional Pokémon and trading card restoration. PSA prep, full restoration, and expert cleaning. Mail us your cards.",
+    "Professional card cleaning kits and PSA prep restoration service for trading card collectors.",
 };
 
 export default function RootLayout({
@@ -28,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${nunito.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${playfair.variable} h-full antialiased`}>
       <head>
         <script async src="https://www.googletagmanager.com/gtag/js?id=G-TYYCHS53JE" />
         <script dangerouslySetInnerHTML={{ __html: `

@@ -19,45 +19,51 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   if (!product) notFound();
 
   return (
-    <div className="max-w-5xl mx-auto px-6 md:px-8 py-12">
-      <a href="/shop" className="text-sm text-muted-foreground hover:text-primary transition-colors mb-6 block">
-        ← Back to Shop
+    <div className="max-w-6xl mx-auto px-6 md:px-10 py-12">
+      <a href="/shop" className="text-sm text-muted-foreground hover:text-foreground transition-colors mb-8 block">
+        &larr; Back to Shop
       </a>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20">
         {/* Images */}
         <div className="flex flex-col gap-3">
-          <div className="aspect-square bg-secondary/40 rounded-2xl overflow-hidden flex items-center justify-center border border-border">
+          <div className="aspect-square bg-secondary overflow-hidden">
             {product.images?.[0] ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
             ) : (
-              <span className="text-8xl">🧴</span>
+              <div className="w-full h-full bg-secondary" />
             )}
           </div>
           {product.images?.length > 1 && (
             <div className="flex gap-2">
               {product.images.slice(1).map((url: string, i: number) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={url} alt={product.name} className="w-16 h-16 object-cover rounded-lg border border-border" />
+                <img key={i} src={url} alt={product.name} className="w-16 h-16 object-cover border border-border" />
               ))}
             </div>
           )}
         </div>
 
         {/* Info */}
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1 capitalize">{product.category}</p>
-            <h1 className="font-heading font-black text-3xl text-foreground mb-2">{product.name}</h1>
-            <p className="font-heading font-black text-3xl text-primary">{formatCurrency(product.price_cents)}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary mb-2 capitalize">
+              {product.category}
+            </p>
+            <h1 className="font-heading text-3xl md:text-4xl text-foreground mb-3">{product.name}</h1>
+            <p className="font-heading text-2xl text-primary">{formatCurrency(product.price_cents)}</p>
           </div>
 
           {product.description && (
-            <p className="text-muted-foreground leading-relaxed">{product.description}</p>
+            <p className="text-muted-foreground leading-relaxed text-sm">{product.description}</p>
           )}
 
-          <div className="border-t border-border pt-5">
+          {product.inventory_count > 0 && product.inventory_count <= 5 && (
+            <p className="text-sm font-medium text-primary">Only {product.inventory_count} left in stock</p>
+          )}
+
+          <div className="border-t border-border pt-6">
             {product.inventory_count === 0 ? (
               <p className="text-muted-foreground font-medium">Out of stock</p>
             ) : (
@@ -72,10 +78,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               />
             )}
           </div>
-
-          {product.inventory_count > 0 && product.inventory_count <= 5 && (
-            <p className="text-sm text-amber-600 font-medium">Only {product.inventory_count} left in stock</p>
-          )}
         </div>
       </div>
     </div>
