@@ -52,18 +52,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     },
     parcels: [{
       massUnit: "lb",
-      weight: "2",
+      weight: "3",
       distanceUnit: "in",
-      length: "10",
-      width: "8",
-      height: "4",
+      length: "12",
+      width: "10",
+      height: "8",
     }],
     async: false,
   });
 
   const rates = [...(shipment.rates ?? [])]
     .sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))
-    .slice(0, 3)
+    .slice(0, 5)
     .map((r) => ({
       objectId: r.objectId,
       provider: r.provider,
