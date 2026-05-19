@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusUpdater } from "./status-updater";
 import { PhotoUploader } from "./photo-uploader";
+import { ReturnLabelButton } from "./return-label-button";
 
 export const dynamic = "force-dynamic";
 
@@ -135,12 +136,24 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             {/* Shipping */}
             <div className="bg-white rounded-xl border border-border p-6">
               <h2 className="font-heading font-black text-lg text-foreground mb-3">Shipping</h2>
-              <p className="text-sm text-foreground font-medium">
-                {order.inbound_method === "buy_label" ? "Prepaid label purchased" : "Customer shipping own way"}
+              <p className="text-sm text-foreground font-medium mb-3">
+                {order.inbound_method === "buy_label" ? "Prepaid inbound label purchased" : "Customer shipping own way"}
               </p>
               {order.shipping_cents > 0 && (
-                <p className="text-sm text-muted-foreground mt-1">Label cost: {formatCurrency(order.shipping_cents)}</p>
+                <p className="text-sm text-muted-foreground mb-4">Label cost: {formatCurrency(order.shipping_cents)}</p>
               )}
+              {order.shipping_label_url && (
+                <a
+                  href={order.shipping_label_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-sm font-medium text-primary hover:underline mb-4"
+                >
+                  Print Inbound Label (PDF)
+                </a>
+              )}
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Return to Customer</p>
+              <ReturnLabelButton orderId={order.id} existingLabelUrl={order.return_label_url} />
             </div>
 
             {/* Notes */}

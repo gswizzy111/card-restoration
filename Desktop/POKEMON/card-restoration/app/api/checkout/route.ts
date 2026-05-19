@@ -146,26 +146,38 @@ export async function POST(request: Request) {
     is_customer_visible: false,
   });
 
-  // Build Stripe line items
+  // Build Stripe line items (tiered: $75 for 1–3, $65 for 4–5, $60 for 6+)
   const cardCount = data.cards.length;
-  const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [
-    {
-      price_data: {
-        currency: "usd",
-        product_data: { name: `Full Restoration & PSA Prep — first card` },
-        unit_amount: 12000,
-      },
-      quantity: 1,
+  const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [];
+
+  const tier1 = Math.min(cardCount, 3);
+  lineItems.push({
+    price_data: {
+      currency: "usd",
+      product_data: { name: cardCount > 3 ? "Full Restoration & PSA Prep — cards 1–3" : "Full Restoration & PSA Prep" },
+      unit_amount: 7500,
     },
-  ];
-  if (cardCount > 1) {
+    quantity: tier1,
+  });
+  if (cardCount > 3) {
+    const tier2 = Math.min(cardCount - 3, 2);
     lineItems.push({
       price_data: {
         currency: "usd",
-        product_data: { name: `Full Restoration & PSA Prep — additional cards` },
-        unit_amount: 10000,
+        product_data: { name: "Full Restoration & PSA Prep — cards 4–5" },
+        unit_amount: 6500,
       },
-      quantity: cardCount - 1,
+      quantity: tier2,
+    });
+  }
+  if (cardCount > 5) {
+    lineItems.push({
+      price_data: {
+        currency: "usd",
+        product_data: { name: "Full Restoration & PSA Prep — cards 6+" },
+        unit_amount: 6000,
+      },
+      quantity: cardCount - 5,
     });
   }
   if (shippingCents > 0 && data.shipping_rate) {
