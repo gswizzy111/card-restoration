@@ -104,7 +104,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const admin = createAdminClient();
-  await admin.from("shop_orders").update({ return_label_url: transaction.labelUrl }).eq("id", id);
+  const { error: dbError } = await admin
+    .from("shop_orders")
+    .update({ return_label_url: transaction.labelUrl })
+    .eq("id", id);
+
+  if (dbError) {
+    console.error("Failed to save return_label_url:", dbError);
+    return Response.json(
+      { error: `Label was purchased but could not be saved: ${dbError.message}. Run: ALTER TABLE shop_orders ADD COLUMN IF NOT EXISTS return_label_url TEXT;` },
+      { status: 500 }
+    );
+  }
 
   return Response.json({ labelUrl: transaction.labelUrl });
 }
