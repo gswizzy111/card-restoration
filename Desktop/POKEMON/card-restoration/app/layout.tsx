@@ -30,12 +30,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable} h-full antialiased`}>
       <head>
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-TYYCHS53JE" />
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-LSQXS277DY" />
         <script dangerouslySetInnerHTML={{ __html: `
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
-          gtag('config', 'G-TYYCHS53JE');
+          gtag('config', 'G-LSQXS277DY');
         `}} />
       </head>
       <body className="min-h-full flex flex-col">
