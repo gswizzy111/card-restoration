@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 interface DayData {
   date: string;
@@ -9,23 +9,40 @@ interface DayData {
   orders: number;
 }
 
-function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
+interface ChartEntry extends DayData {
+  trend: number | null;
+}
+
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number }[]; label?: string }) {
   if (!active || !payload?.length) return null;
+  const revenue = payload.find((p) => p.name === "revenue");
+  const orders = payload.find((p) => p.name === "orders");
+  const trend = payload.find((p) => p.name === "trend");
   return (
     <div className="bg-white border border-border rounded-lg p-3 shadow-md text-sm">
       <p className="font-bold text-foreground mb-1">{label}</p>
-      <p className="text-primary font-bold">${(payload[0].value).toFixed(2)}</p>
-      <p className="text-muted-foreground">{payload[1]?.value} orders</p>
+      {revenue && <p className="text-primary font-bold">${revenue.value.toFixed(2)}</p>}
+      {orders && <p className="text-muted-foreground">{orders.value} orders</p>}
+      {trend && trend.value != null && (
+        <p className="text-orange-500 text-xs mt-1">7-day avg: ${trend.value.toFixed(2)}</p>
+      )}
     </div>
   );
 }
 
 export function RevenueChart({ data }: { data: DayData[] }) {
+  const chartData: ChartEntry[] = data.map((d, i) => {
+    if (i < 6) return { ...d, trend: null };
+    const window = data.slice(i - 6, i + 1);
+    const avg = window.reduce((s, x) => s + x.revenue, 0) / 7;
+    return { ...d, trend: Math.round(avg * 100) / 100 };
+  });
+
   return (
     <div className="bg-white rounded-xl border border-border p-6">
       <h2 className="font-heading font-black text-lg text-foreground mb-6">Revenue — Last 30 Days</h2>
       <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data} barSize={10}>
+        <ComposedChart data={chartData} barSize={10}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
           <XAxis
             dataKey="label"
@@ -43,7 +60,15 @@ export function RevenueChart({ data }: { data: DayData[] }) {
           <Tooltip content={<CustomTooltip />} />
           <Bar dataKey="revenue" fill="oklch(0.55 0.22 265)" radius={[4, 4, 0, 0]} />
           <Bar dataKey="orders" fill="oklch(0.75 0.15 265)" radius={[4, 4, 0, 0]} />
-        </BarChart>
+          <Line
+            dataKey="trend"
+            type="monotone"
+            stroke="#f97316"
+            strokeWidth={2}
+            dot={false}
+            connectNulls={false}
+          />
+        </ComposedChart>
       </ResponsiveContainer>
       <div className="flex gap-6 mt-4">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -51,6 +76,9 @@ export function RevenueChart({ data }: { data: DayData[] }) {
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="w-3 h-3 rounded-sm" style={{ background: "oklch(0.75 0.15 265)" }} />Orders
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="w-3 h-0.5 bg-orange-500 inline-block" />7-day avg
         </div>
       </div>
     </div>
