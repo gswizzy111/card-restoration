@@ -58,17 +58,20 @@ export default async function AdminPage() {
   const monthRevenue = thisMonthRevenue.reduce((sum, o) => sum + o.total_cents, 0);
   const thisMonthOrderCount = thisMonthRevenue.length;
 
-  // Build last 6 months of data for chart (both order types)
-  const monthlyData = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-    const monthItems = allRevenue.filter((o) => {
+  // Build last 30 days of daily data for chart
+  const dailyData = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (29 - i));
+    const dayItems = allRevenue.filter((o) => {
       const od = new Date(o.created_at);
-      return od.getMonth() === d.getMonth() && od.getFullYear() === d.getFullYear();
+      return od.getFullYear() === d.getFullYear() &&
+        od.getMonth() === d.getMonth() &&
+        od.getDate() === d.getDate();
     });
     return {
-      month: d.toLocaleString("default", { month: "short" }),
-      revenue: Math.round(monthItems.reduce((s, o) => s + o.total_cents, 0)) / 100,
-      orders: monthItems.length,
+      date: d.toISOString().slice(0, 10),
+      label: d.toLocaleString("default", { month: "short", day: "numeric" }),
+      revenue: Math.round(dayItems.reduce((s, o) => s + o.total_cents, 0)) / 100,
+      orders: dayItems.length,
     };
   });
 
@@ -115,7 +118,7 @@ export default async function AdminPage() {
 
         {/* Chart */}
         <div className="mb-8">
-          <RevenueChart data={monthlyData} />
+          <RevenueChart data={dailyData} />
         </div>
 
         {allOrders.length === 0 && (
