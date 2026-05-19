@@ -4,54 +4,21 @@ import { AddToCartButton } from "./add-to-cart-button";
 
 export const dynamic = "force-dynamic";
 
-const CATEGORIES = ["All", "Cleaning", "Tools", "Storage", "Kits"];
-
-export default async function ShopPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ category?: string }>;
-}) {
-  const { category } = await searchParams;
+export default async function ShopPage() {
   const admin = createAdminClient();
 
-  let query = admin
+  const { data: products } = await admin
     .from("products")
     .select("id, name, slug, description, price_cents, images, category, inventory_count")
     .eq("active", true)
     .order("created_at", { ascending: false });
-
-  if (category && category !== "All") {
-    query = query.ilike("category", category);
-  }
-
-  const { data: products } = await query;
 
   return (
     <div className="max-w-7xl mx-auto px-6 md:px-10 py-14">
       {/* Header */}
       <div className="mb-10">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary mb-3">The Card Doc</p>
-        <h1 className="font-heading text-4xl md:text-5xl text-foreground">Shop</h1>
-      </div>
-
-      {/* Category filters — editorial underline style */}
-      <div className="flex gap-8 border-b border-border mb-10">
-        {CATEGORIES.map((cat) => {
-          const active = (!category && cat === "All") || category === cat;
-          return (
-            <a
-              key={cat}
-              href={cat === "All" ? "/shop" : `/shop?category=${cat}`}
-              className={`text-sm font-medium pb-3 border-b-2 -mb-px transition-colors ${
-                active
-                  ? "border-foreground text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {cat}
-            </a>
-          );
-        })}
+        <h1 className="font-heading text-4xl md:text-5xl text-foreground">Restoration Kits</h1>
       </div>
 
       {/* Empty state */}

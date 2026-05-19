@@ -6,11 +6,8 @@ import { Menu, ShoppingCart, X } from "lucide-react";
 import { useCart } from "@/lib/cart-context";
 
 const links = [
-  { href: "/shop", label: "Shop" },
-  { href: "/restoration", label: "Restoration" },
-  { href: "/how-it-works", label: "How It Works" },
-  { href: "/faq", label: "FAQ" },
-  { href: "/track", label: "Track Order" },
+  { href: "/shop", label: "Restoration Kits" },
+  { href: "/restoration", label: "Restoration Service" },
 ];
 
 export function Nav() {
