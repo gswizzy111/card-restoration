@@ -19,10 +19,16 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default async function AdminPage() {
   const admin = createAdminClient();
+
   const { data: orders } = await admin
     .from("orders")
     .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method")
     .neq("status", "awaiting_payment")
+    .order("created_at", { ascending: false });
+
+  const { data: shopOrders } = await admin
+    .from("shop_orders")
+    .select("id, total_cents, created_at")
     .order("created_at", { ascending: false });
 
   const orderIds = orders?.map((o) => o.id) ?? [];
@@ -37,24 +43,32 @@ export default async function AdminPage() {
   }
 
   const allOrders = orders ?? [];
+
+  // Combined revenue entries from both tables
+  const allRevenue = [
+    ...(orders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, created_at: o.created_at })),
+    ...(shopOrders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, created_at: o.created_at })),
+  ];
+
   const now = new Date();
-  const thisMonth = allOrders.filter((o) => {
+  const thisMonthRevenue = allRevenue.filter((o) => {
     const d = new Date(o.created_at);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
-  const monthRevenue = thisMonth.reduce((sum, o) => sum + (o.total_cents ?? 0), 0);
+  const monthRevenue = thisMonthRevenue.reduce((sum, o) => sum + o.total_cents, 0);
+  const thisMonthOrderCount = thisMonthRevenue.length;
 
-  // Build last 6 months of data for chart
+  // Build last 6 months of data for chart (both order types)
   const monthlyData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-    const monthOrders = allOrders.filter((o) => {
+    const monthItems = allRevenue.filter((o) => {
       const od = new Date(o.created_at);
       return od.getMonth() === d.getMonth() && od.getFullYear() === d.getFullYear();
     });
     return {
       month: d.toLocaleString("default", { month: "short" }),
-      revenue: Math.round(monthOrders.reduce((s, o) => s + (o.total_cents ?? 0), 0)) / 100,
-      orders: monthOrders.length,
+      revenue: Math.round(monthItems.reduce((s, o) => s + o.total_cents, 0)) / 100,
+      orders: monthItems.length,
     };
   });
 
@@ -64,9 +78,12 @@ export default async function AdminPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="font-heading font-black text-3xl text-foreground">Orders</h1>
-            <p className="text-muted-foreground text-sm mt-1">{allOrders.length} total</p>
+            <p className="text-muted-foreground text-sm mt-1">{allRevenue.length} total</p>
           </div>
           <div className="flex items-center gap-4">
+            <Link href="/admin/shop-orders" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+              Kit Orders →
+            </Link>
             <Link href="/admin/products" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
               Products →
             </Link>
@@ -88,7 +105,7 @@ export default async function AdminPage() {
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-border p-5">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Orders This Month</p>
-            <p className="font-heading font-black text-3xl text-foreground">{thisMonth.length}</p>
+            <p className="font-heading font-black text-3xl text-foreground">{thisMonthOrderCount}</p>
           </div>
           <div className="bg-white rounded-xl border border-border p-5">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Revenue This Month</p>
