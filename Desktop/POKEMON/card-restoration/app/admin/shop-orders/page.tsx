@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import Stripe from "stripe";
+import { ReturnLabelButton } from "./return-label-button";
 
 export const dynamic = "force-dynamic";
 
@@ -194,6 +195,9 @@ export default async function ShopOrdersPage() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">No address on file</p>
+                    )}
+                    {address && (
+                      <ReturnLabelButton orderId={order.id} existingLabelUrl={order.return_label_url} />
                     )}
                   </div>
                 </div>
