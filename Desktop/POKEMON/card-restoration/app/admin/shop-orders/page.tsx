@@ -4,13 +4,15 @@ import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import Stripe from "stripe";
 import { ReturnLabelButton } from "./return-label-button";
+import { KitStatusUpdater } from "./status-updater";
 
 export const dynamic = "force-dynamic";
 
 const STATUS_COLORS: Record<string, string> = {
-  paid:      "bg-blue-100 text-blue-700",
-  shipped:   "bg-green-100 text-green-700",
-  delivered: "bg-emerald-100 text-emerald-700",
+  paid:       "bg-blue-100 text-blue-700",
+  processing: "bg-yellow-100 text-yellow-700",
+  shipped:    "bg-purple-100 text-purple-700",
+  delivered:  "bg-emerald-100 text-emerald-700",
 };
 
 type ShopOrderItem = {
@@ -166,6 +168,8 @@ export default async function ShopOrdersPage() {
                     <p className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
+
+                <KitStatusUpdater orderId={order.id} currentStatus={order.status} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 border-t border-border pt-5">
                   <div>
