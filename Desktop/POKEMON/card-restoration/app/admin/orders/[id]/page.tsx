@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { StatusUpdater } from "./status-updater";
 import { PhotoUploader } from "./photo-uploader";
 import { ReturnLabelButton } from "./return-label-button";
+import { CheckpointAdder } from "./checkpoint-adder";
 
 export const dynamic = "force-dynamic";
 
@@ -167,14 +168,20 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             {/* Event log */}
             <div className="bg-white rounded-xl border border-border p-6">
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Activity</h2>
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 mb-4">
                 {events?.map((e) => (
-                  <div key={e.id} className="text-sm">
+                  <div key={e.id} className="text-sm border-l-2 border-border pl-3">
                     <p className="text-foreground">{e.description}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(e.created_at).toLocaleString()}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-xs text-muted-foreground">{new Date(e.created_at).toLocaleString()}</p>
+                      {e.is_customer_visible && (
+                        <span className="text-xs text-green-600 font-medium">visible to customer</span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
+              <CheckpointAdder orderId={order.id} />
             </div>
           </div>
         </div>
