@@ -52,11 +52,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     },
     parcels: [{
       massUnit: "lb",
-      weight: "3",
+      weight: "4",
       distanceUnit: "in",
-      length: "12",
-      width: "10",
-      height: "8",
+      length: "10",
+      width: "7",
+      height: "7",
     }],
     async: false,
   });
