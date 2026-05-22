@@ -129,7 +129,7 @@ export default async function AdminPage() {
               </div>
               <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
                 <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
-                <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString()}</span>
+                <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</span>
               </div>
             </Link>
           ))}

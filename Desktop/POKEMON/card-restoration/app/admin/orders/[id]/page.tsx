@@ -43,7 +43,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h1 className="font-heading font-black text-2xl text-foreground">Order #{order.order_number}</h1>
-                  <p className="text-sm text-muted-foreground mt-1">{new Date(order.created_at).toLocaleString()}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</p>
                 </div>
                 <span className="font-heading font-black text-2xl text-primary">{formatCurrency(order.total_cents)}</span>
               </div>
@@ -173,7 +173,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                   <div key={e.id} className="text-sm border-l-2 border-border pl-3">
                     <p className="text-foreground">{e.description}</p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-xs text-muted-foreground">{new Date(e.created_at).toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(e.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</p>
                       {e.is_customer_visible && (
                         <span className="text-xs text-green-600 font-medium">visible to customer</span>
                       )}

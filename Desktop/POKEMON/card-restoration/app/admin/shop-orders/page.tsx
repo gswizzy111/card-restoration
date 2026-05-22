@@ -156,7 +156,7 @@ export default async function ShopOrdersPage() {
                   </div>
                   <div className="text-left sm:text-right shrink-0">
                     <p className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</p>
                   </div>
                 </div>
 
