@@ -1,5 +1,4 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import Link from "next/link";
 import { NewPartnerForm } from "./new-partner-form";
 import { AllocateForm } from "./allocate-form";
 
@@ -44,11 +43,6 @@ export default async function AdminPartnersPage() {
           <div>
             <h1 className="font-heading font-black text-3xl text-foreground">Partners</h1>
             <p className="text-muted-foreground text-sm mt-1">{partners?.length ?? 0} active partners</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/admin" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
-              ← Orders
-            </Link>
           </div>
         </div>
 

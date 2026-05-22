@@ -78,33 +78,9 @@ export default async function AdminPage() {
   return (
     <div className="min-h-screen bg-secondary/30">
       <div className="max-w-6xl mx-auto px-6 py-10">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="font-heading font-black text-3xl text-foreground">Orders</h1>
-            <p className="text-muted-foreground text-sm mt-1">{allRevenue.length} total</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/admin/shop-orders" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
-              Kit Orders →
-            </Link>
-            <Link href="/admin/partners" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
-              Partners →
-            </Link>
-            <Link href="/admin/products" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
-              Products →
-            </Link>
-            <a
-              href="https://analytics.google.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-            >
-              Analytics →
-            </a>
-            <form action="/api/admin/logout" method="POST">
-              <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign out</button>
-            </form>
-          </div>
+        <div className="mb-8">
+          <h1 className="font-heading font-black text-3xl text-foreground">Orders</h1>
+          <p className="text-muted-foreground text-sm mt-1">{allRevenue.length} total</p>
         </div>
 
         {/* Stats */}

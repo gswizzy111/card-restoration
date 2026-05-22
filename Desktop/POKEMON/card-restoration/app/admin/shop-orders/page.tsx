@@ -1,7 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { formatCurrency } from "@/lib/utils";
-import Link from "next/link";
 import Stripe from "stripe";
 import { ReturnLabelButton } from "./return-label-button";
 import { KitStatusUpdater } from "./status-updater";
@@ -128,14 +127,6 @@ export default async function ShopOrdersPage() {
           <div>
             <h1 className="font-heading font-black text-3xl text-foreground">Kit Orders</h1>
             <p className="text-muted-foreground text-sm mt-1">{orders?.length ?? 0} total</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/admin" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
-              Restoration Orders →
-            </Link>
-            <form action="/api/admin/logout" method="POST">
-              <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign out</button>
-            </form>
           </div>
         </div>
 
