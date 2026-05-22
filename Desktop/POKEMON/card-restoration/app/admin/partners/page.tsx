@@ -70,6 +70,7 @@ export default async function AdminPartnersPage() {
               const referrals = referralsByPartner[partner.id] ?? [];
               const totalSold = sales.reduce((s, r) => s + r.quantity, 0);
               const remaining = partner.kits_allocated - totalSold;
+              const totalProfit = totalSold * 18.50;
 
               return (
                 <div key={partner.id} className="bg-white rounded-xl border border-border p-6">
@@ -97,6 +98,10 @@ export default async function AdminPartnersPage() {
                       <div>
                         <p className="text-2xl font-heading font-black text-foreground">{referrals.length}</p>
                         <p className="text-xs text-muted-foreground">Referrals</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-heading font-black text-primary">${totalProfit.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">Profit</p>
                       </div>
                     </div>
                   </div>

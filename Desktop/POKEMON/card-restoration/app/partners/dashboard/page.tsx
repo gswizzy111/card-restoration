@@ -29,6 +29,7 @@ export default async function PartnerDashboard() {
 
   const totalSold = (sales ?? []).reduce((s, r) => s + r.quantity, 0);
   const remaining = partner.kits_allocated - totalSold;
+  const totalProfit = totalSold * 18.50;
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -43,6 +44,18 @@ export default async function PartnerDashboard() {
           <form action="/api/partners/logout" method="POST">
             <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign out</button>
           </form>
+        </div>
+
+        {/* Profit banner */}
+        <div className="bg-primary rounded-xl p-6 mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-primary-foreground/70 mb-1">Total Profit Earned</p>
+            <p className="font-heading font-black text-4xl text-primary-foreground">${totalProfit.toFixed(2)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-primary-foreground/70">$18.50 per kit</p>
+            <p className="text-sm font-bold text-primary-foreground mt-0.5">{totalSold} kit{totalSold !== 1 ? "s" : ""} sold</p>
+          </div>
         </div>
 
         {/* Kit stats */}
