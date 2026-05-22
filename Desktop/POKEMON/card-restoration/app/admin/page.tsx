@@ -87,6 +87,9 @@ export default async function AdminPage() {
             <Link href="/admin/shop-orders" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
               Kit Orders →
             </Link>
+            <Link href="/admin/partners" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+              Partners →
+            </Link>
             <Link href="/admin/products" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
               Products →
             </Link>
