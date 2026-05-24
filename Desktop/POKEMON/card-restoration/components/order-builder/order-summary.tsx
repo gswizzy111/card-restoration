@@ -22,7 +22,7 @@ export function OrderSummary({ cards, shippingMethod, selectedRate }: OrderSumma
           <span>Full Restoration & PSA Prep</span>
           <span>{cards.length} card{cards.length !== 1 ? "s" : ""}</span>
         </div>
-        <p className="text-xs text-muted-foreground">$120 first card · $100 each after</p>
+        <p className="text-xs text-muted-foreground">$75/card · $65 each after 3 · $60 each after 5</p>
       </div>
 
       <div className="flex flex-col gap-1 text-sm">
