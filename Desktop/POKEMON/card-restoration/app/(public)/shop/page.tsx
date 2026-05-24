@@ -30,6 +30,8 @@ const TESTIMONIALS = [
   { src: "/testimonial-2.jpeg", alt: "Customer review 2" },
   { src: "/testimonial-3.jpeg", alt: "Customer review 3" },
   { src: "/testimonial-4.jpeg", alt: "Customer review 4" },
+  { src: "/testimonial-5.png",  alt: "Customer review 5" },
+  { src: "/testimonial-6.png",  alt: "Customer review 6" },
 ];
 
 export default async function ShopPage() {
@@ -112,7 +114,7 @@ export default async function ShopPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary mb-3">What Our Customers Say</p>
           <h2 className="font-heading text-3xl md:text-4xl text-foreground">Trusted by Collectors</h2>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
           {TESTIMONIALS.map((t) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
