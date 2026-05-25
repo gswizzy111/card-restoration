@@ -20,6 +20,10 @@ export const metadata: Metadata = {
   title: "The Card Doc — Card Cleaning Kits & Restoration",
   description:
     "Professional card cleaning kits and PSA prep restoration service for trading card collectors.",
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
   openGraph: {
     title: "The Card Doc — Card Cleaning Kits & Restoration",
     description: "Professional card cleaning kits and PSA prep restoration service for trading card collectors.",
