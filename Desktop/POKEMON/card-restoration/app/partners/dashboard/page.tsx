@@ -40,7 +40,7 @@ export default async function PartnerDashboard() {
   const remainingPolish = (partner.polish_allocated ?? 0) - polishSold;
   const remainingSpray  = (partner.spray_allocated ?? 0) - spraySold;
 
-  const totalProfit = kitsSold * 18.50 + polishSold * 8.75 + spraySold * 9.10;
+  const totalProfit = kitsSold * 18.50 + polishSold * 7.75 + spraySold * 8.10;
 
   const productLabel = (s: { product_type?: string; quantity: number }) => {
     if (s.product_type === "polish") return `${s.quantity} polish`;
@@ -71,8 +71,8 @@ export default async function PartnerDashboard() {
           </div>
           <div className="text-right text-primary-foreground/70 text-xs space-y-0.5">
             <p>{kitsSold} kit{kitsSold !== 1 ? "s" : ""} × $18.50</p>
-            <p>{polishSold} polish × $8.75</p>
-            <p>{spraySold} spray × $9.10</p>
+            <p>{polishSold} polish × $7.75</p>
+            <p>{spraySold} spray × $8.10</p>
           </div>
         </div>
 

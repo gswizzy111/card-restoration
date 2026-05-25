@@ -4,7 +4,7 @@ import { AllocateForm } from "./allocate-form";
 
 export const dynamic = "force-dynamic";
 
-const PROFIT = { kit: 18.50, polish: 8.75, spray: 9.10 };
+const PROFIT = { kit: 18.50, polish: 7.75, spray: 8.10 };
 
 export default async function AdminPartnersPage() {
   const admin = createAdminClient();
