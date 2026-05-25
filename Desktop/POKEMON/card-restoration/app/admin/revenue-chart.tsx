@@ -135,20 +135,23 @@ export function RevenueChart({ entries }: { entries: Entry[] }) {
 
   const data = useMemo(() => buildBuckets(entries, range), [entries, range]);
 
+  const totalRevenue = useMemo(() => data.reduce((s, d) => s + d.revenue, 0), [data]);
+  const totalOrders = useMemo(() => data.reduce((s, d) => s + d.orders, 0), [data]);
+
   const showTrend = range !== "24h" && range !== "7d";
   const xInterval = range === "24h" ? 3 : range === "30d" ? 4 : 0;
 
   const titles: Record<Range, string> = {
-    "24h": "Revenue — Last 24 Hours",
-    "7d": "Revenue — Last 7 Days",
-    "30d": "Revenue — Last 30 Days",
-    all: "Revenue — All Time",
+    "24h": "Last 24 Hours",
+    "7d": "Last 7 Days",
+    "30d": "Last 30 Days",
+    all: "All Time",
   };
 
   return (
     <div className="bg-white rounded-xl border border-border p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <h2 className="font-heading font-black text-lg text-foreground">{titles[range]}</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+        <h2 className="font-heading font-black text-lg text-foreground">Revenue — {titles[range]}</h2>
         <div className="flex gap-1 bg-secondary/50 rounded-lg p-1">
           {RANGES.map((r) => (
             <button
@@ -163,6 +166,18 @@ export function RevenueChart({ entries }: { entries: Entry[] }) {
               {r.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Totals for selected range */}
+      <div className="grid grid-cols-2 gap-3 mb-6">
+        <div className="bg-secondary/40 rounded-lg p-4">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Revenue</p>
+          <p className="font-heading font-black text-2xl text-primary">${totalRevenue.toFixed(2)}</p>
+        </div>
+        <div className="bg-secondary/40 rounded-lg p-4">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Orders</p>
+          <p className="font-heading font-black text-2xl text-foreground">{totalOrders}</p>
         </div>
       </div>
 
