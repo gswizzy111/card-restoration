@@ -4,6 +4,8 @@ import { AllocateForm } from "./allocate-form";
 
 export const dynamic = "force-dynamic";
 
+const PROFIT = { kit: 18.50, polish: 8.75, spray: 9.10 };
+
 export default async function AdminPartnersPage() {
   const admin = createAdminClient();
 
@@ -16,14 +18,14 @@ export default async function AdminPartnersPage() {
 
   const [{ data: allSales }, { data: allReferrals }] = await Promise.all([
     partnerIds.length > 0
-      ? admin.from("partner_kit_sales").select("partner_id, quantity, notes, created_at").in("partner_id", partnerIds)
+      ? admin.from("partner_kit_sales").select("partner_id, quantity, notes, created_at, product_type").in("partner_id", partnerIds)
       : { data: [] },
     partnerIds.length > 0
       ? admin.from("partner_referrals").select("partner_id, client_name, notes, created_at").in("partner_id", partnerIds)
       : { data: [] },
   ]);
 
-  type Sale = { partner_id: string; quantity: number; notes: string | null; created_at: string };
+  type Sale = { partner_id: string; quantity: number; notes: string | null; created_at: string; product_type: string };
   type Referral = { partner_id: string; client_name: string | null; notes: string | null; created_at: string };
   const salesByPartner: Record<string, Sale[]> = {};
   const referralsByPartner: Record<string, Referral[]> = {};
@@ -39,11 +41,9 @@ export default async function AdminPartnersPage() {
   return (
     <div className="min-h-screen bg-secondary/30">
       <div className="max-w-5xl mx-auto px-6 py-10">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="font-heading font-black text-3xl text-foreground">Partners</h1>
-            <p className="text-muted-foreground text-sm mt-1">{partners?.length ?? 0} active partners</p>
-          </div>
+        <div className="mb-8">
+          <h1 className="font-heading font-black text-3xl text-foreground">Partners</h1>
+          <p className="text-muted-foreground text-sm mt-1">{partners?.length ?? 0} active partners</p>
         </div>
 
         {/* Create new partner */}
@@ -62,9 +62,26 @@ export default async function AdminPartnersPage() {
             {partners.map((partner) => {
               const sales = salesByPartner[partner.id] ?? [];
               const referrals = referralsByPartner[partner.id] ?? [];
-              const totalSold = sales.reduce((s, r) => s + r.quantity, 0);
-              const remaining = partner.kits_allocated - totalSold;
-              const totalProfit = totalSold * 18.50;
+
+              const kitSales    = sales.filter(s => (s.product_type ?? "kit") === "kit");
+              const polishSales = sales.filter(s => s.product_type === "polish");
+              const spraySales  = sales.filter(s => s.product_type === "spray");
+
+              const kitsSold    = kitSales.reduce((s, r) => s + r.quantity, 0);
+              const polishSold  = polishSales.reduce((s, r) => s + r.quantity, 0);
+              const spraySold   = spraySales.reduce((s, r) => s + r.quantity, 0);
+
+              const kitsLeft   = (partner.kits_allocated ?? 0) - kitsSold;
+              const polishLeft = (partner.polish_allocated ?? 0) - polishSold;
+              const sprayLeft  = (partner.spray_allocated ?? 0) - spraySold;
+
+              const totalProfit = kitsSold * PROFIT.kit + polishSold * PROFIT.polish + spraySold * PROFIT.spray;
+
+              const productLabel = (s: Sale) => {
+                if (s.product_type === "polish") return "polish";
+                if (s.product_type === "spray") return "spray";
+                return `kit${s.quantity > 1 ? "s" : ""}`;
+              };
 
               return (
                 <div key={partner.id} className="bg-white rounded-xl border border-border p-6">
@@ -76,46 +93,53 @@ export default async function AdminPartnersPage() {
                         Passcode: <span className="font-mono font-bold text-foreground">{partner.passcode}</span>
                       </p>
                     </div>
-                    <div className="flex gap-4 text-center shrink-0">
+                    <div className="flex flex-wrap gap-4 text-center">
                       <div>
-                        <p className="text-2xl font-heading font-black text-foreground">{partner.kits_allocated}</p>
-                        <p className="text-xs text-muted-foreground">Allocated</p>
+                        <p className="text-xl font-heading font-black text-foreground">{kitsSold}/{partner.kits_allocated ?? 0}</p>
+                        <p className="text-xs text-muted-foreground">Kits sold</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-heading font-black text-primary">{totalSold}</p>
-                        <p className="text-xs text-muted-foreground">Sold</p>
+                        <p className="text-xl font-heading font-black text-foreground">{polishSold}/{partner.polish_allocated ?? 0}</p>
+                        <p className="text-xs text-muted-foreground">Polish sold</p>
                       </div>
                       <div>
-                        <p className={`text-2xl font-heading font-black ${remaining <= 3 ? "text-red-500" : "text-foreground"}`}>{remaining}</p>
-                        <p className="text-xs text-muted-foreground">Left</p>
+                        <p className="text-xl font-heading font-black text-foreground">{spraySold}/{partner.spray_allocated ?? 0}</p>
+                        <p className="text-xs text-muted-foreground">Spray sold</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-heading font-black text-foreground">{referrals.length}</p>
+                        <p className="text-xl font-heading font-black text-foreground">{referrals.length}</p>
                         <p className="text-xs text-muted-foreground">Referrals</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-heading font-black text-primary">${totalProfit.toFixed(2)}</p>
-                        <p className="text-xs text-muted-foreground">Profit</p>
+                        <p className="text-xl font-heading font-black text-primary">${totalProfit.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">Their profit</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Allocate kits */}
+                  {/* Allocate */}
                   <div className="mb-5">
-                    <AllocateForm partnerId={partner.id} current={partner.kits_allocated} />
+                    <AllocateForm
+                      partnerId={partner.id}
+                      kits={partner.kits_allocated ?? 0}
+                      polish={partner.polish_allocated ?? 0}
+                      spray={partner.spray_allocated ?? 0}
+                    />
                   </div>
 
-                  {/* Sales + referrals detail */}
+                  {/* Sales + referrals */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 border-t border-border pt-5">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Kit Sales</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Sales</p>
                       {sales.length === 0 ? (
                         <p className="text-sm text-muted-foreground">None yet</p>
                       ) : (
                         <div className="flex flex-col gap-1.5">
                           {sales.map((s, i) => (
                             <div key={i} className="text-sm flex justify-between">
-                              <span className="text-foreground">{s.quantity} kit{s.quantity > 1 ? "s" : ""}{s.notes ? ` — ${s.notes}` : ""}</span>
+                              <span className="text-foreground">
+                                {s.quantity} {productLabel(s)}{s.notes ? ` — ${s.notes}` : ""}
+                              </span>
                               <span className="text-muted-foreground text-xs">{new Date(s.created_at).toLocaleDateString()}</span>
                             </div>
                           ))}

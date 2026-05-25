@@ -27,9 +27,26 @@ export default async function PartnerDashboard() {
     admin.from("partner_referrals").select("*").eq("partner_id", partnerId).order("created_at", { ascending: false }),
   ]);
 
-  const totalSold = (sales ?? []).reduce((s, r) => s + r.quantity, 0);
-  const remaining = partner.kits_allocated - totalSold;
-  const totalProfit = totalSold * 18.50;
+  const allSales = sales ?? [];
+  const kitSales    = allSales.filter(s => (s.product_type ?? "kit") === "kit");
+  const polishSales = allSales.filter(s => s.product_type === "polish");
+  const spraySales  = allSales.filter(s => s.product_type === "spray");
+
+  const kitsSold    = kitSales.reduce((s, r) => s + r.quantity, 0);
+  const polishSold  = polishSales.reduce((s, r) => s + r.quantity, 0);
+  const spraySold   = spraySales.reduce((s, r) => s + r.quantity, 0);
+
+  const remainingKits   = (partner.kits_allocated ?? 0) - kitsSold;
+  const remainingPolish = (partner.polish_allocated ?? 0) - polishSold;
+  const remainingSpray  = (partner.spray_allocated ?? 0) - spraySold;
+
+  const totalProfit = kitsSold * 18.50 + polishSold * 8.75 + spraySold * 9.10;
+
+  const productLabel = (s: { product_type?: string; quantity: number }) => {
+    if (s.product_type === "polish") return `${s.quantity} polish`;
+    if (s.product_type === "spray") return `${s.quantity} spray`;
+    return `${s.quantity} kit${s.quantity !== 1 ? "s" : ""}`;
+  };
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -52,45 +69,45 @@ export default async function PartnerDashboard() {
             <p className="text-xs font-bold uppercase tracking-widest text-primary-foreground/70 mb-1">Total Profit Earned</p>
             <p className="font-heading font-black text-4xl text-primary-foreground">${totalProfit.toFixed(2)}</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-primary-foreground/70">$18.50 per kit</p>
-            <p className="text-sm font-bold text-primary-foreground mt-0.5">{totalSold} kit{totalSold !== 1 ? "s" : ""} sold</p>
+          <div className="text-right text-primary-foreground/70 text-xs space-y-0.5">
+            <p>{kitsSold} kit{kitsSold !== 1 ? "s" : ""} × $18.50</p>
+            <p>{polishSold} polish × $8.75</p>
+            <p>{spraySold} spray × $9.10</p>
           </div>
         </div>
 
-        {/* Kit stats */}
+        {/* Inventory stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Kits Allocated</p>
-            <p className="font-heading font-black text-3xl text-foreground">{partner.kits_allocated}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Kits Sold</p>
-            <p className="font-heading font-black text-3xl text-primary">{totalSold}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Remaining</p>
-            <p className={`font-heading font-black text-3xl ${remaining <= 3 ? "text-red-500" : "text-foreground"}`}>{remaining}</p>
-          </div>
+          {[
+            { label: "Kits", allocated: partner.kits_allocated ?? 0, sold: kitsSold, remaining: remainingKits },
+            { label: "Polish", allocated: partner.polish_allocated ?? 0, sold: polishSold, remaining: remainingPolish },
+            { label: "Spray", allocated: partner.spray_allocated ?? 0, sold: spraySold, remaining: remainingSpray },
+          ].map(({ label, allocated, sold, remaining }) => (
+            <div key={label} className="bg-white rounded-xl border border-border p-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">{label}</p>
+              <p className="font-heading font-black text-2xl text-foreground">{remaining}<span className="text-sm font-normal text-muted-foreground">/{allocated}</span></p>
+              <p className="text-xs text-muted-foreground mt-1">{sold} sold</p>
+            </div>
+          ))}
         </div>
 
         {/* Actions */}
         <div className="grid grid-cols-2 gap-4 mb-8">
-          <LogSaleButton remaining={remaining} />
+          <LogSaleButton remainingKits={remainingKits} remainingPolish={remainingPolish} remainingSpray={remainingSpray} />
           <LogReferralButton />
         </div>
 
-        {/* Kit sales history */}
+        {/* Sales history */}
         <div className="bg-white rounded-xl border border-border p-6 mb-4">
-          <h2 className="font-heading font-black text-lg text-foreground mb-4">Kit Sales</h2>
-          {!sales?.length ? (
+          <h2 className="font-heading font-black text-lg text-foreground mb-4">Sales History</h2>
+          {!allSales.length ? (
             <p className="text-sm text-muted-foreground">No sales logged yet.</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {sales.map((s) => (
+              {allSales.map((s) => (
                 <div key={s.id} className="flex items-center justify-between text-sm border-b border-border pb-3 last:border-0 last:pb-0">
                   <div>
-                    <p className="font-bold text-foreground">{s.quantity} kit{s.quantity > 1 ? "s" : ""} sold</p>
+                    <p className="font-bold text-foreground">{productLabel(s)} sold</p>
                     {s.notes && <p className="text-muted-foreground text-xs">{s.notes}</p>}
                   </div>
                   <p className="text-xs text-muted-foreground">{new Date(s.created_at).toLocaleDateString()}</p>
