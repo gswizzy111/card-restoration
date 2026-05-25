@@ -20,6 +20,15 @@ export const metadata: Metadata = {
   title: "The Card Doc — Card Cleaning Kits & Restoration",
   description:
     "Professional card cleaning kits and PSA prep restoration service for trading card collectors.",
+  openGraph: {
+    title: "The Card Doc — Card Cleaning Kits & Restoration",
+    description: "Professional card cleaning kits and PSA prep restoration service for trading card collectors.",
+    images: [{ url: "/og-image.png", width: 1080, height: 1080 }],
+  },
+  twitter: {
+    card: "summary",
+    images: ["/og-image.png"],
+  },
 };
 
 export default function RootLayout({
