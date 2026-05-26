@@ -17,9 +17,31 @@ export default function ProductCheckoutPage() {
     name: "", email: "", phone: "",
     street1: "", street2: "", city: "", state: "", zip: "",
   });
+  const [creatorCode, setCreatorCode] = useState("");
+  const [codeInput, setCodeInput] = useState("");
+  const [codeStatus, setCodeStatus] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function applyCreatorCode() {
+    const trimmed = codeInput.trim();
+    if (!trimmed) return;
+    setCodeStatus("checking");
+    try {
+      const res = await fetch(`/api/affiliates/validate?code=${encodeURIComponent(trimmed)}`);
+      if (res.ok) {
+        setCreatorCode(trimmed);
+        setCodeStatus("valid");
+      } else {
+        setCreatorCode("");
+        setCodeStatus("invalid");
+      }
+    } catch {
+      setCreatorCode("");
+      setCodeStatus("invalid");
+    }
   }
 
   function isValid() {
@@ -37,6 +59,7 @@ export default function ProductCheckoutPage() {
           items: items.map((i) => ({ id: i.id, quantity: i.quantity, slug: i.slug })),
           customer: { name: form.name, email: form.email, phone: form.phone },
           address: { street1: form.street1, street2: form.street2 || undefined, city: form.city, state: form.state, zip: form.zip },
+          ...(codeStatus === "valid" && creatorCode ? { affiliate_code: creatorCode } : {}),
         }),
       });
       const data = await res.json();
@@ -117,6 +140,39 @@ export default function ProductCheckoutPage() {
                 <Input value={form.zip} onChange={(e) => set("zip", e.target.value)} placeholder="10001" />
               </div>
             </div>
+          </div>
+          <div className="bg-white border border-border rounded-xl p-6">
+            <h2 className="font-heading font-black text-lg text-foreground mb-4">Creator Code</h2>
+            <p className="text-xs text-muted-foreground mb-3">Have a creator code? Enter it here.</p>
+            <div className="flex gap-2">
+              <Input
+                value={codeInput}
+                onChange={(e) => {
+                  setCodeInput(e.target.value.toUpperCase());
+                  setCodeStatus("idle");
+                  setCreatorCode("");
+                }}
+                onBlur={applyCreatorCode}
+                placeholder="CREATORCODE"
+                className="flex-1 font-mono uppercase"
+              />
+              <button
+                type="button"
+                onClick={applyCreatorCode}
+                className="px-4 h-9 bg-secondary text-foreground text-sm font-bold rounded-lg hover:bg-secondary/70 transition-colors whitespace-nowrap"
+              >
+                Apply
+              </button>
+            </div>
+            {codeStatus === "checking" && (
+              <p className="text-xs text-muted-foreground mt-2">Checking code...</p>
+            )}
+            {codeStatus === "valid" && (
+              <p className="text-xs text-green-600 font-semibold mt-2">✓ Code applied</p>
+            )}
+            {codeStatus === "invalid" && (
+              <p className="text-xs text-red-600 mt-2">Invalid code. Please try again.</p>
+            )}
           </div>
         </div>
 

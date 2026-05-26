@@ -12,6 +12,7 @@ const BodySchema = z.object({
     state: z.string().min(1),
     zip: z.string().min(5),
   }),
+  affiliate_code: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -54,6 +55,20 @@ export async function POST(request: Request) {
     });
   }
 
+  // Validate affiliate code if provided
+  let validatedAffiliateCode: string | null = null;
+  if (data.affiliate_code) {
+    const { data: affiliate } = await admin
+      .from("affiliates")
+      .select("code")
+      .ilike("code", data.affiliate_code.trim())
+      .single();
+    if (!affiliate) {
+      return Response.json({ error: "Invalid creator code." }, { status: 400 });
+    }
+    validatedAffiliateCode = affiliate.code;
+  }
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
 
   let session;
@@ -80,6 +95,7 @@ export async function POST(request: Request) {
         customer_name: data.customer.name,
         customer_phone: data.customer.phone,
         items: JSON.stringify(data.items.map((i) => ({ id: i.id, qty: i.quantity }))),
+        affiliate_code: validatedAffiliateCode ?? "",
       },
     });
   } catch (err) {

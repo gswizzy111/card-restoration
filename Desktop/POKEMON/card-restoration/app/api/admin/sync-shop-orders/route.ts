@@ -73,6 +73,7 @@ export async function POST() {
         shipping_cents: 599,
         total_cents: totalCents,
         status: "paid",
+        affiliate_code: session.metadata?.affiliate_code || null,
       });
     }
 

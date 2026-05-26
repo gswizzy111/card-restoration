@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/admin/shop-orders", label: "Kit Orders", icon: "📦" },
   { href: "/admin/partners",    label: "Partners",   icon: "🤝" },
   { href: "/admin/products",    label: "Products",   icon: "🛍️" },
+  { href: "/admin/affiliates",  label: "Affiliates", icon: "🎯" },
 ];
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
