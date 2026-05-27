@@ -51,7 +51,7 @@ export async function POST() {
 
       const typedSession = session as Stripe.Checkout.Session;
       const addr = typedSession.collected_information?.shipping_details?.address;
-      const shippingAddress = addr ? {
+      let shippingAddress = addr ? {
         street1: addr.line1 ?? "",
         street2: addr.line2 ?? null,
         city: addr.city ?? "",
@@ -60,7 +60,17 @@ export async function POST() {
         country: addr.country ?? "US",
       } : null;
 
+      // International orders: address stored in metadata instead of Stripe collected_information
+      const isInternational = session.metadata?.is_international === "true";
+      if (!shippingAddress && isInternational && session.metadata?.shipping_address_json) {
+        try { shippingAddress = JSON.parse(session.metadata.shipping_address_json); } catch { /* ignore */ }
+      }
+
       const totalCents = session.amount_total ?? 0;
+      // For international, full shipping (incl. $10 handling) is in total; for US, $5.99 flat
+      const shippingCents = isInternational
+        ? (totalCents - (session.amount_subtotal ?? totalCents - 599))
+        : 599;
 
       toInsert.push({
         stripe_session_id: session.id,
@@ -69,8 +79,8 @@ export async function POST() {
         customer_phone: session.metadata.customer_phone ?? "",
         shipping_address: shippingAddress,
         items: itemsForDb,
-        subtotal_cents: Math.max(0, totalCents - 599),
-        shipping_cents: 599,
+        subtotal_cents: Math.max(0, totalCents - shippingCents),
+        shipping_cents: shippingCents,
         total_cents: totalCents,
         status: "paid",
         affiliate_code: session.metadata?.affiliate_code || null,

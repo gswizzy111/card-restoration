@@ -9,10 +9,13 @@ const BodySchema = z.object({
     street1: z.string().min(1),
     street2: z.string().optional(),
     city: z.string().min(1),
-    state: z.string().min(1),
-    zip: z.string().min(5),
+    state: z.string(),
+    zip: z.string().min(1),
+    country: z.string().default("US"),
   }),
   affiliate_code: z.string().optional(),
+  international_shipping_cents: z.number().int().positive().optional(),
+  international_shipping_label: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -24,6 +27,12 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data;
+  const isInternational = data.address.country !== "US";
+
+  if (isInternational && !data.international_shipping_cents) {
+    return Response.json({ error: "Please calculate international shipping before proceeding." }, { status: 400 });
+  }
+
   const admin = createAdminClient();
 
   // Fetch products from DB (never trust client prices)
@@ -39,19 +48,27 @@ export async function POST(request: Request) {
 
   const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
 
-  // Validate stock and build line items
-  const lineItems = [];
+  // Validate stock and build product line items
+  const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [];
   for (const item of data.items) {
     const product = productMap[item.id];
-    if (!product || !product.active) return Response.json({ error: `Product not available.` }, { status: 400 });
+    if (!product || !product.active) return Response.json({ error: "Product not available." }, { status: 400 });
     if (product.inventory_count < item.quantity) return Response.json({ error: `Not enough stock for ${product.name}.` }, { status: 400 });
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: product.name }, unit_amount: product.price_cents },
+      quantity: item.quantity,
+    });
+  }
+
+  // For international: add shipping as a line item
+  if (isInternational && data.international_shipping_cents) {
     lineItems.push({
       price_data: {
         currency: "usd",
-        product_data: { name: product.name },
-        unit_amount: product.price_cents,
+        product_data: { name: `International Shipping — ${data.international_shipping_label ?? "Standard"}` },
+        unit_amount: data.international_shipping_cents,
       },
-      quantity: item.quantity,
+      quantity: 1,
     });
   }
 
@@ -63,41 +80,66 @@ export async function POST(request: Request) {
       .select("code")
       .ilike("code", data.affiliate_code.trim())
       .single();
-    if (!affiliate) {
-      return Response.json({ error: "Invalid creator code." }, { status: 400 });
-    }
+    if (!affiliate) return Response.json({ error: "Invalid creator code." }, { status: 400 });
     validatedAffiliateCode = affiliate.code;
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
 
+  const metadata: Record<string, string> = {
+    type: "shop",
+    customer_name: data.customer.name,
+    customer_phone: data.customer.phone,
+    items: JSON.stringify(data.items.map((i) => ({ id: i.id, qty: i.quantity }))),
+    affiliate_code: validatedAffiliateCode ?? "",
+  };
+
+  if (isInternational) {
+    metadata.is_international = "true";
+    metadata.shipping_address_json = JSON.stringify({
+      street1: data.address.street1,
+      street2: data.address.street2 ?? null,
+      city: data.address.city,
+      state: data.address.state,
+      zip: data.address.zip,
+      country: data.address.country,
+    });
+  }
+
   let session;
   try {
-    session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      customer_email: data.customer.email,
-      line_items: lineItems,
-      shipping_address_collection: { allowed_countries: ["US"] },
-      shipping_options: [
-        {
-          shipping_rate_data: {
-            type: "fixed_amount",
-            fixed_amount: { amount: 599, currency: "usd" },
-            display_name: "Standard Shipping",
-            delivery_estimate: { minimum: { unit: "business_day", value: 3 }, maximum: { unit: "business_day", value: 7 } },
+    if (isInternational) {
+      // International: shipping is a line item, no Stripe address collection needed
+      session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        customer_email: data.customer.email,
+        line_items: lineItems,
+        success_url: `${appUrl}/shop/order-confirmed?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/cart`,
+        metadata,
+      });
+    } else {
+      // US: fixed $5.99 shipping via Stripe options (unchanged)
+      session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        customer_email: data.customer.email,
+        line_items: lineItems,
+        shipping_address_collection: { allowed_countries: ["US"] },
+        shipping_options: [
+          {
+            shipping_rate_data: {
+              type: "fixed_amount",
+              fixed_amount: { amount: 599, currency: "usd" },
+              display_name: "Standard Shipping",
+              delivery_estimate: { minimum: { unit: "business_day", value: 3 }, maximum: { unit: "business_day", value: 7 } },
+            },
           },
-        },
-      ],
-      success_url: `${appUrl}/shop/order-confirmed?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/cart`,
-      metadata: {
-        type: "shop",
-        customer_name: data.customer.name,
-        customer_phone: data.customer.phone,
-        items: JSON.stringify(data.items.map((i) => ({ id: i.id, qty: i.quantity }))),
-        affiliate_code: validatedAffiliateCode ?? "",
-      },
-    });
+        ],
+        success_url: `${appUrl}/shop/order-confirmed?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/cart`,
+        metadata,
+      });
+    }
   } catch (err) {
     console.error("Stripe shop session error:", err);
     return Response.json({ error: "Payment provider error. Please try again." }, { status: 500 });
