@@ -21,7 +21,7 @@ export function MarkShippedButton({ orderId }: { orderId: string }) {
     <button
       onClick={markShipped}
       disabled={loading}
-      className="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+      className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity whitespace-nowrap"
     >
       {loading ? "Marking..." : "Mark as Shipped"}
     </button>
