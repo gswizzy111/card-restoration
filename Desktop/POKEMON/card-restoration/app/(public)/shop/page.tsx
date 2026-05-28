@@ -5,7 +5,7 @@ import { AddToCartButton } from "./add-to-cart-button";
 export const dynamic = "force-dynamic";
 
 const RATINGS: { keywords: string[]; stars: number; count: number }[] = [
-  { keywords: ["official"],   stars: 4.97, count: 32 },
+  { keywords: ["official"],   stars: 4.97, count: 89 },
   { keywords: ["essential"],  stars: 4.8,  count: 24 },
   { keywords: ["starter"],    stars: 4.7,  count: 51 },
   { keywords: ["clamp"],      stars: 4.9,  count: 17 },
