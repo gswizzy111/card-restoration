@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { AddToCartButtonLarge } from "./add-to-cart-button-large";
 
 export const dynamic = "force-dynamic";
@@ -86,7 +87,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <p className="text-sm font-medium text-primary">Only {product.inventory_count} left in stock</p>
           )}
 
-          <div className="border-t border-border pt-6">
+          <div className="border-t border-border pt-6 flex flex-col gap-4">
             {product.inventory_count === 0 ? (
               <p className="text-muted-foreground font-medium">Out of stock</p>
             ) : (
@@ -99,6 +100,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   image: product.images?.[0],
                 }}
               />
+            )}
+
+            {product.name.toLowerCase().includes("kit") && (
+              <Link
+                href="/subscribe"
+                className="w-full flex items-center justify-center gap-2 h-12 font-semibold text-sm tracking-wide border border-primary text-primary hover:bg-primary/5 transition-colors rounded-sm"
+              >
+                🔁 Subscribe — $62.99/mo · Save every month
+              </Link>
             )}
           </div>
         </div>
