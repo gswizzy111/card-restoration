@@ -31,10 +31,14 @@ function DescriptionBlock({ text }: { text: string }) {
 }
 
 const RATINGS: { keywords: string[]; stars: number; count: number }[] = [
-  { keywords: ["spray"],              stars: 4.9,  count: 14 },
-  { keywords: ["polish"],             stars: 4.8,  count: 18 },
-  { keywords: ["clamp"],              stars: 4.95, count: 11 },
-  { keywords: ["restoration", "kit"], stars: 4.97, count: 32 },
+  { keywords: ["official"],   stars: 4.97, count: 32 },
+  { keywords: ["essential"],  stars: 4.8,  count: 24 },
+  { keywords: ["starter"],    stars: 4.7,  count: 51 },
+  { keywords: ["clamp"],      stars: 4.9,  count: 17 },
+  { keywords: ["wrinkle"],    stars: 4.85, count: 9  },
+  { keywords: ["tools"],      stars: 4.75, count: 13 },
+  { keywords: ["polish"],     stars: 4.8,  count: 22 },
+  { keywords: ["spray"],      stars: 4.9,  count: 16 },
 ];
 
 function getRating(name: string) {
