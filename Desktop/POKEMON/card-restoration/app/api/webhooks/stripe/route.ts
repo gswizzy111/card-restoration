@@ -145,6 +145,54 @@ export async function POST(request: Request) {
       return Response.json({ received: true });
     }
 
+    // ── Subscription checkout ─────────────────────────────────────────────
+    if (session.metadata?.type === "subscription") {
+      const admin2 = createAdminClient();
+
+      let shippingAddress: Record<string, unknown> | null = null;
+      try {
+        shippingAddress = JSON.parse(session.metadata.shipping_address_json ?? "null");
+      } catch {
+        console.error("Failed to parse subscription shipping_address_json");
+      }
+
+      await admin2.from("subscriptions").insert({
+        stripe_subscription_id: String(session.subscription ?? ""),
+        stripe_customer_id: String(session.customer ?? ""),
+        customer_name: session.metadata.customer_name ?? "",
+        customer_email: session.customer_email ?? "",
+        customer_phone: session.metadata.customer_phone ?? "",
+        shipping_address: shippingAddress,
+        status: "active",
+      });
+
+      const subCustomerEmail = session.customer_email;
+      const subCustomerName = session.metadata.customer_name ?? "";
+      if (subCustomerEmail) {
+        try {
+          await resend.emails.send({
+            from: fromEmail,
+            to: subCustomerEmail,
+            subject: `Welcome to Monthly Kit Club — ${businessName}`,
+            html: `
+              <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
+                <h1 style="font-size:22px;font-weight:900">Welcome to Monthly Kit Club!</h1>
+                <p>Hi ${subCustomerName.split(" ")[0] || "there"}, you&rsquo;re officially subscribed.</p>
+                <p>Your first kit will ship within 1-2 business days. After that, you&rsquo;ll be billed $62.99 on the same day each month and a new kit will be on its way.</p>
+                <p>You can cancel anytime by emailing us at <a href="mailto:${fromEmail}">${fromEmail}</a>.</p>
+                <p style="font-size:13px;color:#666">Questions? DM us on Instagram <strong>@thecarddoc</strong></p>
+                <p style="font-size:13px;color:#999">${businessName}</p>
+              </div>
+            `,
+          });
+        } catch (err) {
+          console.error("Failed to send subscription welcome email:", err);
+        }
+      }
+
+      return Response.json({ received: true });
+    }
+
     // ── Restoration order ─────────────────────────────────────────────────
     const orderId = session.metadata?.order_id;
     if (!orderId) return Response.json({ error: "No order_id in metadata" }, { status: 400 });
@@ -259,6 +307,57 @@ export async function POST(request: Request) {
     } catch (err) {
       console.error("Failed to send confirmation email:", err);
     }
+  }
+
+  // ── Invoice paid (recurring subscription billing) ─────────────────────
+  if (event.type === "invoice.paid") {
+    const invoice = event.data.object as Stripe.Invoice;
+    const subscriptionId = (invoice as { subscription?: string | null }).subscription;
+    if (subscriptionId) {
+      const adminInv = createAdminClient();
+      const { data: subRecord } = await adminInv
+        .from("subscriptions")
+        .select("*")
+        .eq("stripe_subscription_id", subscriptionId)
+        .maybeSingle();
+
+      if (subRecord) {
+        await adminInv.from("shop_orders").upsert(
+          {
+            stripe_session_id: invoice.id,
+            customer_name: subRecord.customer_name,
+            customer_email: subRecord.customer_email,
+            customer_phone: subRecord.customer_phone ?? "",
+            shipping_address: subRecord.shipping_address,
+            items: [
+              {
+                product_id: "subscription",
+                product_name: "Monthly Kit Club",
+                quantity: 1,
+                price_cents: 6299,
+              },
+            ],
+            subtotal_cents: 6299,
+            shipping_cents: 0,
+            total_cents: 6299,
+            status: "paid",
+          },
+          { onConflict: "stripe_session_id" }
+        );
+      } else {
+        console.warn("invoice.paid: no subscription record found for", subscriptionId);
+      }
+    }
+  }
+
+  // ── Subscription cancelled ────────────────────────────────────────────
+  if (event.type === "customer.subscription.deleted") {
+    const subscription = event.data.object as Stripe.Subscription;
+    const adminCan = createAdminClient();
+    await adminCan
+      .from("subscriptions")
+      .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+      .eq("stripe_subscription_id", subscription.id);
   }
 
   return Response.json({ received: true });
