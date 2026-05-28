@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MarkShippedButton } from "./mark-shipped-button";
+import { ReturnLabelButton } from "../shop-orders/return-label-button";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function ShipQueuePage() {
 
   const { data: orders } = await admin
     .from("shop_orders")
-    .select("id, customer_name, customer_email, customer_phone, shipping_address, items, created_at, status")
+    .select("id, customer_name, customer_email, customer_phone, shipping_address, items, created_at, status, return_label_url")
     .in("status", ["paid", "processing"])
     .order("created_at", { ascending: true });
 
@@ -52,44 +53,55 @@ export default async function ShipQueuePage() {
               const items = (order.items as OrderItem[] | null) ?? [];
 
               return (
-                <div key={order.id} className="bg-white rounded-xl border border-border p-6 flex flex-col sm:flex-row sm:items-center gap-5">
+                <div key={order.id} className="bg-white rounded-xl border border-border p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-5">
 
-                  {/* Order info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <p className="font-heading font-black text-lg text-foreground">{order.customer_name}</p>
-                      {order.status === "processing" && (
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Processing</span>
+                    {/* Order info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <p className="font-heading font-black text-lg text-foreground">{order.customer_name}</p>
+                        {order.status === "processing" && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Processing</span>
+                        )}
+                        {order.status === "paid" && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Paid</span>
+                        )}
+                      </div>
+
+                      <p className="text-sm font-medium text-foreground mb-2">
+                        {items.length > 0
+                          ? items.map((i) => `${i.product_name} ×${i.quantity}`).join(", ")
+                          : "—"}
+                      </p>
+
+                      {addr ? (
+                        <div className="text-sm text-muted-foreground">
+                          <p>{addr.street1}{addr.street2 ? `, ${addr.street2}` : ""}</p>
+                          <p>{addr.city}, {addr.state} {addr.zip}{addr.country && addr.country !== "US" ? ` · ${addr.country}` : ""}</p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">No address on file</p>
                       )}
-                      {order.status === "paid" && (
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Paid</span>
-                      )}
+
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Ordered {new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} EST
+                      </p>
+
+                      {/* Label button inline under address */}
+                      <div className="mt-3">
+                        <ReturnLabelButton
+                          orderId={order.id}
+                          existingLabelUrl={order.return_label_url ?? null}
+                          labelName="Shipping"
+                        />
+                      </div>
                     </div>
 
-                    {/* Items */}
-                    <p className="text-sm font-medium text-foreground mb-2">
-                      {items.length > 0
-                        ? items.map((i) => `${i.product_name} ×${i.quantity}`).join(", ")
-                        : "—"}
-                    </p>
-
-                    {/* Address */}
-                    {addr ? (
-                      <div className="text-sm text-muted-foreground">
-                        <p>{addr.street1}{addr.street2 ? `, ${addr.street2}` : ""}</p>
-                        <p>{addr.city}, {addr.state} {addr.zip}{addr.country && addr.country !== "US" ? ` · ${addr.country}` : ""}</p>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">No address on file</p>
-                    )}
-
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Ordered {new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} EST
-                    </p>
+                    {/* Mark shipped */}
+                    <div className="shrink-0">
+                      <MarkShippedButton orderId={order.id} />
+                    </div>
                   </div>
-
-                  {/* Action */}
-                  <MarkShippedButton orderId={order.id} />
                 </div>
               );
             })}

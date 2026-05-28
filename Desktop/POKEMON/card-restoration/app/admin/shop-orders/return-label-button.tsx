@@ -14,9 +14,10 @@ type Rate = {
 type Props = {
   orderId: string;
   existingLabelUrl?: string | null;
+  labelName?: string;
 };
 
-export function ReturnLabelButton({ orderId, existingLabelUrl }: Props) {
+export function ReturnLabelButton({ orderId, existingLabelUrl, labelName = "Return" }: Props) {
   const [state, setState] = useState<"idle" | "fetching" | "confirm" | "purchasing" | "done" | "error">("idle");
   const [rates, setRates] = useState<Rate[]>([]);
   const [selectedRate, setSelectedRate] = useState<Rate | null>(null);
@@ -31,7 +32,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl }: Props) {
         rel="noopener noreferrer"
         className="inline-block text-xs font-bold px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
       >
-        Print Return Label
+        Print {labelName} Label
       </a>
     );
   }
@@ -79,7 +80,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl }: Props) {
   if (state === "confirm" && selectedRate) {
     return (
       <div className="flex flex-col gap-2 mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-        <p className="text-xs font-bold text-blue-900">Confirm Return Label</p>
+        <p className="text-xs font-bold text-blue-900">Confirm {labelName} Label</p>
         <div className="flex flex-col gap-1">
           {rates.map((r) => (
             <label key={r.objectId} className="flex items-center gap-2 text-xs cursor-pointer">
@@ -127,7 +128,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl }: Props) {
         disabled={state === "fetching"}
         className="text-xs font-bold px-3 py-1.5 bg-secondary text-foreground border border-border rounded-lg hover:border-primary/40 transition-colors disabled:opacity-50 w-fit"
       >
-        {state === "fetching" ? "Getting rates..." : "Create Return Label"}
+        {state === "fetching" ? "Getting rates..." : `Create ${labelName} Label`}
       </button>
       {state === "error" && <p className="text-xs text-red-600">{errorMsg}</p>}
     </div>
