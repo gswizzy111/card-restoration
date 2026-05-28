@@ -41,7 +41,7 @@ export default async function ShopPage() {
     .from("products")
     .select("id, name, slug, description, price_cents, images, category, inventory_count")
     .eq("active", true)
-    .order("created_at", { ascending: false });
+    .order("display_order", { ascending: true });
 
   return (
     <div className="max-w-7xl mx-auto px-6 md:px-10 py-14">
@@ -63,8 +63,14 @@ export default async function ShopPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 bg-border" style={{ gap: "1px" }}>
           {products.map((product) => {
             const rating = getRating(product.name);
+            const isKit = product.name.toLowerCase().includes("official");
             return (
-              <div key={product.id} className="bg-card flex flex-col group">
+              <div key={product.id} className="bg-card flex flex-col group relative">
+                {isKit && (
+                  <span className="absolute top-2 left-2 z-10 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full shadow">
+                    Most Popular
+                  </span>
+                )}
                 <a href={`/shop/${product.slug}`} className="block">
                   <div className="aspect-square bg-secondary overflow-hidden">
                     {product.images?.[0] ? (

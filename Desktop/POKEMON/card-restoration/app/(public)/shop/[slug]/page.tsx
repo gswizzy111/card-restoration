@@ -3,6 +3,7 @@ import { formatCurrency } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AddToCartButtonLarge } from "./add-to-cart-button-large";
+import { RefreshCw } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -126,9 +127,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             {product.name.toLowerCase().includes("kit") && (
               <Link
                 href="/subscribe"
-                className="w-full flex items-center justify-center gap-2 h-12 font-semibold text-sm tracking-wide border border-primary text-primary hover:bg-primary/5 transition-colors rounded-sm"
+                className="w-full flex items-center justify-center gap-2 h-13 font-semibold text-sm tracking-wide border-2 border-primary text-primary hover:bg-primary/5 active:scale-[0.98] transition-all duration-150 rounded-xl"
               >
-                🔁 Subscribe — $62.99/mo · Save every month
+                <RefreshCw className="h-4 w-4" />
+                Subscribe — $62.99/mo · Save every month
               </Link>
             )}
           </div>

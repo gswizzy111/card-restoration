@@ -24,6 +24,8 @@ export function StepShipping({
   const [loadingRates, setLoadingRates] = useState(false);
   const [ratesError, setRatesError] = useState("");
 
+  const isInternational = customer.country && customer.country !== "US";
+
   useEffect(() => {
     if (shippingMethod !== "buy_label") return;
     setLoadingRates(true);
@@ -39,7 +41,7 @@ export function StepShipping({
           city: customer.city,
           state: customer.state,
           zip: customer.zip,
-          country: "US",
+          country: customer.country || "US",
           phone: customer.phone,
           email: customer.email,
         },
@@ -66,6 +68,11 @@ export function StepShipping({
         <h2 className="font-serif text-2xl font-medium text-foreground mb-1">
           How will you send your cards to us?
         </h2>
+        {isInternational && (
+          <p className="text-sm text-primary font-medium mt-1">
+            International order — shipping covers both inbound and return.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -91,14 +98,17 @@ export function StepShipping({
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <p className="font-medium text-foreground">Buy a prepaid shipping label</p>
+                <p className="font-medium text-foreground">
+                  {isInternational ? "Buy a prepaid international shipping label" : "Buy a prepaid shipping label"}
+                </p>
                 <span className="text-[10px] uppercase tracking-wider bg-accent text-accent-foreground px-2 py-0.5 rounded-full">
                   Recommended
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                We generate a label and email it to you. Just print, tape it on, drop it off.
-                Includes tracking and insurance.
+                {isInternational
+                  ? "We generate a label and email it to you. Ship your cards to us, and we'll ship them back when done. Price covers both directions."
+                  : "We generate a label and email it to you. Just print, tape it on, drop it off. Includes tracking and insurance."}
               </p>
 
               {/* Rates */}
@@ -115,7 +125,11 @@ export function StepShipping({
                     <p className="text-sm text-destructive">{ratesError}</p>
                   )}
                   {!loadingRates && rates.length > 0 && (
-                    <p className="text-xs text-muted-foreground mb-1">Price covers shipping to us + return shipping back to you.</p>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      {isInternational
+                        ? "Price covers international shipping to us + return shipping back to you."
+                        : "Price covers shipping to us + return shipping back to you."}
+                    </p>
                   )}
                   {!loadingRates &&
                     rates.map((rate) => (
@@ -176,8 +190,9 @@ export function StepShipping({
             <div>
               <p className="font-medium text-foreground">I&apos;ll ship them myself</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Use your own carrier and packaging. We&apos;ll send you our shipping address after
-                checkout. Be sure to use a tracked, insured method.
+                {isInternational
+                  ? "Use your own carrier to ship internationally. We'll send you our address after checkout. Use a tracked, insured method."
+                  : "Use your own carrier and packaging. We'll send you our shipping address after checkout. Be sure to use a tracked, insured method."}
               </p>
             </div>
           </div>

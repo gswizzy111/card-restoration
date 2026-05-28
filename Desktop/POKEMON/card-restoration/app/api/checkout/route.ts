@@ -7,8 +7,8 @@ const AddressSchema = z.object({
   street1: z.string().min(1),
   street2: z.string().optional(),
   city: z.string().min(1),
-  state: z.string().min(1),
-  zip: z.string().min(5),
+  state: z.string().optional(),
+  zip: z.string().optional(),
   country: z.string().default("US"),
 });
 
@@ -78,7 +78,12 @@ export async function POST(request: Request) {
 
   const shipFromAddress = {
     name: data.customer.name,
-    ...data.customer.address,
+    street1: data.customer.address.street1,
+    street2: data.customer.address.street2 ?? null,
+    city: data.customer.address.city,
+    state: data.customer.address.state ?? null,
+    zip: data.customer.address.zip ?? null,
+    country: data.customer.address.country,
   };
   const shipToAddress = {
     name: process.env.BUSINESS_SHIPPING_NAME ?? "The Card Doc",

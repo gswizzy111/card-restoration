@@ -35,17 +35,17 @@ export function AddToCartButtonLarge({ product }: Props) {
     <div className="flex flex-col gap-3">
       <button
         onClick={handleBuyNow}
-        className="w-full flex items-center justify-center gap-2 h-12 font-bold text-sm tracking-wide bg-primary text-primary-foreground hover:opacity-90 transition-opacity rounded-sm"
+        className="w-full flex items-center justify-center gap-2 h-13 font-bold text-sm tracking-widest uppercase bg-primary text-primary-foreground shadow-md hover:shadow-lg hover:opacity-95 active:scale-[0.98] transition-all duration-150 rounded-xl"
       >
-        <Zap className="h-4 w-4" />
+        <Zap className="h-4 w-4 fill-current" />
         Buy It Now
       </button>
       <button
         onClick={handleAdd}
-        className={`w-full flex items-center justify-center gap-2 h-12 font-semibold text-sm tracking-wide border transition-colors rounded-sm ${
+        className={`w-full flex items-center justify-center gap-2 h-13 font-semibold text-sm tracking-wide border-2 transition-all duration-150 rounded-xl active:scale-[0.98] ${
           added
             ? "bg-secondary text-foreground border-border"
-            : "bg-transparent text-foreground border-foreground hover:bg-secondary"
+            : "bg-transparent text-foreground border-foreground/70 hover:border-foreground hover:bg-secondary"
         }`}
       >
         <ShoppingCart className="h-4 w-4" />

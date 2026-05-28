@@ -62,7 +62,9 @@ export function OrderBuilder({ services }: { services: Service[] }) {
     if (step === 1) return cards.every((c) => c.card_name.trim().length > 0);
     if (step === 2) {
       const c = customer;
-      return !!(c.name && c.email && c.phone && c.street1 && c.city && c.state && c.zip);
+      const isUS = !c.country || c.country === "US";
+      if (isUS) return !!(c.name && c.email && c.phone && c.street1 && c.city && c.state && c.zip);
+      return !!(c.name && c.email && c.phone && c.street1 && c.city && c.country);
     }
     if (step === 3) {
       if (!shippingMethod) return false;
@@ -98,9 +100,9 @@ export function OrderBuilder({ services }: { services: Service[] }) {
               street1: customer.street1,
               street2: customer.street2 || undefined,
               city: customer.city,
-              state: customer.state,
-              zip: customer.zip,
-              country: "US",
+              state: customer.state || undefined,
+              zip: customer.zip || undefined,
+              country: customer.country || "US",
             },
           },
           shipping_method: shippingMethod,

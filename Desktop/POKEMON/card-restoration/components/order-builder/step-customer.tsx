@@ -1,3 +1,5 @@
+"use client";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -7,8 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { US_STATES } from "@/lib/constants";
+import { US_STATES, INTERNATIONAL_COUNTRIES } from "@/lib/constants";
 import type { CustomerInfo } from "@/lib/types";
+import type { ChangeEvent } from "react";
+
 
 interface StepCustomerProps {
   customer: CustomerInfo;
@@ -16,8 +20,14 @@ interface StepCustomerProps {
 }
 
 export function StepCustomer({ customer, onChange }: StepCustomerProps) {
+  const isUS = customer.country === "US";
+
   function update(patch: Partial<CustomerInfo>) {
     onChange({ ...customer, ...patch });
+  }
+
+  function handleCountryChange(newCountry: string) {
+    update({ country: newCountry, state: "", zip: "" });
   }
 
   return (
@@ -65,6 +75,22 @@ export function StepCustomer({ customer, onChange }: StepCustomerProps) {
         </div>
 
         <div className="sm:col-span-2 flex flex-col gap-1.5">
+          <Label htmlFor="country">Country *</Label>
+          <select
+            id="country"
+            value={customer.country || "US"}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => handleCountryChange(e.target.value)}
+            className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            {INTERNATIONAL_COUNTRIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="sm:col-span-2 flex flex-col gap-1.5">
           <Label htmlFor="street1">Street Address *</Label>
           <Input
             id="street1"
@@ -94,36 +120,45 @@ export function StepCustomer({ customer, onChange }: StepCustomerProps) {
           />
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="state">State *</Label>
-          <Select value={customer.state || undefined} onValueChange={(v: string | null) => { if (v) update({ state: v }); }}>
-            <SelectTrigger id="state">
-              <SelectValue placeholder="Select state" />
-            </SelectTrigger>
-            <SelectContent>
-              {US_STATES.map((s) => (
-                <SelectItem key={s.value} value={s.value}>
-                  {s.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {isUS ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="state">State *</Label>
+            <Select value={customer.state || undefined} onValueChange={(v: string | null) => { if (v) update({ state: v }); }}>
+              <SelectTrigger id="state">
+                <SelectValue placeholder="Select state" />
+              </SelectTrigger>
+              <SelectContent>
+                {US_STATES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="state">Province / Region</Label>
+            <Input
+              id="state"
+              value={customer.state}
+              onChange={(e) => update({ state: e.target.value })}
+              autoComplete="address-level1"
+              placeholder="Optional"
+            />
+          </div>
+        )}
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="zip">ZIP Code *</Label>
+          <Label htmlFor="zip">{isUS ? "ZIP Code *" : "Postal Code"}</Label>
           <Input
             id="zip"
             value={customer.zip}
             onChange={(e) => update({ zip: e.target.value })}
             autoComplete="postal-code"
             maxLength={10}
+            placeholder={isUS ? "" : "Optional"}
           />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="country">Country</Label>
-          <Input id="country" value="United States" disabled className="opacity-70" />
         </div>
       </div>
     </div>
