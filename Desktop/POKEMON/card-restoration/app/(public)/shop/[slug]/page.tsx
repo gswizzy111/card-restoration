@@ -6,6 +6,29 @@ import { AddToCartButtonLarge } from "./add-to-cart-button-large";
 
 export const dynamic = "force-dynamic";
 
+function DescriptionBlock({ text }: { text: string }) {
+  // If description contains "includes:" pull out the items after it and render as bullets
+  const match = text.match(/^(.+?includes:)\s*/i);
+  if (match) {
+    const itemsText = text.slice(match[0].length);
+    // Split before each quantity pattern like "10x", "2x", "5×", "1×"
+    const items = itemsText.split(/\s+(?=\d+[x×])/).filter(Boolean);
+    if (items.length > 1) {
+      return (
+        <ul className="flex flex-col gap-2">
+          {items.map((item, i) => (
+            <li key={i} className="flex items-start gap-2.5 text-sm">
+              <span className="text-primary font-bold shrink-0 mt-0.5">•</span>
+              <span className="text-muted-foreground">{item.trim()}</span>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+  }
+  return <p className="text-muted-foreground leading-relaxed text-sm">{text}</p>;
+}
+
 const RATINGS: { keywords: string[]; stars: number; count: number }[] = [
   { keywords: ["spray"],              stars: 4.9,  count: 14 },
   { keywords: ["polish"],             stars: 4.8,  count: 18 },
@@ -79,9 +102,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <p className="font-heading text-2xl text-primary">{formatCurrency(product.price_cents)}</p>
           </div>
 
-          {product.description && (
-            <p className="text-muted-foreground leading-relaxed text-sm">{product.description}</p>
-          )}
+          {product.description && <DescriptionBlock text={product.description} />}
 
           {product.inventory_count > 0 && product.inventory_count <= 5 && (
             <p className="text-sm font-medium text-primary">Only {product.inventory_count} left in stock</p>
