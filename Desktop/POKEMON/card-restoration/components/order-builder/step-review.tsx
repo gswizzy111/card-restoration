@@ -1,6 +1,7 @@
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
+import { getPriceCents } from "@/lib/pricing";
 import type { Service, CardEntry, CustomerInfo, ShippingRate } from "@/lib/types";
 
 interface StepReviewProps {
@@ -27,12 +28,7 @@ export function StepReview({
 }: StepReviewProps) {
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
 
-  let subtotal = 0;
-  for (const card of cards) {
-    for (const sid of card.service_ids) {
-      if (serviceMap[sid]) subtotal += serviceMap[sid].price_cents;
-    }
-  }
+  const subtotal = getPriceCents(cards.length);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
   const total = subtotal + shipping;
 
@@ -67,7 +63,7 @@ export function StepReview({
                     key={sid}
                     className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground"
                   >
-                    {svc.name} — {formatCurrency(svc.price_cents)}
+                    {svc.name} — {formatCurrency(getPriceCents(cards.length) / cards.length)}
                   </span>
                 ) : null;
               })}
