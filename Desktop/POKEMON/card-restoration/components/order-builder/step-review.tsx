@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
@@ -13,6 +16,8 @@ interface StepReviewProps {
   selectedRate: ShippingRate | null;
   customerNotes: string;
   onNotesChange: (v: string) => void;
+  affiliateCode: string;
+  onAffiliateCodeChange: (v: string) => void;
   termsAccepted: boolean;
   onTermsChange: (v: boolean) => void;
   onEditStep: (step: number) => void;
@@ -26,10 +31,28 @@ export function StepReview({
   selectedRate,
   customerNotes,
   onNotesChange,
+  affiliateCode,
+  onAffiliateCodeChange,
   termsAccepted,
   onTermsChange,
   onEditStep,
 }: StepReviewProps) {
+  const [codeStatus, setCodeStatus] = useState<"idle" | "valid" | "invalid">("idle");
+  const [codeName, setCodeName] = useState("");
+
+  async function validateCode() {
+    const trimmed = affiliateCode.trim().toUpperCase();
+    if (!trimmed) return;
+    const res = await fetch(`/api/affiliates/validate?code=${encodeURIComponent(trimmed)}`);
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      setCodeStatus("valid");
+      setCodeName(data.name);
+    } else {
+      setCodeStatus("invalid");
+      setCodeName("");
+    }
+  }
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
 
   const subtotal = getPriceCents(cards.length);
@@ -149,6 +172,31 @@ export function StepReview({
           rows={3}
           placeholder="Special instructions, packaging preferences, etc."
         />
+      </div>
+
+      {/* Affiliate / creator code */}
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="affiliate-code">Creator code <span className="text-muted-foreground font-normal">(optional)</span></Label>
+        <div className="flex gap-2">
+          <input
+            id="affiliate-code"
+            type="text"
+            value={affiliateCode}
+            onChange={(e) => { onAffiliateCodeChange(e.target.value.toUpperCase()); setCodeStatus("idle"); setCodeName(""); }}
+            placeholder="CREATOR123"
+            className="flex-1 h-9 border border-border rounded-lg px-3 text-sm font-mono uppercase focus:outline-none focus:border-primary transition-colors"
+          />
+          <button
+            type="button"
+            onClick={validateCode}
+            disabled={!affiliateCode.trim()}
+            className="h-9 px-4 bg-secondary text-foreground text-sm font-semibold rounded-lg hover:bg-border transition-colors disabled:opacity-40"
+          >
+            Apply
+          </button>
+        </div>
+        {codeStatus === "valid" && <p className="text-sm text-green-600 font-medium">✓ Code applied — {codeName}</p>}
+        {codeStatus === "invalid" && <p className="text-sm text-red-500">Invalid code.</p>}
       </div>
 
       {/* Terms */}

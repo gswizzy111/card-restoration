@@ -56,6 +56,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
   const [shippingMethod, setShippingMethod] = useState<"buy_label" | "self_ship" | null>(null);
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
   const [customerNotes, setCustomerNotes] = useState("");
+  const [affiliateCode, setAffiliateCode] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -116,6 +117,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
               }
             : undefined,
           customer_notes: customerNotes || undefined,
+          affiliate_code: affiliateCode.trim().toUpperCase() || undefined,
         }),
       });
 
@@ -171,6 +173,8 @@ export function OrderBuilder({ services }: { services: Service[] }) {
               selectedRate={selectedRate}
               customerNotes={customerNotes}
               onNotesChange={setCustomerNotes}
+              affiliateCode={affiliateCode}
+              onAffiliateCodeChange={setAffiliateCode}
               termsAccepted={termsAccepted}
               onTermsChange={setTermsAccepted}
               onEditStep={(s) => {

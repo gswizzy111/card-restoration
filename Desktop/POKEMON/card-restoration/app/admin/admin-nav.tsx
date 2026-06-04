@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { href: "/admin/ship-queue",  label: "Ship Queue", icon: "🚚" },
   { href: "/admin/partners",    label: "Partners",   icon: "🤝" },
   { href: "/admin/products",    label: "Products",   icon: "🛍️" },
-  { href: "/admin/affiliates",     label: "Affiliates",    icon: "🎯" },
+  { href: "/admin/affiliates",     label: "Affiliates & Coupons", icon: "🎯" },
   { href: "/admin/subscriptions",  label: "Subscriptions", icon: "🔁" },
   { href: "/admin/customers",      label: "Customers",     icon: "👥" },
 ];

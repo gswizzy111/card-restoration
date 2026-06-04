@@ -42,6 +42,7 @@ const BodySchema = z.object({
     })
     .optional(),
   customer_notes: z.string().optional(),
+  affiliate_code: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -108,6 +109,7 @@ export async function POST(request: Request) {
       shipping_cents: shippingCents,
       total_cents: totalCents,
       customer_notes: data.customer_notes ?? null,
+      affiliate_code: data.affiliate_code ?? null,
       status: "awaiting_payment",
       payment_status: "pending",
     })
