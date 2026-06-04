@@ -63,9 +63,17 @@ export default async function AdminPage({
                 {matchedOrders?.length ?? 0} order{matchedOrders?.length !== 1 ? "s" : ""} containing &ldquo;{query}&rdquo;
               </p>
             </div>
-            <Suspense>
-              <CardSearch />
-            </Suspense>
+            <div className="flex items-center gap-3">
+              <Suspense>
+                <CardSearch />
+              </Suspense>
+              <Link
+                href="/admin/orders/new"
+                className="h-9 px-4 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors flex items-center whitespace-nowrap"
+              >
+                + New Order
+              </Link>
+            </div>
           </div>
 
           {(!matchedOrders || matchedOrders.length === 0) ? (
@@ -155,9 +163,17 @@ export default async function AdminPage({
             <h1 className="font-heading font-black text-3xl text-foreground">Orders</h1>
             <p className="text-muted-foreground text-sm mt-1">{allRevenue.length} total</p>
           </div>
-          <Suspense>
-            <CardSearch />
-          </Suspense>
+          <div className="flex items-center gap-3">
+            <Suspense>
+              <CardSearch />
+            </Suspense>
+            <Link
+              href="/admin/orders/new"
+              className="h-9 px-4 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors flex items-center whitespace-nowrap"
+            >
+              + New Order
+            </Link>
+          </div>
         </div>
 
         {/* Stats */}
