@@ -13,6 +13,8 @@ interface StepReviewProps {
   selectedRate: ShippingRate | null;
   customerNotes: string;
   onNotesChange: (v: string) => void;
+  termsAccepted: boolean;
+  onTermsChange: (v: boolean) => void;
   onEditStep: (step: number) => void;
 }
 
@@ -24,6 +26,8 @@ export function StepReview({
   selectedRate,
   customerNotes,
   onNotesChange,
+  termsAccepted,
+  onTermsChange,
   onEditStep,
 }: StepReviewProps) {
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
@@ -146,6 +150,28 @@ export function StepReview({
           placeholder="Special instructions, packaging preferences, etc."
         />
       </div>
+
+      {/* Terms */}
+      <label className="flex items-start gap-3 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={termsAccepted}
+          onChange={(e) => onTermsChange(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+        />
+        <span className="text-sm text-muted-foreground">
+          I have read and agree to the{" "}
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline underline-offset-2 hover:opacity-80"
+          >
+            Terms &amp; Conditions
+          </a>
+          , including The Card Doc&apos;s limitations of liability regarding grading outcomes and card condition.
+        </span>
+      </label>
     </div>
   );
 }

@@ -56,6 +56,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
   const [shippingMethod, setShippingMethod] = useState<"buy_label" | "self_ship" | null>(null);
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
   const [customerNotes, setCustomerNotes] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   function canAdvance(): boolean {
@@ -170,6 +171,8 @@ export function OrderBuilder({ services }: { services: Service[] }) {
               selectedRate={selectedRate}
               customerNotes={customerNotes}
               onNotesChange={setCustomerNotes}
+              termsAccepted={termsAccepted}
+              onTermsChange={setTermsAccepted}
               onEditStep={(s) => {
                 // remap review edit targets to new step numbers
                 if (s === 2) setStep(1); // cards
@@ -192,7 +195,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
                 Continue
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={submitting} className="px-8">
+              <Button onClick={handleSubmit} disabled={submitting || !termsAccepted} className="px-8">
                 {submitting ? "Redirecting..." : "Pay Securely with Stripe"}
               </Button>
             )}
