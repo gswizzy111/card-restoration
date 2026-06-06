@@ -127,7 +127,7 @@ export async function POST(request: Request) {
     order_id: order.id,
     service_id: serviceId ?? "",
     service_name: svc?.name ?? "Full Restoration & PSA Prep",
-    price_cents: 12000,
+    price_cents: subtotalCents,
     quantity: data.cards.length,
   }]);
 
