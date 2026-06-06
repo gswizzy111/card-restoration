@@ -199,6 +199,9 @@ export async function POST(request: Request) {
 
     // Purchase prepaid label if customer selected that option
     let shippingLabelUrl: string | null = null;
+    let inboundTrackingNumber: string | null = null;
+    let inboundTrackingUrl: string | null = null;
+    let inboundEta: string | null = null;
     const rateObjectId = session.metadata?.shipping_rate_object_id;
     if (rateObjectId) {
       try {
@@ -209,6 +212,9 @@ export async function POST(request: Request) {
         });
         if (transaction.status === "SUCCESS" && transaction.labelUrl) {
           shippingLabelUrl = transaction.labelUrl;
+          inboundTrackingNumber = transaction.trackingNumber ?? null;
+          inboundTrackingUrl = transaction.trackingUrlProvider ?? null;
+          inboundEta = transaction.eta ?? null;
         } else {
           console.error("Shippo label purchase failed:", transaction.messages);
         }
@@ -219,6 +225,7 @@ export async function POST(request: Request) {
 
     const updatePayload: Record<string, unknown> = { status: "awaiting_cards", payment_status: "paid" };
     if (shippingLabelUrl) updatePayload.shipping_label_url = shippingLabelUrl;
+    if (inboundTrackingNumber) updatePayload.inbound_tracking_number = inboundTrackingNumber;
 
     const { data: updated, error } = await admin
       .from("orders")
@@ -248,17 +255,39 @@ export async function POST(request: Request) {
     // Notify admin of new restoration order
     const adminEmail = process.env.ADMIN_NOTIFY_EMAIL ?? "gavinfraiman33@gmail.com";
     const appUrl2 = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
+    const o = updated[0];
+    const shipFromAddr = o.ship_from_address as Record<string, string> | null;
+    const addressLine = shipFromAddr
+      ? `${shipFromAddr.street1}${shipFromAddr.street2 ? `, ${shipFromAddr.street2}` : ""}, ${shipFromAddr.city}, ${shipFromAddr.state} ${shipFromAddr.zip}`
+      : "—";
+
+    const inboundShippingBlock = inboundTrackingNumber
+      ? `
+        <div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:12px;padding:16px;margin:16px 0">
+          <p style="margin:0 0 4px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#0891b2">Inbound Tracking</p>
+          <p style="margin:0 0 8px;font-family:monospace;font-size:18px;font-weight:900;color:#0e7490">${inboundTrackingNumber}</p>
+          ${inboundEta ? `<p style="margin:0 0 4px;font-size:13px;color:#0891b2">Estimated arrival: <strong>${new Date(inboundEta).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</strong></p>` : ""}
+          ${inboundTrackingUrl ? `<a href="${inboundTrackingUrl}" style="font-size:13px;color:#0891b2">Track on carrier website →</a>` : ""}
+        </div>`
+      : `<p style="font-size:14px;color:#666;">Customer is self-shipping — no prepaid label.</p>`;
+
     try {
       await resend.emails.send({
         from: fromEmail,
         to: adminEmail,
-        subject: `New Restoration Order #${updated[0].order_number} — ${updated[0].customer_name}`,
+        subject: `📦 New Restoration Order #${o.order_number} — ${o.customer_name}`,
         html: `
           <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
             <h1 style="font-size:20px;font-weight:900">New restoration order!</h1>
-            <p><strong>${updated[0].customer_name}</strong> just placed order <strong>#${updated[0].order_number}</strong>.</p>
-            <p style="color:#666;font-size:14px">${updated[0].customer_email} · ${updated[0].customer_phone ?? ""}</p>
-            <a href="${appUrl2}/admin/orders/${orderId}" style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">View Order</a>
+            <p><strong>${o.customer_name}</strong> just placed order <strong>#${o.order_number}</strong>.</p>
+            <table style="font-size:14px;width:100%;border-collapse:collapse;margin:12px 0">
+              <tr><td style="padding:4px 0;color:#666;width:120px">Email</td><td style="font-weight:600">${o.customer_email}</td></tr>
+              <tr><td style="padding:4px 0;color:#666">Phone</td><td style="font-weight:600">${o.customer_phone ?? "—"}</td></tr>
+              <tr><td style="padding:4px 0;color:#666">Address</td><td style="font-weight:600">${addressLine}</td></tr>
+              <tr><td style="padding:4px 0;color:#666">Shipping</td><td style="font-weight:600">${o.inbound_carrier ? `${o.inbound_carrier} — ${o.inbound_service_level}` : "Self-ship"}</td></tr>
+            </table>
+            ${inboundShippingBlock}
+            <a href="${appUrl2}/admin/orders/${orderId}" style="display:inline-block;background:#c0392b;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:8px">View Order</a>
           </div>
         `,
       });

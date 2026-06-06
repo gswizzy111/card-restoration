@@ -105,6 +105,8 @@ export async function POST(request: Request) {
       ship_from_address: shipFromAddress,
       ship_to_address: shipToAddress,
       inbound_method: data.shipping_method,
+      inbound_carrier: data.shipping_rate?.carrier ?? null,
+      inbound_service_level: data.shipping_rate?.service_level ?? null,
       subtotal_cents: subtotalCents,
       shipping_cents: shippingCents,
       total_cents: totalCents,
