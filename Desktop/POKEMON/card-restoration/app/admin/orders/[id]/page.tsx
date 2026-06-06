@@ -52,7 +52,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             {/* Status updater */}
             <div className="bg-white rounded-xl border border-border p-6">
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Order Status</h2>
-              <StatusUpdater orderId={order.id} currentStatus={order.status} />
+              <StatusUpdater orderId={order.id} currentStatus={order.status} currentTrackingNumber={order.tracking_number as string | null} />
             </div>
 
             {/* Restoration photos */}

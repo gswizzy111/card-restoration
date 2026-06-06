@@ -56,6 +56,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
         </div>
       </div>
 
+      {/* Return tracking number */}
+      {order.tracking_number && (
+        <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-6 mb-5">
+          <p className="text-xs font-bold uppercase tracking-widest text-cyan-700 mb-1">Return Tracking Number</p>
+          <p className="font-mono font-black text-xl text-cyan-900 tracking-widest">{order.tracking_number}</p>
+          <p className="text-xs text-cyan-700 mt-2">Paste this number on your carrier&apos;s website to track your package.</p>
+        </div>
+      )}
+
       {/* Prepaid shipping label */}
       {order.inbound_method === "buy_label" && order.shipping_label_url && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-5">
