@@ -1,16 +1,15 @@
-// True tiered pricing: first 3 cards at $75, cards 4–5 at $65, cards 6+ at $60.
-// This matches the Stripe line items exactly.
+// Flat block pricing: rate applies to ALL cards based on total count.
+// 1–2 cards: $75 each · 3–5 cards: $65 each · 6+ cards: $60 each
 export function getPriceCents(cardCount: number): number {
   if (cardCount <= 0) return 0;
-  let total = Math.min(cardCount, 3) * 7500;
-  if (cardCount > 3) total += Math.min(cardCount - 3, 2) * 6500;
-  if (cardCount > 5) total += (cardCount - 5) * 6000;
-  return total;
+  if (cardCount <= 2) return cardCount * 7500;
+  if (cardCount <= 5) return cardCount * 6500;
+  return cardCount * 6000;
 }
 
-// Per-card rate for a card at 1-based position i.
-export function getRateForPosition(i: number): number {
-  if (i <= 3) return 7500;
-  if (i <= 5) return 6500;
+// The per-card rate for an order of cardCount cards (all cards share the same rate).
+export function getRatePerCard(cardCount: number): number {
+  if (cardCount <= 2) return 7500;
+  if (cardCount <= 5) return 6500;
   return 6000;
 }

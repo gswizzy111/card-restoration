@@ -42,11 +42,11 @@ export function ServicesGrid() {
               </ul>
               <div className="flex flex-col gap-1.5 pt-2 border-t border-border">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">1–3 cards</span>
+                  <span className="text-muted-foreground">1–2 cards</span>
                   <span className="font-bold text-foreground">{formatCurrency(7500)} each</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">4–5 cards</span>
+                  <span className="text-muted-foreground">3–5 cards</span>
                   <span className="font-bold text-foreground">{formatCurrency(6500)} each</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">

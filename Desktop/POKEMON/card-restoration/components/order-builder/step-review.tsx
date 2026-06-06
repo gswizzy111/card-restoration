@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
-import { getPriceCents, getRateForPosition } from "@/lib/pricing";
+import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import type { Service, CardEntry, CustomerInfo, ShippingRate } from "@/lib/types";
 
 interface StepReviewProps {
@@ -90,7 +90,7 @@ export function StepReview({
                     key={sid}
                     className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground"
                   >
-                    {svc.name} — {formatCurrency(getRateForPosition(i + 1))}
+                    {svc.name} — {formatCurrency(getRatePerCard(cards.length))}
                   </span>
                 ) : null;
               })}
