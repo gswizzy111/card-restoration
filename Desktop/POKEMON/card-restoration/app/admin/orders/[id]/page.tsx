@@ -7,6 +7,7 @@ import { StatusUpdater } from "./status-updater";
 import { PhotoUploader } from "./photo-uploader";
 import { ReturnLabelButton } from "./return-label-button";
 import { CheckpointAdder } from "./checkpoint-adder";
+import { InboundTrackingEditor } from "./inbound-tracking-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,18 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Order Status</h2>
               <StatusUpdater orderId={order.id} currentStatus={order.status} currentTrackingNumber={order.tracking_number as string | null} />
             </div>
+
+            {/* Inbound tracking — only for buy_label orders */}
+            {order.inbound_method === "buy_label" && (
+              <div className="bg-white rounded-xl border border-border p-6">
+                <h2 className="font-heading font-black text-lg text-foreground mb-1">Inbound Tracking</h2>
+                <p className="text-xs text-muted-foreground mb-4">The tracking number on the label the customer uses to ship their cards to you.</p>
+                <InboundTrackingEditor
+                  orderId={order.id}
+                  currentTracking={order.inbound_tracking_number as string | null}
+                />
+              </div>
+            )}
 
             {/* Restoration photos */}
             <div className="bg-white rounded-xl border border-border p-6">
