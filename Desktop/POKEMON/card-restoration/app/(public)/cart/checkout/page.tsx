@@ -60,10 +60,11 @@ function CheckoutInner() {
     street1: "", street2: "", city: "", state: "", zip: "", country: "",
   });
 
-  // Creator code
+  // Creator / coupon code
   const [codeInput, setCodeInput] = useState("");
   const [creatorCode, setCreatorCode] = useState("");
   const [codeStatus, setCodeStatus] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  const [discountPercent, setDiscountPercent] = useState(0);
 
   // International shipping
   const [rateStatus, setRateStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -85,10 +86,20 @@ function CheckoutInner() {
     setCodeStatus("checking");
     try {
       const res = await fetch(`/api/affiliates/validate?code=${encodeURIComponent(trimmed)}`);
-      if (res.ok) { setCreatorCode(trimmed); setCodeStatus("valid"); }
-      else { setCreatorCode(""); setCodeStatus("invalid"); }
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setCreatorCode(trimmed);
+        setCodeStatus("valid");
+        setDiscountPercent(data.discount_percent ?? 0);
+      } else {
+        setCreatorCode("");
+        setCodeStatus("invalid");
+        setDiscountPercent(0);
+      }
     } catch {
-      setCreatorCode(""); setCodeStatus("invalid");
+      setCreatorCode("");
+      setCodeStatus("invalid");
+      setDiscountPercent(0);
     }
   }
 
@@ -176,6 +187,8 @@ function CheckoutInner() {
   }
 
   const intlShippingTotal = chosenRate ? chosenRate.amountCents + 1000 : 0;
+  const discountCents = discountPercent > 0 ? Math.round(totalCents * discountPercent / 100) : 0;
+  const discountedTotal = totalCents - discountCents;
 
   if (items.length === 0) {
     return (
@@ -319,7 +332,7 @@ function CheckoutInner() {
             <div className="flex gap-2">
               <Input
                 value={codeInput}
-                onChange={(e) => { setCodeInput(e.target.value.toUpperCase()); setCodeStatus("idle"); setCreatorCode(""); }}
+                onChange={(e) => { setCodeInput(e.target.value.toUpperCase()); setCodeStatus("idle"); setCreatorCode(""); setDiscountPercent(0); }}
                 onBlur={applyCreatorCode}
                 placeholder="CREATORCODE"
                 className="flex-1 font-mono uppercase"
@@ -330,7 +343,8 @@ function CheckoutInner() {
               </button>
             </div>
             {codeStatus === "checking" && <p className="text-xs text-muted-foreground mt-2">Checking...</p>}
-            {codeStatus === "valid" && <p className="text-xs text-green-600 font-semibold mt-2">✓ Code applied</p>}
+            {codeStatus === "valid" && discountPercent > 0 && <p className="text-xs text-green-600 font-semibold mt-2">✓ {discountPercent}% discount applied</p>}
+            {codeStatus === "valid" && discountPercent === 0 && <p className="text-xs text-green-600 font-semibold mt-2">✓ Code applied</p>}
             {codeStatus === "invalid" && <p className="text-xs text-red-600 mt-2">Invalid code. Please try again.</p>}
           </div>
         </div>
@@ -346,6 +360,12 @@ function CheckoutInner() {
                   <span className="font-medium">{formatCurrency(item.price_cents * item.quantity)}</span>
                 </div>
               ))}
+              {discountCents > 0 && (
+                <div className="flex justify-between text-sm text-green-600 font-semibold">
+                  <span>Discount ({discountPercent}% off)</span>
+                  <span>−{formatCurrency(discountCents)}</span>
+                </div>
+              )}
               {isInternational && chosenRate ? (
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">International Shipping</span>
@@ -360,7 +380,7 @@ function CheckoutInner() {
               <div className="border-t border-border pt-2 flex justify-between font-bold">
                 <span>Total</span>
                 <span className="text-primary">
-                  {formatCurrency(totalCents + (isInternational && chosenRate ? intlShippingTotal : 0))}
+                  {formatCurrency(discountedTotal + (isInternational && chosenRate ? intlShippingTotal : 0))}
                 </span>
               </div>
             </div>

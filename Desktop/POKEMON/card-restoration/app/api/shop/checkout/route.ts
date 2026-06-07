@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
+import Stripe from "stripe";
 
 const BodySchema = z.object({
   items: z.array(z.object({ id: z.string(), quantity: z.number().int().positive(), slug: z.string() })).min(1),
@@ -72,16 +73,31 @@ export async function POST(request: Request) {
     });
   }
 
-  // Validate affiliate code if provided
+  // Validate affiliate/coupon code and get discount
   let validatedAffiliateCode: string | null = null;
+  let discountPercent = 0;
+  let stripeDiscounts: Stripe.Checkout.SessionCreateParams["discounts"] = undefined;
   if (data.affiliate_code) {
     const { data: affiliate } = await admin
       .from("affiliates")
-      .select("code")
+      .select("code, discount_percent")
       .ilike("code", data.affiliate_code.trim())
       .single();
     if (!affiliate) return Response.json({ error: "Invalid creator code." }, { status: 400 });
     validatedAffiliateCode = affiliate.code;
+    discountPercent = affiliate.discount_percent ?? 0;
+    if (discountPercent > 0) {
+      try {
+        const coupon = await stripe.coupons.create({
+          percent_off: discountPercent,
+          duration: "once",
+          name: `${discountPercent}% Off — ${validatedAffiliateCode}`,
+        });
+        stripeDiscounts = [{ coupon: coupon.id }];
+      } catch (err) {
+        console.error("Failed to create Stripe coupon:", err);
+      }
+    }
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
@@ -109,21 +125,21 @@ export async function POST(request: Request) {
   let session;
   try {
     if (isInternational) {
-      // International: shipping is a line item, no Stripe address collection needed
       session = await stripe.checkout.sessions.create({
         mode: "payment",
         customer_email: data.customer.email,
         line_items: lineItems,
+        discounts: stripeDiscounts,
         success_url: `${appUrl}/shop/order-confirmed?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${appUrl}/cart`,
         metadata,
       });
     } else {
-      // US: fixed $5.99 shipping via Stripe options (unchanged)
       session = await stripe.checkout.sessions.create({
         mode: "payment",
         customer_email: data.customer.email,
         line_items: lineItems,
+        discounts: stripeDiscounts,
         shipping_address_collection: { allowed_countries: ["US"] },
         shipping_options: [
           {
