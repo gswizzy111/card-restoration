@@ -14,28 +14,17 @@ type Rate = {
 type Props = {
   orderId: string;
   existingLabelUrl?: string | null;
+  existingTrackingNumber?: string | null;
   labelName?: string;
 };
 
-export function ReturnLabelButton({ orderId, existingLabelUrl, labelName = "Return" }: Props) {
+export function ReturnLabelButton({ orderId, existingLabelUrl, existingTrackingNumber, labelName = "Return" }: Props) {
   const [state, setState] = useState<"idle" | "fetching" | "confirm" | "purchasing" | "done" | "error">("idle");
   const [rates, setRates] = useState<Rate[]>([]);
   const [selectedRate, setSelectedRate] = useState<Rate | null>(null);
   const [labelUrl, setLabelUrl] = useState<string | null>(existingLabelUrl ?? null);
+  const [trackingNumber, setTrackingNumber] = useState<string | null>(existingTrackingNumber ?? null);
   const [errorMsg, setErrorMsg] = useState("");
-
-  if (labelUrl) {
-    return (
-      <a
-        href={labelUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-block text-xs font-bold px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
-      >
-        Print {labelName} Label
-      </a>
-    );
-  }
 
   async function fetchRates() {
     setState("fetching");
@@ -46,6 +35,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, labelName = "Retu
       if (!res.ok) throw new Error(data.error ?? "Failed to get rates");
       if (data.labelUrl) {
         setLabelUrl(data.labelUrl);
+        if (data.trackingNumber) setTrackingNumber(data.trackingNumber);
         setState("done");
         return;
       }
@@ -70,11 +60,34 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, labelName = "Retu
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Purchase failed");
       setLabelUrl(data.labelUrl);
+      if (data.trackingNumber) setTrackingNumber(data.trackingNumber);
       setState("done");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Unknown error");
       setState("error");
     }
+  }
+
+  // Already have a label
+  if (labelUrl) {
+    return (
+      <div className="flex flex-col gap-2">
+        <a
+          href={labelUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block text-xs font-bold px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity w-fit"
+        >
+          Print {labelName} Label
+        </a>
+        {trackingNumber && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-cyan-50 border border-cyan-200 rounded-lg w-fit">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-cyan-700">Tracking</span>
+            <span className="font-mono font-semibold text-sm text-cyan-900">{trackingNumber}</span>
+          </div>
+        )}
+      </div>
+    );
   }
 
   if (state === "confirm" && selectedRate) {

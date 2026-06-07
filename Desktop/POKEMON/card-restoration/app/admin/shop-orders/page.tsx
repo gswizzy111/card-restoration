@@ -192,7 +192,7 @@ export default async function ShopOrdersPage() {
                       <p className="text-sm text-muted-foreground">No address on file</p>
                     )}
                     {address && (
-                      <ReturnLabelButton orderId={order.id} existingLabelUrl={order.return_label_url} />
+                      <ReturnLabelButton orderId={order.id} existingLabelUrl={order.return_label_url} existingTrackingNumber={order.tracking_number} />
                     )}
                   </div>
                 </div>
