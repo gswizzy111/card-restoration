@@ -57,6 +57,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
   const [customerNotes, setCustomerNotes] = useState("");
   const [affiliateCode, setAffiliateCode] = useState("");
+  const [discountPercent, setDiscountPercent] = useState(0);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -118,6 +119,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
             : undefined,
           customer_notes: customerNotes || undefined,
           affiliate_code: affiliateCode.trim().toUpperCase() || undefined,
+          discount_percent: discountPercent > 0 ? discountPercent : undefined,
         }),
       });
 
@@ -175,6 +177,8 @@ export function OrderBuilder({ services }: { services: Service[] }) {
               onNotesChange={setCustomerNotes}
               affiliateCode={affiliateCode}
               onAffiliateCodeChange={setAffiliateCode}
+              discountPercent={discountPercent}
+              onDiscountChange={setDiscountPercent}
               termsAccepted={termsAccepted}
               onTermsChange={setTermsAccepted}
               onEditStep={(s) => {
@@ -212,6 +216,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
               cards={cards}
               shippingMethod={shippingMethod}
               selectedRate={selectedRate}
+              discountPercent={discountPercent}
             />
           </div>
         </div>

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { NewAffiliateForm } from "./new-affiliate-form";
+import { NewCouponForm } from "./new-coupon-form";
 import { formatCurrency } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,7 @@ type Affiliate = {
   id: string;
   name: string;
   code: string;
+  discount_percent: number;
   created_at: string;
 };
 
@@ -81,6 +83,7 @@ export default async function AdminAffiliatesPage() {
       </div>
 
       <NewAffiliateForm />
+      <NewCouponForm />
 
       {allAffiliates.length === 0 ? (
         <div className="bg-white rounded-xl border border-border p-8 text-center">
@@ -107,6 +110,12 @@ export default async function AdminAffiliatesPage() {
                       <p className="font-mono font-black text-lg text-foreground tracking-widest">{affiliate.code}</p>
                       <p className="text-xs text-muted-foreground">code</p>
                     </div>
+                    {affiliate.discount_percent > 0 && (
+                      <div className="text-center">
+                        <p className="font-heading font-black text-lg text-green-600">{affiliate.discount_percent}%</p>
+                        <p className="text-xs text-muted-foreground">customer discount</p>
+                      </div>
+                    )}
                     <div className="text-center">
                       <p className="font-heading font-black text-lg text-foreground">{sales.length}</p>
                       <p className="text-xs text-muted-foreground">sales</p>

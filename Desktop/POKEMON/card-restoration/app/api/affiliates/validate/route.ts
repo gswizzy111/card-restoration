@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   const { data: affiliate, error } = await admin
     .from("affiliates")
-    .select("id, name, code")
+    .select("id, name, code, discount_percent")
     .ilike("code", code.trim())
     .single();
 
@@ -19,5 +19,9 @@ export async function GET(request: Request) {
     return Response.json({ error: "Invalid code." }, { status: 404 });
   }
 
-  return Response.json({ ok: true, name: affiliate.name });
+  return Response.json({
+    ok: true,
+    name: affiliate.name,
+    discount_percent: affiliate.discount_percent ?? 0,
+  });
 }

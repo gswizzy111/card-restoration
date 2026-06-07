@@ -6,12 +6,14 @@ interface OrderSummaryProps {
   cards: CardEntry[];
   shippingMethod: "buy_label" | "self_ship" | null;
   selectedRate: ShippingRate | null;
+  discountPercent?: number;
 }
 
-export function OrderSummary({ cards, shippingMethod, selectedRate }: OrderSummaryProps) {
+export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0 }: OrderSummaryProps) {
   const subtotal = getPriceCents(cards.length);
+  const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const total = subtotal + shipping;
+  const total = subtotal - discountCents + shipping;
 
   return (
     <div className="bg-white border-2 border-border rounded-xl p-6 flex flex-col gap-4">
@@ -30,6 +32,12 @@ export function OrderSummary({ cards, shippingMethod, selectedRate }: OrderSumma
           <span>Subtotal</span>
           <span>{formatCurrency(subtotal)}</span>
         </div>
+        {discountCents > 0 && (
+          <div className="flex justify-between text-green-600 font-semibold">
+            <span>Discount ({discountPercent}% off)</span>
+            <span>−{formatCurrency(discountCents)}</span>
+          </div>
+        )}
         <div className="flex justify-between text-muted-foreground">
           <span>Shipping</span>
           <span>

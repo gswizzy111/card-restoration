@@ -18,6 +18,8 @@ interface StepReviewProps {
   onNotesChange: (v: string) => void;
   affiliateCode: string;
   onAffiliateCodeChange: (v: string) => void;
+  discountPercent: number;
+  onDiscountChange: (pct: number) => void;
   termsAccepted: boolean;
   onTermsChange: (v: boolean) => void;
   onEditStep: (step: number) => void;
@@ -33,6 +35,8 @@ export function StepReview({
   onNotesChange,
   affiliateCode,
   onAffiliateCodeChange,
+  discountPercent,
+  onDiscountChange,
   termsAccepted,
   onTermsChange,
   onEditStep,
@@ -48,16 +52,20 @@ export function StepReview({
     if (res.ok && data.ok) {
       setCodeStatus("valid");
       setCodeName(data.name);
+      onDiscountChange(data.discount_percent ?? 0);
     } else {
       setCodeStatus("invalid");
       setCodeName("");
+      onDiscountChange(0);
     }
   }
+
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
 
   const subtotal = getPriceCents(cards.length);
+  const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const total = subtotal + shipping;
+  const total = subtotal - discountCents + shipping;
 
   return (
     <div className="flex flex-col gap-8">
@@ -152,6 +160,12 @@ export function StepReview({
           <span>Subtotal</span>
           <span>{formatCurrency(subtotal)}</span>
         </div>
+        {discountCents > 0 && (
+          <div className="flex justify-between text-sm text-green-600 font-medium">
+            <span>Discount ({discountPercent}% off)</span>
+            <span>−{formatCurrency(discountCents)}</span>
+          </div>
+        )}
         <div className="flex justify-between text-sm text-muted-foreground">
           <span>Shipping</span>
           <span>{shippingMethod === "self_ship" ? "Self-ship" : formatCurrency(shipping)}</span>
@@ -176,13 +190,18 @@ export function StepReview({
 
       {/* Affiliate / creator code */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="affiliate-code">Creator code <span className="text-muted-foreground font-normal">(optional)</span></Label>
+        <Label htmlFor="affiliate-code">Creator or coupon code <span className="text-muted-foreground font-normal">(optional)</span></Label>
         <div className="flex gap-2">
           <input
             id="affiliate-code"
             type="text"
             value={affiliateCode}
-            onChange={(e) => { onAffiliateCodeChange(e.target.value.toUpperCase()); setCodeStatus("idle"); setCodeName(""); }}
+            onChange={(e) => {
+              onAffiliateCodeChange(e.target.value.toUpperCase());
+              setCodeStatus("idle");
+              setCodeName("");
+              onDiscountChange(0);
+            }}
             placeholder="CREATOR123"
             className="flex-1 h-9 border border-border rounded-lg px-3 text-sm font-mono uppercase focus:outline-none focus:border-primary transition-colors"
           />
@@ -195,7 +214,12 @@ export function StepReview({
             Apply
           </button>
         </div>
-        {codeStatus === "valid" && <p className="text-sm text-green-600 font-medium">✓ Code applied — {codeName}</p>}
+        {codeStatus === "valid" && discountPercent > 0 && (
+          <p className="text-sm text-green-600 font-medium">✓ {discountPercent}% discount applied — {codeName}</p>
+        )}
+        {codeStatus === "valid" && discountPercent === 0 && (
+          <p className="text-sm text-green-600 font-medium">✓ Code applied — {codeName}</p>
+        )}
         {codeStatus === "invalid" && <p className="text-sm text-red-500">Invalid code.</p>}
       </div>
 

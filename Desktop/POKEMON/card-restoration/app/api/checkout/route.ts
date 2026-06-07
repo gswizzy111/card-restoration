@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
+import Stripe from "stripe";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -69,13 +70,27 @@ export async function POST(request: Request) {
 
   const serviceMap = Object.fromEntries(dbServices.map((s) => [s.id, s]));
 
-  // Compute subtotal: $120 first card, $100 each after
   const subtotalCents = getPriceCents(data.cards.length);
+
+  // Look up discount from DB using the affiliate code (never trust client-sent discount)
+  let discountPercent = 0;
+  let discountCents = 0;
+  if (data.affiliate_code) {
+    const { data: affiliate } = await admin
+      .from("affiliates")
+      .select("discount_percent")
+      .ilike("code", data.affiliate_code.trim())
+      .single();
+    discountPercent = affiliate?.discount_percent ?? 0;
+    if (discountPercent > 0) {
+      discountCents = Math.round(subtotalCents * discountPercent / 100);
+    }
+  }
 
   const shippingCents = data.shipping_method === "buy_label" && data.shipping_rate
     ? data.shipping_rate.amount_cents
     : 0;
-  const totalCents = subtotalCents + shippingCents;
+  const totalCents = subtotalCents - discountCents + shippingCents;
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -108,6 +123,8 @@ export async function POST(request: Request) {
       inbound_carrier: data.shipping_rate?.carrier ?? null,
       inbound_service_level: data.shipping_rate?.service_level ?? null,
       subtotal_cents: subtotalCents,
+      discount_cents: discountCents,
+      discount_percent: discountPercent,
       shipping_cents: shippingCents,
       total_cents: totalCents,
       customer_notes: data.customer_notes ?? null,
@@ -179,6 +196,21 @@ export async function POST(request: Request) {
     });
   }
 
+  // Create a one-time Stripe coupon if there's a discount
+  let stripeDiscounts: Stripe.Checkout.SessionCreateParams["discounts"] = undefined;
+  if (discountPercent > 0) {
+    try {
+      const coupon = await stripe.coupons.create({
+        percent_off: discountPercent,
+        duration: "once",
+        name: `${discountPercent}% Off — ${data.affiliate_code ?? "coupon"}`,
+      });
+      stripeDiscounts = [{ coupon: coupon.id }];
+    } catch (err) {
+      console.error("Failed to create Stripe coupon:", err);
+    }
+  }
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   let session;
   try {
@@ -186,6 +218,7 @@ export async function POST(request: Request) {
       mode: "payment",
       customer_email: data.customer.email,
       line_items: lineItems,
+      discounts: stripeDiscounts,
       success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/checkout/cancel`,
       metadata: {

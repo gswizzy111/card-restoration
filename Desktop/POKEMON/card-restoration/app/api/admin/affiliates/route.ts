@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { name, code } = body;
+  const { name, code, discount_percent } = body;
 
   if (!name || typeof name !== "string" || !code || typeof code !== "string") {
     return Response.json({ error: "Name and code are required." }, { status: 400 });
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
   const { error } = await admin.from("affiliates").insert({
     name: name.trim(),
     code: code.trim().toUpperCase(),
+    discount_percent: typeof discount_percent === "number" ? discount_percent : 0,
   });
 
   if (error) {
