@@ -6,6 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusUpdater } from "./status-updater";
 import { PhotoUploader } from "./photo-uploader";
+import { CompletionNotesEditor } from "./completion-notes-editor";
 import { ReturnLabelButton } from "./return-label-button";
 import { CheckpointAdder } from "./checkpoint-adder";
 import { InboundTrackingEditor } from "./inbound-tracking-editor";
@@ -98,14 +99,24 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               </div>
             )}
 
-            {/* Restoration photos */}
+            {/* Completion notes + photos */}
             <div className="bg-white rounded-xl border border-border p-6">
-              <h2 className="font-heading font-black text-lg text-foreground mb-4">Restoration Photos</h2>
-              <p className="text-sm text-muted-foreground mb-4">Upload photos of the finished cards — customers will see these when tracking their order.</p>
-              <PhotoUploader
+              <h2 className="font-heading font-black text-lg text-foreground mb-1">Work Completion</h2>
+              <p className="text-sm text-muted-foreground mb-5">Notes and photos from when the restoration is done. Photos are visible to the customer on their tracking page.</p>
+
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Your Notes</p>
+              <CompletionNotesEditor
                 orderId={order.id}
-                existingPhotos={(order.restoration_photos as string[]) ?? []}
+                existingNotes={(order.admin_notes as string) ?? ""}
               />
+
+              <div className="border-t border-border mt-6 pt-5">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Finished Photos</p>
+                <PhotoUploader
+                  orderId={order.id}
+                  existingPhotos={(order.restoration_photos as string[]) ?? []}
+                />
+              </div>
             </div>
 
             {/* Cards */}
