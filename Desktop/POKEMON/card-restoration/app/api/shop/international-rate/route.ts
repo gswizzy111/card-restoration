@@ -1,12 +1,13 @@
 import { shippo, businessAddress } from "@/lib/shippo";
+import { WeightUnitEnum, DistanceUnitEnum } from "shippo/models/components";
 
 const BOX_KEYWORDS = ["official", "essential", "clamp"];
 
 function getParcel(itemNames: string[]) {
   const needsBox = itemNames.some((n) => BOX_KEYWORDS.some((kw) => n.toLowerCase().includes(kw)));
   return needsBox
-    ? { massUnit: "lb", weight: "4", distanceUnit: "in", length: "10", width: "7", height: "7" }
-    : { massUnit: "oz", weight: "6", distanceUnit: "in", length: "8", width: "5", height: "1" };
+    ? { massUnit: WeightUnitEnum.Lb, weight: "4", distanceUnit: DistanceUnitEnum.In, length: "10", width: "7", height: "7" }
+    : { massUnit: WeightUnitEnum.Oz, weight: "6", distanceUnit: DistanceUnitEnum.In, length: "8", width: "5", height: "1" };
 }
 
 export async function POST(req: Request) {

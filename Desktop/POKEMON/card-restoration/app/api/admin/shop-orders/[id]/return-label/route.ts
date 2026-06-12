@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo, businessAddress } from "@/lib/shippo";
 import { resend, fromEmail, businessName } from "@/lib/resend";
+import { WeightUnitEnum, DistanceUnitEnum } from "shippo/models/components";
 
 const BOX_KEYWORDS = ["official", "essential", "clamp"];
 
@@ -9,8 +10,8 @@ function getParcel(items: { product_name: string }[] | null) {
   const names = (items ?? []).map((i) => i.product_name ?? "");
   const needsBox = names.some((n) => BOX_KEYWORDS.some((kw) => n.toLowerCase().includes(kw)));
   return needsBox
-    ? { massUnit: "lb", weight: "4", distanceUnit: "in", length: "10", width: "7", height: "7" }
-    : { massUnit: "oz", weight: "6", distanceUnit: "in", length: "8", width: "5", height: "1" };
+    ? { massUnit: WeightUnitEnum.Lb, weight: "4", distanceUnit: DistanceUnitEnum.In, length: "10", width: "7", height: "7" }
+    : { massUnit: WeightUnitEnum.Oz, weight: "6", distanceUnit: DistanceUnitEnum.In, length: "8", width: "5", height: "1" };
 }
 
 type ShippingAddress = {
