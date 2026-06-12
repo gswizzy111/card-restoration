@@ -30,7 +30,7 @@ const BodySchema = z.object({
   customer: z.object({
     name: z.string().min(1),
     email: z.string().email(),
-    phone: z.string().min(10),
+    phone: z.string().min(7),
     address: AddressSchema,
   }),
   shipping_method: z.enum(["buy_label", "self_ship"]),
@@ -87,8 +87,11 @@ export async function POST(request: Request) {
     }
   }
 
-  const shippingCents = data.shipping_method === "buy_label" && data.shipping_rate
-    ? data.shipping_rate.amount_cents
+  const isInternational = data.customer.address.country !== "US";
+  // buy_label charges inbound rate (doubled in UI for round-trip)
+  // international self_ship charges the return shipping rate chosen by customer
+  const shippingCents = data.shipping_rate
+    ? (data.shipping_method === "buy_label" || isInternational ? data.shipping_rate.amount_cents : 0)
     : 0;
   const totalCents = subtotalCents - discountCents + shippingCents;
 
@@ -186,10 +189,13 @@ export async function POST(request: Request) {
     },
   ];
   if (shippingCents > 0 && data.shipping_rate) {
+    const shippingLabel = isInternational
+      ? `Return Shipping — ${data.shipping_rate.carrier} ${data.shipping_rate.service_level}`
+      : `Shipping — ${data.shipping_rate.carrier} ${data.shipping_rate.service_level}`;
     lineItems.push({
       price_data: {
         currency: "usd",
-        product_data: { name: `Shipping — ${data.shipping_rate.carrier} ${data.shipping_rate.service_level}` },
+        product_data: { name: shippingLabel },
         unit_amount: shippingCents,
       },
       quantity: 1,
@@ -224,7 +230,11 @@ export async function POST(request: Request) {
       metadata: {
         order_id: order.id,
         order_number: order.order_number ?? "",
-        shipping_rate_object_id: data.shipping_rate?.object_id ?? "",
+        // only set for domestic buy_label — webhook uses this to purchase inbound label
+        shipping_rate_object_id: (!isInternational && data.shipping_method === "buy_label")
+          ? (data.shipping_rate?.object_id ?? "")
+          : "",
+        is_international: isInternational ? "true" : "",
       },
     });
   } catch (err) {

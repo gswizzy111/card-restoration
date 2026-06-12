@@ -71,7 +71,8 @@ export function OrderBuilder({ services }: { services: Service[] }) {
     }
     if (step === 3) {
       if (!shippingMethod) return false;
-      if (shippingMethod === "buy_label") return !!selectedRate;
+      const isInternational = !!(customer.country && customer.country !== "US");
+      if (shippingMethod === "buy_label" || isInternational) return !!selectedRate;
       return true;
     }
     return true;
@@ -90,7 +91,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
             card_set: c.card_set || undefined,
             card_year: c.card_year || undefined,
             card_number: c.card_number || undefined,
-            estimated_value_cents: c.estimated_value ? Math.round(parseFloat(c.estimated_value) * 100) : undefined,
+            estimated_value_cents: c.estimated_value ? Math.round(parseFloat(c.estimated_value.replace(/[$,]/g, "")) * 100) : undefined,
             notes: c.notes || undefined,
             photo_urls: c.photo_urls,
             service_ids: [serviceId],
@@ -217,6 +218,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
               shippingMethod={shippingMethod}
               selectedRate={selectedRate}
               discountPercent={discountPercent}
+              isInternational={!!(customer.country && customer.country !== "US")}
             />
           </div>
         </div>

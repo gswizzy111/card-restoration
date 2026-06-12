@@ -1,8 +1,33 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Track } from "shippo/models/components";
+
+function shippoCarrierToken(provider: string): string {
+  const map: Record<string, string> = {
+    USPS: "usps",
+    FedEx: "fedex",
+    UPS: "ups",
+    DHLExpress: "dhl_express",
+    "DHL Express": "dhl_express",
+    DHL: "dhl",
+    Canada: "canadapost",
+    CanadaPost: "canadapost",
+  };
+  return map[provider] ?? provider.toLowerCase().replace(/\s+/g, "_");
+}
+
+const TRACKING_BADGE: Record<string, { label: string; cls: string }> = {
+  UNKNOWN:     { label: "Label Created",  cls: "bg-gray-100 text-gray-700" },
+  PRE_TRANSIT: { label: "Label Created",  cls: "bg-gray-100 text-gray-700" },
+  TRANSIT:     { label: "In Transit",     cls: "bg-blue-100 text-blue-700" },
+  DELIVERED:   { label: "Delivered",      cls: "bg-green-100 text-green-700" },
+  RETURNED:    { label: "Returned",       cls: "bg-orange-100 text-orange-700" },
+  FAILURE:     { label: "Delivery Issue", cls: "bg-red-100 text-red-700" },
+};
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ orderNumber: string }> }) {
   const { orderNumber } = await params;
@@ -18,6 +43,23 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
 
   const { data: cards } = await admin.from("cards").select("*").eq("order_id", order.id);
   const { data: services } = await admin.from("order_services").select("*").eq("order_id", order.id);
+
+  // Fetch live inbound tracking from Shippo (only while awaiting cards)
+  let inboundTrack: Track | null = null;
+  if (
+    order.inbound_tracking_number &&
+    order.inbound_carrier &&
+    (order.status === "awaiting_cards" || order.status === "received")
+  ) {
+    try {
+      inboundTrack = await shippo.trackingStatus.get(
+        order.inbound_tracking_number,
+        shippoCarrierToken(order.inbound_carrier)
+      );
+    } catch {
+      // fail silently — don't break the page
+    }
+  }
 
   const currentIndex = STATUS_TIMELINE.indexOf(order.status as OrderStatus);
   const visibleStatuses = STATUS_TIMELINE.filter(s => s !== "awaiting_payment");
@@ -56,12 +98,44 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
         </div>
       </div>
 
+      {/* Live inbound tracking (while we're waiting for the cards) */}
+      {inboundTrack && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-5">
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-700 mb-3">Inbound Shipment Tracking</p>
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+              TRACKING_BADGE[inboundTrack.trackingStatus?.status ?? "UNKNOWN"]?.cls ?? "bg-gray-100 text-gray-700"
+            }`}>
+              {TRACKING_BADGE[inboundTrack.trackingStatus?.status ?? "UNKNOWN"]?.label ?? "Unknown"}
+            </span>
+          </div>
+          {inboundTrack.trackingStatus?.statusDetails && (
+            <p className="text-sm text-blue-800 mb-2">{inboundTrack.trackingStatus.statusDetails}</p>
+          )}
+          {inboundTrack.eta && (
+            <p className="text-sm font-semibold text-blue-900">
+              Estimated arrival: {new Date(inboundTrack.eta).toLocaleDateString("en-US", {
+                weekday: "long", month: "long", day: "numeric"
+              })}
+            </p>
+          )}
+          <p className="font-mono text-xs text-blue-600 mt-3">{order.inbound_tracking_number}</p>
+        </div>
+      )}
+
       {/* Return tracking number */}
       {order.tracking_number && (
         <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-6 mb-5">
-          <p className="text-xs font-bold uppercase tracking-widest text-cyan-700 mb-1">Return Tracking Number</p>
-          <p className="font-mono font-black text-xl text-cyan-900 tracking-widest">{order.tracking_number}</p>
-          <p className="text-xs text-cyan-700 mt-2">Paste this number on your carrier&apos;s website to track your package.</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-cyan-700 mb-1">Return Tracking</p>
+          <p className="font-mono font-black text-xl text-cyan-900 tracking-widest mb-3">{order.tracking_number}</p>
+          <a
+            href={`https://www.17track.net/en/track?nums=${order.tracking_number}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-xs font-bold px-3 py-1.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors"
+          >
+            Track Package →
+          </a>
         </div>
       )}
 

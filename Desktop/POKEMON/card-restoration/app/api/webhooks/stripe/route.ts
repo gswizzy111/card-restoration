@@ -197,13 +197,15 @@ export async function POST(request: Request) {
     const orderId = session.metadata?.order_id;
     if (!orderId) return Response.json({ error: "No order_id in metadata" }, { status: 400 });
 
-    // Purchase prepaid label if customer selected that option
+    // Purchase prepaid label if domestic buy_label order (not international — rate object
+    // for international is the return leg and would be purchased when we ship back)
     let shippingLabelUrl: string | null = null;
     let inboundTrackingNumber: string | null = null;
     let inboundTrackingUrl: string | null = null;
     let inboundEta: string | null = null;
     const rateObjectId = session.metadata?.shipping_rate_object_id;
-    if (rateObjectId) {
+    const isInternational = session.metadata?.is_international === "true";
+    if (rateObjectId && !isInternational) {
       try {
         const transaction = await shippo.transactions.create({
           rate: rateObjectId,
@@ -312,7 +314,8 @@ export async function POST(request: Request) {
           <p style="margin:8px 0 0;color:#78350f;font-weight:600;font-size:14px">
             The Card Doc<br>
             ${process.env.BUSINESS_SHIPPING_STREET1 ?? ""}<br>
-            ${process.env.BUSINESS_SHIPPING_CITY ?? ""}, ${process.env.BUSINESS_SHIPPING_STATE ?? ""} ${process.env.BUSINESS_SHIPPING_ZIP ?? ""}
+            ${process.env.BUSINESS_SHIPPING_CITY ?? ""}, ${process.env.BUSINESS_SHIPPING_STATE ?? ""} ${process.env.BUSINESS_SHIPPING_ZIP ?? ""}<br>
+            United States
           </p>
         </div>`;
 

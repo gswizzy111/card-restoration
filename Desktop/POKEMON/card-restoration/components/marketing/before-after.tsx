@@ -11,7 +11,7 @@ const pairs: Pair[] = [
     image: "/before-after-garchomp.png",
   },
   { caption: "1986 Fleer Michael Jordan", services: "Full Restoration" },
-  { caption: "1952 Topps Mickey Mantle", services: "Full Card Restoration" },
+  { caption: "1952 Topps Mickey Mantle", services: "Full Card Restoration", image: "/before-after-mickey-mantle.png" },
 ];
 
 export function BeforeAfter() {

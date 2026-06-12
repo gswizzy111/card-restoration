@@ -7,9 +7,10 @@ interface OrderSummaryProps {
   shippingMethod: "buy_label" | "self_ship" | null;
   selectedRate: ShippingRate | null;
   discountPercent?: number;
+  isInternational?: boolean;
 }
 
-export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0 }: OrderSummaryProps) {
+export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0, isInternational = false }: OrderSummaryProps) {
   const subtotal = getPriceCents(cards.length);
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
@@ -39,9 +40,11 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
           </div>
         )}
         <div className="flex justify-between text-muted-foreground">
-          <span>Shipping</span>
+          <span>{isInternational ? "Return shipping" : "Shipping"}</span>
           <span>
-            {shippingMethod === "self_ship" ? "Self-ship" : selectedRate ? formatCurrency(selectedRate.amount_cents) : "—"}
+            {isInternational
+              ? (selectedRate ? formatCurrency(selectedRate.amount_cents) : "—")
+              : shippingMethod === "self_ship" ? "Self-ship" : selectedRate ? formatCurrency(selectedRate.amount_cents) : "—"}
           </span>
         </div>
         <div className="flex justify-between font-bold text-foreground pt-1 border-t border-border text-base">

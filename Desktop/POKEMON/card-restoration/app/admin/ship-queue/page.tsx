@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MarkShippedButton } from "./mark-shipped-button";
 import { ReturnLabelButton } from "../shop-orders/return-label-button";
+import { AddressEditor } from "./address-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -74,14 +75,7 @@ export default async function ShipQueuePage() {
                           : "—"}
                       </p>
 
-                      {addr ? (
-                        <div className="text-sm text-muted-foreground">
-                          <p>{addr.street1}{addr.street2 ? `, ${addr.street2}` : ""}</p>
-                          <p>{addr.city}, {addr.state} {addr.zip}{addr.country && addr.country !== "US" ? ` · ${addr.country}` : ""}</p>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground italic">No address on file</p>
-                      )}
+                      <AddressEditor orderId={order.id} address={addr} />
 
                       <p className="text-xs text-muted-foreground mt-2">
                         Ordered {new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} EST

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
@@ -8,8 +9,26 @@ import { PhotoUploader } from "./photo-uploader";
 import { ReturnLabelButton } from "./return-label-button";
 import { CheckpointAdder } from "./checkpoint-adder";
 import { InboundTrackingEditor } from "./inbound-tracking-editor";
+import type { Track } from "shippo/models/components";
 
 export const dynamic = "force-dynamic";
+
+function shippoCarrierToken(provider: string): string {
+  const map: Record<string, string> = {
+    USPS: "usps", FedEx: "fedex", UPS: "ups",
+    DHLExpress: "dhl_express", "DHL Express": "dhl_express", DHL: "dhl",
+  };
+  return map[provider] ?? provider.toLowerCase().replace(/\s+/g, "_");
+}
+
+const TRACKING_BADGE: Record<string, { label: string; cls: string }> = {
+  UNKNOWN:     { label: "Label Created", cls: "bg-gray-100 text-gray-600" },
+  PRE_TRANSIT: { label: "Label Created", cls: "bg-gray-100 text-gray-600" },
+  TRANSIT:     { label: "In Transit",    cls: "bg-blue-100 text-blue-700" },
+  DELIVERED:   { label: "Delivered",     cls: "bg-green-100 text-green-700" },
+  RETURNED:    { label: "Returned",      cls: "bg-orange-100 text-orange-700" },
+  FAILURE:     { label: "Issue",         cls: "bg-red-100 text-red-700" },
+};
 
 export default async function AdminOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,6 +42,17 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   ]);
 
   if (!order) notFound();
+
+  // Live inbound tracking
+  let inboundTrack: Track | null = null;
+  if (order.inbound_tracking_number && order.inbound_carrier) {
+    try {
+      inboundTrack = await shippo.trackingStatus.get(
+        order.inbound_tracking_number,
+        shippoCarrierToken(order.inbound_carrier)
+      );
+    } catch { /* fail silently */ }
+  }
 
   const address = order.ship_from_address as Record<string, string> | null;
 
@@ -154,18 +184,41 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 {order.inbound_method === "buy_label" ? "Prepaid inbound label purchased" : "Customer shipping own way"}
               </p>
               {order.shipping_cents > 0 && (
-                <p className="text-sm text-muted-foreground mb-4">Label cost: {formatCurrency(order.shipping_cents)}</p>
+                <p className="text-sm text-muted-foreground mb-3">Label cost: {formatCurrency(order.shipping_cents)}</p>
               )}
               {order.shipping_label_url && (
                 <a
                   href={order.shipping_label_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block text-sm font-medium text-primary hover:underline mb-4"
+                  className="block text-sm font-medium text-primary hover:underline mb-3"
                 >
                   Print Inbound Label (PDF)
                 </a>
               )}
+
+              {/* Live inbound tracking status */}
+              {inboundTrack && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs font-bold uppercase tracking-widest text-blue-700 mb-1.5">Inbound Status</p>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    TRACKING_BADGE[inboundTrack.trackingStatus?.status ?? "UNKNOWN"]?.cls ?? "bg-gray-100 text-gray-600"
+                  }`}>
+                    {TRACKING_BADGE[inboundTrack.trackingStatus?.status ?? "UNKNOWN"]?.label ?? "Unknown"}
+                  </span>
+                  {inboundTrack.trackingStatus?.statusDetails && (
+                    <p className="text-xs text-blue-800 mt-1.5">{inboundTrack.trackingStatus.statusDetails}</p>
+                  )}
+                  {inboundTrack.eta && (
+                    <p className="text-xs font-semibold text-blue-900 mt-1">
+                      ETA: {new Date(inboundTrack.eta).toLocaleDateString("en-US", {
+                        weekday: "short", month: "short", day: "numeric"
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Return to Customer</p>
               <ReturnLabelButton orderId={order.id} existingLabelUrl={order.return_label_url} />
             </div>
