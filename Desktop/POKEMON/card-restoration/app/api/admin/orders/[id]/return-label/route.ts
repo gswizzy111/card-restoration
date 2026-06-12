@@ -46,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     addressTo: buildAddressTo(order, addr),
     parcels: [{
       massUnit: "lb",
-      weight: "0.5",
+      weight: "1",
       distanceUnit: "in",
       length: "7",
       width: "5",

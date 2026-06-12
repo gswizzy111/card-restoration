@@ -55,7 +55,7 @@ export function StepShipping({
             phone: customer.phone,
             email: customer.email,
           },
-          parcel: { length: 6, width: 4, height: 1, weight: 4 },
+          parcel: { length: 7, width: 5, height: 1, weight: 16 },
           from_business: true,
         }),
       })
@@ -94,7 +94,7 @@ export function StepShipping({
           phone: customer.phone,
           email: customer.email,
         },
-        parcel: { length: 6, width: 4, height: 1, weight: 4 },
+        parcel: { length: 7, width: 5, height: 1, weight: 16 },
       }),
     })
       .then((r) => r.json())
