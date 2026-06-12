@@ -119,6 +119,7 @@ function CheckoutInner() {
           state: form.state || undefined,
           zip: form.zip,
           country: form.country,
+          item_names: items.map((i) => i.name),
         }),
       });
       const data = await res.json();

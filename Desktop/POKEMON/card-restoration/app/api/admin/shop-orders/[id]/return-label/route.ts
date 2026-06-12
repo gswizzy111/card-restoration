@@ -3,6 +3,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo, businessAddress } from "@/lib/shippo";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 
+const BOX_KEYWORDS = ["official", "essential", "clamp"];
+
+function getParcel(items: { product_name: string }[] | null) {
+  const names = (items ?? []).map((i) => i.product_name ?? "");
+  const needsBox = names.some((n) => BOX_KEYWORDS.some((kw) => n.toLowerCase().includes(kw)));
+  return needsBox
+    ? { massUnit: "lb", weight: "4", distanceUnit: "in", length: "10", width: "7", height: "7" }
+    : { massUnit: "oz", weight: "6", distanceUnit: "in", length: "8", width: "5", height: "1" };
+}
+
 type ShippingAddress = {
   street1: string;
   street2?: string;
@@ -51,14 +61,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       phone: order.customer_phone ?? "",
       email: order.customer_email ?? "",
     },
-    parcels: [{
-      massUnit: "lb",
-      weight: "4",
-      distanceUnit: "in",
-      length: "10",
-      width: "7",
-      height: "7",
-    }],
+    parcels: [getParcel(order.items as { product_name: string }[] | null)],
     async: false,
   });
 
