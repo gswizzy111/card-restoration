@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo, businessAddress } from "@/lib/shippo";
+import { resend, fromEmail, businessName } from "@/lib/resend";
 
 async function authed() {
   const jar = await cookies();
@@ -95,7 +96,48 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const admin = createAdminClient();
-  await admin.from("orders").update({ return_label_url: transaction.labelUrl }).eq("id", id);
+  await admin
+    .from("orders")
+    .update({ return_label_url: transaction.labelUrl, tracking_number: transaction.trackingNumber ?? null })
+    .eq("id", id);
 
-  return Response.json({ labelUrl: transaction.labelUrl });
+  const trackingNumber = transaction.trackingNumber ?? null;
+  const trackingUrl = transaction.trackingUrlProvider ?? null;
+
+  if (order.customer_email && trackingNumber) {
+    const firstName = (order.customer_name as string)?.split(" ")[0] ?? "there";
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
+    const orderTrackingUrl = `${appUrl}/orders/${order.order_number}`;
+
+    try {
+      await resend.emails.send({
+        from: fromEmail,
+        to: order.customer_email as string,
+        subject: `Your restored cards are on the way! — ${businessName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
+            <h1 style="font-size:22px;font-weight:900;margin-bottom:4px">Your cards have been shipped!</h1>
+            <p>Hi ${firstName}, your restored cards are on their way back to you.</p>
+
+            <div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:12px;padding:20px;margin:20px 0">
+              <p style="margin:0 0 6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#0891b2">Tracking Number</p>
+              <p style="margin:0 0 10px;font-family:monospace;font-size:22px;font-weight:900;color:#0e7490;letter-spacing:0.05em">${trackingNumber}</p>
+              ${trackingUrl
+                ? `<a href="${trackingUrl}" style="display:inline-block;background:#0891b2;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Track Your Package →</a>`
+                : ""}
+            </div>
+
+            <a href="${orderTrackingUrl}" style="display:inline-block;background:#c0392b;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin-bottom:24px">View Your Order →</a>
+
+            <p style="font-size:14px;color:#666;">If you have any questions, reply to this email or reach out at <a href="mailto:${fromEmail}" style="color:#c0392b">${fromEmail}</a>.</p>
+            <p style="font-size:13px;color:#999">${businessName}</p>
+          </div>
+        `,
+      });
+    } catch (err) {
+      console.error("Failed to send shipping email:", err);
+    }
+  }
+
+  return Response.json({ labelUrl: transaction.labelUrl, trackingNumber });
 }
