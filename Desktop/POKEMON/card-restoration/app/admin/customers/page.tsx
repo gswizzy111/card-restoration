@@ -41,7 +41,7 @@ export default async function CustomersPage() {
     if (!email) continue;
     const existing = map.get(email);
     if (existing) {
-      existing.totalOrders++;
+      existing.totalOrders = (existing.totalOrders ?? 0) + 1;
       if (o.created_at < existing.firstOrder) existing.firstOrder = o.created_at;
       if (existing.source === "Kit Order") existing.source = "Both";
     } else {
@@ -61,7 +61,7 @@ export default async function CustomersPage() {
     if (!email) continue;
     const existing = map.get(email);
     if (existing) {
-      existing.totalOrders++;
+      existing.totalOrders = (existing.totalOrders ?? 0) + 1;
       if (o.created_at < existing.firstOrder) existing.firstOrder = o.created_at;
       if (existing.source === "Restoration") existing.source = "Both";
     } else {

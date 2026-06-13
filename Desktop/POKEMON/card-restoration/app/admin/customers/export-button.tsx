@@ -6,7 +6,7 @@ type Customer = {
   phone: string;
   source: string;
   firstOrder: string;
-  totalOrders: number;
+  totalOrders: number | null;
 };
 
 export function ExportButton({ customers }: { customers: Customer[] }) {
@@ -18,7 +18,7 @@ export function ExportButton({ customers }: { customers: Customer[] }) {
       c.phone,
       c.source,
       new Date(c.firstOrder).toLocaleDateString("en-US"),
-      String(c.totalOrders),
+      c.totalOrders != null ? String(c.totalOrders) : "",
     ]);
 
     const csv = [headers, ...rows]
