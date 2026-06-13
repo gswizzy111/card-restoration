@@ -14,7 +14,7 @@ export default function HomePage() {
           }}
         >
           Due to high volume, our store will be{" "}
-          <span style={{ color: "#c0392b", textShadow: "0 0 60px rgba(192,57,43,0.5)" }}>
+          <span style={{ color: "#1a8fe0", textShadow: "0 0 60px rgba(26,143,224,0.5)" }}>
             down for a couple days.
           </span>
         </p>
