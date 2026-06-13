@@ -11,7 +11,7 @@ type Customer = {
   phone: string;
   source: string;
   firstOrder: string;
-  totalOrders: number;
+  totalOrders: number | null;
 };
 
 export default async function CustomersPage() {
@@ -20,13 +20,16 @@ export default async function CustomersPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: restorationOrders }, { data: shopOrders }] = await Promise.all([
+  const [{ data: restorationOrders }, { data: shopOrders }, { data: waitlistRows }] = await Promise.all([
     admin.from("orders")
       .select("customer_name, customer_email, customer_phone, created_at")
       .neq("status", "awaiting_payment")
       .order("created_at", { ascending: true }),
     admin.from("shop_orders")
       .select("customer_name, customer_email, customer_phone, created_at")
+      .order("created_at", { ascending: true }),
+    admin.from("waitlist")
+      .select("email, created_at")
       .order("created_at", { ascending: true }),
   ]);
 
@@ -73,6 +76,20 @@ export default async function CustomersPage() {
     }
   }
 
+  // Add waitlist signups (only if not already a customer)
+  for (const w of waitlistRows ?? []) {
+    const email = (w.email ?? "").toLowerCase().trim();
+    if (!email || map.has(email)) continue;
+    map.set(email, {
+      name: "",
+      email,
+      phone: "",
+      source: "Waitlist",
+      firstOrder: w.created_at,
+      totalOrders: null,
+    });
+  }
+
   const customers = Array.from(map.values()).sort(
     (a, b) => new Date(b.firstOrder).getTime() - new Date(a.firstOrder).getTime()
   );
@@ -114,6 +131,7 @@ export default async function CustomersPage() {
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                         c.source === "Both" ? "bg-purple-100 text-purple-700" :
                         c.source === "Kit Order" ? "bg-blue-100 text-blue-700" :
+                        c.source === "Waitlist" ? "bg-gray-100 text-gray-500" :
                         "bg-green-100 text-green-700"
                       }`}>
                         {c.source}
@@ -122,7 +140,7 @@ export default async function CustomersPage() {
                     <td className="px-5 py-3 text-muted-foreground hidden lg:table-cell">
                       {new Date(c.firstOrder).toLocaleDateString("en-US")}
                     </td>
-                    <td className="px-5 py-3 text-right font-bold text-foreground">{c.totalOrders}</td>
+                    <td className="px-5 py-3 text-right font-bold text-foreground">{c.totalOrders ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

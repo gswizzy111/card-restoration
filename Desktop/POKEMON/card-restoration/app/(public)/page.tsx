@@ -1,24 +1,25 @@
+import { WaitlistForm } from "./waitlist-form";
+
 export default function HomePage() {
   return (
     <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
-      <div className="text-center px-6">
+      <div className="text-center px-6" style={{ maxWidth: "680px", width: "100%" }}>
         <p
-          className="text-white font-heading font-black tracking-[0.25em] uppercase"
+          className="text-white font-heading font-black"
           style={{
-            fontSize: "clamp(2rem, 8vw, 7rem)",
-            lineHeight: 1.1,
-            textShadow: "0 0 80px rgba(255,255,255,0.15)",
-            letterSpacing: "0.15em",
+            fontSize: "clamp(1.6rem, 5.5vw, 4.5rem)",
+            lineHeight: 1.15,
+            textShadow: "0 0 80px rgba(255,255,255,0.12)",
+            letterSpacing: "0.02em",
           }}
         >
-          Big Things
-          <br />
-          Coming
-          <br />
-          <span style={{ color: "#c0392b", textShadow: "0 0 60px rgba(192,57,43,0.6)" }}>
-            Very Soon.
+          Due to high volume, our store will be{" "}
+          <span style={{ color: "#c0392b", textShadow: "0 0 60px rgba(192,57,43,0.5)" }}>
+            down for a couple days.
           </span>
         </p>
+
+        <WaitlistForm />
       </div>
     </div>
   );
