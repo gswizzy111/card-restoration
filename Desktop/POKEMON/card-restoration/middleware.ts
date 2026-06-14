@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // ─── COMING SOON MODE ───────────────────────────────────────────────────────
 // Set to false and push to bring the full site back.
-const COMING_SOON = true;
+const COMING_SOON = false;
 // ────────────────────────────────────────────────────────────────────────────
 
 export function middleware(request: NextRequest) {
