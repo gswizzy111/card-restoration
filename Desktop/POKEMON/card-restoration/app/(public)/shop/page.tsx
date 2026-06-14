@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
 import { AddToCartButton } from "./add-to-cart-button";
+import { SOLD_OUT_MODE } from "@/lib/site-config";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +78,7 @@ export default async function ShopPage() {
                   </span>
                 )}
                 <a href={`/shop/${product.slug}`} className="block">
-                  <div className="aspect-square bg-secondary overflow-hidden">
+                  <div className="aspect-square bg-secondary overflow-hidden relative">
                     {product.images?.[0] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -87,6 +88,17 @@ export default async function ShopPage() {
                       />
                     ) : (
                       <div className="w-full h-full bg-secondary" />
+                    )}
+                    {SOLD_OUT_MODE && (
+                      <div className="absolute inset-0 flex items-center justify-center"
+                        style={{ background: "rgba(0,0,0,0.45)" }}>
+                        <span
+                          className="text-white font-black uppercase tracking-widest text-xs px-3 py-1 border-2 border-white rotate-[-20deg]"
+                          style={{ letterSpacing: "0.2em" }}
+                        >
+                          Sold Out
+                        </span>
+                      </div>
                     )}
                   </div>
                 </a>
@@ -98,8 +110,8 @@ export default async function ShopPage() {
                   </a>
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-primary text-sm">{formatCurrency(product.price_cents)}</span>
-                    {product.inventory_count === 0 ? (
-                      <span className="text-xs text-muted-foreground">Out of stock</span>
+                    {SOLD_OUT_MODE || product.inventory_count === 0 ? (
+                      <span className="text-xs text-muted-foreground font-semibold">Sold Out</span>
                     ) : (
                       <AddToCartButton
                         product={{
