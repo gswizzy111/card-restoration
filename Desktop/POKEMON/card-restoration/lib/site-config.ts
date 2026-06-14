@@ -7,5 +7,5 @@ export const SOLD_OUT_MODE = true;
 // Set to true to enable the new restoration tier selection page.
 // When false, uses existing volume-based pricing. Set to true to preview,
 // false to deploy to production with old pricing until fully ready.
-export const TIER_SELECTION_ENABLED = false;
+export const TIER_SELECTION_ENABLED = true;
 // ─────────────────────────────────────────────────────────────────────────────
