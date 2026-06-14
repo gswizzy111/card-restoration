@@ -139,7 +139,9 @@ export default async function AdminPage({
     cardsByOrder[card.order_id].push(card.card_name);
   }
 
-  const allOrders = orders ?? [];
+  const PAST_STATUSES = ["shipped_back", "delivered"];
+  const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status));
+  const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status));
 
   const allRevenue = [
     ...(orders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, created_at: o.created_at })),
@@ -193,40 +195,78 @@ export default async function AdminPage({
           <RevenueChart entries={revenueEntries} />
         </div>
 
-        {allOrders.length === 0 && (
+        {/* Active orders */}
+        {activeOrders.length === 0 ? (
           <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
-            No orders yet.
+            No active orders.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {activeOrders.map((order) => (
+              <Link
+                key={order.id}
+                href={`/admin/orders/${order.id}`}
+                className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-1">
+                    <span className="font-heading font-black text-foreground">#{order.order_number}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                      {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
+                    </span>
+                  </div>
+                  <p className="font-medium text-foreground">{order.customer_name}</p>
+                  <p className="text-sm text-muted-foreground">{order.customer_email}</p>
+                  {order.customer_phone && <p className="text-sm text-muted-foreground">{order.customer_phone}</p>}
+                  {cardsByOrder[order.id]?.length > 0 && (
+                    <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
+                  )}
+                </div>
+                <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
+                  <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</span>
+                </div>
+              </Link>
+            ))}
           </div>
         )}
 
-        <div className="flex flex-col gap-3">
-          {allOrders.map((order) => (
-            <Link
-              key={order.id}
-              href={`/admin/orders/${order.id}`}
-              className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="font-heading font-black text-foreground">#{order.order_number}</span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
-                    {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
-                  </span>
-                </div>
-                <p className="font-medium text-foreground">{order.customer_name}</p>
-                <p className="text-sm text-muted-foreground">{order.customer_email}</p>
-                {order.customer_phone && <p className="text-sm text-muted-foreground">{order.customer_phone}</p>}
-                {cardsByOrder[order.id]?.length > 0 && (
-                  <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
-                )}
-              </div>
-              <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
-                <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
-                <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</span>
-              </div>
-            </Link>
-          ))}
-        </div>
+        {/* Past orders */}
+        {pastOrders.length > 0 && (
+          <div className="mt-10">
+            <h2 className="font-heading font-black text-xl text-foreground mb-4">
+              Past Orders
+              <span className="ml-2 text-sm font-normal text-muted-foreground">({pastOrders.length})</span>
+            </h2>
+            <div className="flex flex-col gap-3">
+              {pastOrders.map((order) => (
+                <Link
+                  key={order.id}
+                  href={`/admin/orders/${order.id}`}
+                  className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors opacity-70 hover:opacity-100"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className="font-heading font-black text-foreground">#{order.order_number}</span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                        {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
+                      </span>
+                    </div>
+                    <p className="font-medium text-foreground">{order.customer_name}</p>
+                    <p className="text-sm text-muted-foreground">{order.customer_email}</p>
+                    {cardsByOrder[order.id]?.length > 0 && (
+                      <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
+                    )}
+                  </div>
+                  <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
+                    <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
