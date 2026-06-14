@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import Stripe from "stripe";
+import { SOLD_OUT_MODE } from "@/lib/site-config";
 
 const BodySchema = z.object({
   items: z.array(z.object({ id: z.string(), quantity: z.number().int().positive(), slug: z.string() })).min(1),
@@ -20,6 +21,10 @@ const BodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  if (SOLD_OUT_MODE) {
+    return Response.json({ error: "The shop is currently sold out. Please check back soon." }, { status: 503 });
+  }
+
   const body = await request.json();
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {

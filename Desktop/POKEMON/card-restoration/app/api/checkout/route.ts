@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import Stripe from "stripe";
+import { SOLD_OUT_MODE } from "@/lib/site-config";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -47,6 +48,10 @@ const BodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  if (SOLD_OUT_MODE) {
+    return Response.json({ error: "Restoration services are currently unavailable. Please check back soon." }, { status: 503 });
+  }
+
   const body = await request.json();
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {
