@@ -1,9 +1,24 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrderBuilder } from "@/components/order-builder/builder";
-import { SOLD_OUT_MODE } from "@/lib/site-config";
+import { SOLD_OUT_MODE, TIER_SELECTION_ENABLED } from "@/lib/site-config";
+import type { RestorationTierId } from "@/lib/restoration-tiers";
 
-export default async function OrderPage() {
+interface PageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function OrderPage({ searchParams }: PageProps) {
+  // Get tier from query params
+  const params = await searchParams;
+  const tierParam = params.tier as string | undefined;
+
+  // If tier selection is enabled and no tier selected, redirect to tier selection page
+  if (TIER_SELECTION_ENABLED && !tierParam) {
+    redirect("/tier-selection");
+  }
+
   if (SOLD_OUT_MODE) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-24 text-center">
@@ -23,7 +38,7 @@ export default async function OrderPage() {
 
   return (
     <Suspense>
-      <OrderBuilder services={services ?? []} />
+      <OrderBuilder services={services ?? []} selectedTier={tierParam as RestorationTierId | undefined} />
     </Suspense>
   );
 }

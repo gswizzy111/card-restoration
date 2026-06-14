@@ -5,7 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
+import { getTierById, formatCents } from "@/lib/restoration-tiers";
 import type { Service, CardEntry, CustomerInfo, ShippingRate } from "@/lib/types";
+import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 interface StepReviewProps {
   services: Service[];
@@ -23,6 +25,7 @@ interface StepReviewProps {
   termsAccepted: boolean;
   onTermsChange: (v: boolean) => void;
   onEditStep: (step: number) => void;
+  selectedTier?: RestorationTierId;
 }
 
 export function StepReview({
@@ -40,6 +43,7 @@ export function StepReview({
   termsAccepted,
   onTermsChange,
   onEditStep,
+  selectedTier,
 }: StepReviewProps) {
   const [codeStatus, setCodeStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [codeName, setCodeName] = useState("");
@@ -62,7 +66,19 @@ export function StepReview({
 
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
 
-  const subtotal = getPriceCents(cards.length);
+  // Tier-based or volume-based pricing
+  let subtotal: number;
+  let pricePerCard: string;
+
+  if (selectedTier) {
+    const tier = getTierById(selectedTier);
+    subtotal = tier.price_cents * cards.length;
+    pricePerCard = formatCents(tier.price_cents);
+  } else {
+    subtotal = getPriceCents(cards.length);
+    pricePerCard = formatCurrency(getRatePerCard(cards.length));
+  }
+
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
   const total = subtotal - discountCents + shipping;
@@ -73,7 +89,7 @@ export function StepReview({
         <h2 className="font-serif text-2xl font-medium text-foreground mb-1">Review your order.</h2>
       </div>
 
-      {/* Cards & services */}
+      {/* Cards & Services/Tier */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h3 className="font-medium text-foreground">Cards & Services</h3>
@@ -85,23 +101,40 @@ export function StepReview({
             Edit
           </button>
         </div>
+        {selectedTier && (
+          <div className="border border-[#1a8fe0] bg-blue-50 rounded-lg p-4">
+            <p className="font-medium text-[#1a8fe0] text-sm mb-1">
+              {getTierById(selectedTier).name} Tier
+            </p>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>Turnaround: {getTierById(selectedTier).turnaround_min_days}–{getTierById(selectedTier).turnaround_max_days} business days</p>
+              <p>Max value: {getTierById(selectedTier).max_card_value_cents === null ? "Unlimited" : formatCurrency(getTierById(selectedTier).max_card_value_cents!)}</p>
+            </div>
+          </div>
+        )}
         {cards.map((card, i) => (
           <div key={card.id} className="border border-border rounded-lg p-4 flex flex-col gap-2">
             <p className="font-medium text-foreground text-sm">
               Card {i + 1}: {card.card_name}
             </p>
             <div className="flex flex-wrap gap-1">
-              {card.service_ids.map((sid) => {
-                const svc = serviceMap[sid];
-                return svc ? (
-                  <span
-                    key={sid}
-                    className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground"
-                  >
-                    {svc.name} — {formatCurrency(getRatePerCard(cards.length))}
-                  </span>
-                ) : null;
-              })}
+              {selectedTier ? (
+                <span className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground">
+                  {getTierById(selectedTier).name} Restoration — {pricePerCard}
+                </span>
+              ) : (
+                card.service_ids.map((sid) => {
+                  const svc = serviceMap[sid];
+                  return svc ? (
+                    <span
+                      key={sid}
+                      className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground"
+                    >
+                      {svc.name} — {pricePerCard}
+                    </span>
+                  ) : null;
+                })
+              )}
             </div>
           </div>
         ))}

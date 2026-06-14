@@ -10,6 +10,7 @@ import { StepCustomer } from "./step-customer";
 import { StepShipping } from "./step-shipping";
 import { StepReview } from "./step-review";
 import type { Service, CardEntry, CustomerInfo, ShippingRate } from "@/lib/types";
+import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 function defaultCard(serviceId: string): CardEntry {
   return {
@@ -46,7 +47,7 @@ function InAppBrowserBanner() {
 }
 
 // Steps: 1=Cards, 2=Customer, 3=Shipping, 4=Review
-export function OrderBuilder({ services }: { services: Service[] }) {
+export function OrderBuilder({ services, selectedTier }: { services: Service[]; selectedTier?: RestorationTierId }) {
   const service = services[0];
   const serviceId = service?.id ?? "";
 
@@ -85,7 +86,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          services: [{ id: serviceId, quantity: cards.length }],
+          ...(selectedTier ? { restoration_tier: selectedTier } : { services: [{ id: serviceId, quantity: cards.length }] }),
           cards: cards.map((c) => ({
             card_name: c.card_name,
             card_set: c.card_set || undefined,
@@ -188,6 +189,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
                 else if (s === 3) setStep(2); // customer
                 else if (s === 4) setStep(3); // shipping
               }}
+              selectedTier={selectedTier}
             />
           )}
 
@@ -219,6 +221,7 @@ export function OrderBuilder({ services }: { services: Service[] }) {
               selectedRate={selectedRate}
               discountPercent={discountPercent}
               isInternational={!!(customer.country && customer.country !== "US")}
+              selectedTier={selectedTier}
             />
           </div>
         </div>

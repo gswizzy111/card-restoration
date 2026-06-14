@@ -2,6 +2,8 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
+import { getTierById } from "@/lib/restoration-tiers";
+import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
 import { SOLD_OUT_MODE } from "@/lib/site-config";
 
@@ -15,7 +17,8 @@ const AddressSchema = z.object({
 });
 
 const BodySchema = z.object({
-  services: z.array(z.object({ id: z.string(), quantity: z.number().int().positive() })).min(1),
+  restoration_tier: z.enum(["regular", "expedited", "premium", "ultra_premium"]).optional(),
+  services: z.array(z.object({ id: z.string(), quantity: z.number().int().positive() })).optional(),
   cards: z.array(
     z.object({
       card_name: z.string().min(1),
@@ -62,20 +65,38 @@ export async function POST(request: Request) {
   const data = parsed.data;
   const admin = createAdminClient();
 
-  // Refetch service prices from DB (never trust client)
-  const serviceIds = data.services.map((s) => s.id);
-  const { data: dbServices, error: svcErr } = await admin
-    .from("services")
-    .select("id, name, price_cents, turnaround_days")
-    .in("id", serviceIds);
-  if (svcErr || !dbServices) {
-    console.error("Failed to load services:", svcErr);
-    return Response.json({ error: "Failed to load services. Please try again." }, { status: 500 });
+  // Calculate subtotal based on tier or services
+  let subtotalCents: number;
+  let serviceName: string;
+  let serviceId: string | null = null;
+  let restorationTier: RestorationTierId | null = null;
+
+  if (data.restoration_tier) {
+    restorationTier = data.restoration_tier;
+    const tier = getTierById(restorationTier);
+    subtotalCents = tier.price_cents * data.cards.length;
+    serviceName = `${tier.name} - Full Restoration & PSA Prep`;
+  } else {
+    // Refetch service prices from DB (never trust client)
+    if (!data.services || data.services.length === 0) {
+      return Response.json({ error: "Invalid order data. Please select a service." }, { status: 400 });
+    }
+
+    const serviceIds = data.services.map((s) => s.id);
+    const { data: dbServices, error: svcErr } = await admin
+      .from("services")
+      .select("id, name, price_cents, turnaround_days")
+      .in("id", serviceIds);
+    if (svcErr || !dbServices) {
+      console.error("Failed to load services:", svcErr);
+      return Response.json({ error: "Failed to load services. Please try again." }, { status: 500 });
+    }
+
+    const firstService = dbServices[0];
+    serviceId = firstService.id;
+    serviceName = firstService.name;
+    subtotalCents = getPriceCents(data.cards.length);
   }
-
-  const serviceMap = Object.fromEntries(dbServices.map((s) => [s.id, s]));
-
-  const subtotalCents = getPriceCents(data.cards.length);
 
   // Look up discount from DB using the affiliate code (never trust client-sent discount)
   let discountPercent = 0;
@@ -137,6 +158,7 @@ export async function POST(request: Request) {
       total_cents: totalCents,
       customer_notes: data.customer_notes ?? null,
       affiliate_code: data.affiliate_code ?? null,
+      restoration_tier: restorationTier ?? null,
       status: "awaiting_payment",
       payment_status: "pending",
     })
@@ -148,12 +170,10 @@ export async function POST(request: Request) {
   }
 
   // Insert order_services
-  const serviceId = data.services[0]?.id;
-  const svc = serviceId ? serviceMap[serviceId] : null;
   await admin.from("order_services").insert([{
     order_id: order.id,
     service_id: serviceId ?? "",
-    service_name: svc?.name ?? "Full Restoration & PSA Prep",
+    service_name: serviceName,
     price_cents: subtotalCents,
     quantity: data.cards.length,
   }]);
