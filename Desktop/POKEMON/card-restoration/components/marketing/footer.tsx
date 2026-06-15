@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 
 export function Footer() {
@@ -41,9 +42,14 @@ export function Footer() {
 
         <Separator className="my-8 bg-white/10" />
 
-        <p className="text-xs text-white/40 text-center">
-          All cards are insured during transit. Results may vary by card condition.
-        </p>
+        <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+          <p className="text-xs text-white/40">
+            All cards are insured during transit. Results may vary by card condition.
+          </p>
+          <Link href="/terms" className="text-xs text-white/60 hover:text-white transition-colors">
+            Terms & Conditions
+          </Link>
+        </div>
       </div>
     </footer>
   );
