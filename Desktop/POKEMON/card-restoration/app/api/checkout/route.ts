@@ -200,15 +200,26 @@ export async function POST(request: Request) {
     is_customer_visible: false,
   });
 
-  // Build Stripe line items — flat block pricing: all cards at the same rate based on total count
+  // Build Stripe line items — use tier pricing if selected, otherwise flat block pricing
   const cardCount = data.cards.length;
-  const ratePerCard = getRatePerCard(cardCount);
+  let pricePerCardCents: number;
+  let productName: string;
+
+  if (restorationTier) {
+    const tier = getTierById(restorationTier);
+    pricePerCardCents = tier.price_cents;
+    productName = `${tier.name} - Full Restoration & PSA Prep`;
+  } else {
+    pricePerCardCents = getRatePerCard(cardCount);
+    productName = "Full Restoration & PSA Prep";
+  }
+
   const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [
     {
       price_data: {
         currency: "usd",
-        product_data: { name: "Full Restoration & PSA Prep" },
-        unit_amount: ratePerCard,
+        product_data: { name: productName },
+        unit_amount: pricePerCardCents,
       },
       quantity: cardCount,
     },
