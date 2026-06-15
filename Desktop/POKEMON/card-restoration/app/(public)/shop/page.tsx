@@ -136,8 +136,7 @@ export default async function ShopPage() {
       {/* Testimonials */}
       <div className="mt-20">
         <div className="mb-8 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary mb-3">What Our Customers Say</p>
-          <h2 className="font-heading text-3xl md:text-4xl text-foreground">What our customers have to say</h2>
+          <p className="text-2xl md:text-3xl font-bold uppercase tracking-[0.3em] text-primary mb-3">What Our Customers Say</p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
           {TESTIMONIALS.map((t) => (
