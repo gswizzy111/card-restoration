@@ -8,6 +8,7 @@ import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import { getTierById, formatCents } from "@/lib/restoration-tiers";
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
+import { INSURANCE_ENABLED } from "@/lib/site-config";
 
 interface StepReviewProps {
   services: Service[];
@@ -134,7 +135,7 @@ export function StepReview({
 
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const total = subtotal - discountCents + shipping + insurance.chargeCents;
+  const total = subtotal - discountCents + shipping + (INSURANCE_ENABLED ? insurance.chargeCents : 0);
 
   return (
     <div className="flex flex-col gap-8">
@@ -215,7 +216,7 @@ export function StepReview({
       </div>
 
       {/* Insurance */}
-      <div className="flex flex-col gap-3">
+      {INSURANCE_ENABLED && <div className="flex flex-col gap-3">
         <h3 className="font-medium text-foreground">Package Insurance <span className="text-xs font-normal text-muted-foreground">(optional)</span></h3>
         <p className="text-xs text-muted-foreground">Insure your cards against loss or damage in transit via Shippo / ShipSurance. Up to $10,000.</p>
 
@@ -268,7 +269,7 @@ export function StepReview({
         {!insuranceQuote && insurance.declaredValueCents === 0 && (
           <p className="text-xs text-muted-foreground italic">Enter a declared value above to see insurance pricing.</p>
         )}
-      </div>
+      </div>}
 
       {/* Customer info */}
       <div className="flex flex-col gap-2">
@@ -312,7 +313,7 @@ export function StepReview({
           <span>Shipping</span>
           <span>{shippingMethod === "self_ship" ? "Self-ship" : formatCurrency(shipping)}</span>
         </div>
-        {insurance.chargeCents > 0 && (
+        {INSURANCE_ENABLED && insurance.chargeCents > 0 && (
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>Insurance ({insurance.type === "round_trip" ? "round trip" : "inbound"})</span>
             <span>{formatCurrency(insurance.chargeCents)}</span>

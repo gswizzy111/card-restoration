@@ -5,7 +5,7 @@ import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import { getTierById } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
-import { isSoldOut } from "@/lib/site-config";
+import { isSoldOut, INSURANCE_ENABLED } from "@/lib/site-config";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
   const SHIPPO_MIN_CENTS = 250;
   const MARKUP = 1.1;
   let insuranceChargeCents = 0;
-  if (data.insurance_declared_value_cents && data.insurance_type) {
+  if (INSURANCE_ENABLED && data.insurance_declared_value_cents && data.insurance_type) {
     const shippoCost = Math.max(Math.round(data.insurance_declared_value_cents * SHIPPO_RATE), SHIPPO_MIN_CENTS);
     const perDirection = Math.round(shippoCost * MARKUP);
     insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;

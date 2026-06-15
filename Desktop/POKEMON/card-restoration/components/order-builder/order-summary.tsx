@@ -2,6 +2,7 @@ import { formatCurrency } from "@/lib/utils";
 import { getPriceCents } from "@/lib/pricing";
 import { getTierById, formatCents } from "@/lib/restoration-tiers";
 import type { CardEntry, ShippingRate, InsuranceSelection } from "@/lib/types";
+import { INSURANCE_ENABLED } from "@/lib/site-config";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 interface OrderSummaryProps {
@@ -30,7 +31,7 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
 
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const insuranceCents = insurance?.chargeCents ?? 0;
+  const insuranceCents = INSURANCE_ENABLED ? (insurance?.chargeCents ?? 0) : 0;
   const total = subtotal - discountCents + shipping + insuranceCents;
 
   // Get turnaround description
