@@ -125,7 +125,6 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           discount_percent: discountPercent > 0 ? discountPercent : undefined,
           insurance_declared_value_cents: insurance.declaredValueCents > 0 ? insurance.declaredValueCents : undefined,
           insurance_type: insurance.type !== "none" ? insurance.type : undefined,
-          insurance_charge_cents: insurance.chargeCents > 0 ? insurance.chargeCents : undefined,
         }),
       });
 

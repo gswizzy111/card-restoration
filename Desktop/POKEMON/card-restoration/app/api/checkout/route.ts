@@ -50,7 +50,6 @@ const BodySchema = z.object({
   affiliate_code: z.string().optional(),
   insurance_declared_value_cents: z.number().int().min(100).max(1_000_000).optional(),
   insurance_type: z.enum(["inbound", "round_trip"]).optional(),
-  insurance_charge_cents: z.number().int().nonnegative().optional(),
 });
 
 export async function POST(request: Request) {
@@ -120,7 +119,18 @@ export async function POST(request: Request) {
   const shippingCents = data.shipping_rate
     ? (data.shipping_method === "buy_label" || isInternational ? data.shipping_rate.amount_cents : 0)
     : 0;
-  const insuranceChargeCents = data.insurance_charge_cents ?? 0;
+
+  // Compute insurance server-side — never trust client price
+  const SHIPPO_RATE = 0.015;
+  const SHIPPO_MIN_CENTS = 250;
+  const MARKUP = 1.1;
+  let insuranceChargeCents = 0;
+  if (data.insurance_declared_value_cents && data.insurance_type) {
+    const shippoCost = Math.max(Math.round(data.insurance_declared_value_cents * SHIPPO_RATE), SHIPPO_MIN_CENTS);
+    const perDirection = Math.round(shippoCost * MARKUP);
+    insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;
+  }
+
   const totalCents = subtotalCents - discountCents + shippingCents + insuranceChargeCents;
 
   const shipFromAddress = {
