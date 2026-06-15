@@ -37,22 +37,34 @@ export default async function AdminPage({
 
   const admin = createAdminClient();
 
-  // ── Card search mode ──────────────────────────────────────────────────────
+  // ── Card/name search mode ─────────────────────────────────────────────────
   if (query) {
-    const { data: matchingCards } = await admin
-      .from("cards")
-      .select("order_id, card_name")
-      .ilike("card_name", `%${query}%`);
+    const [{ data: matchingCards }, { data: nameMatches }] = await Promise.all([
+      admin.from("cards").select("order_id, card_name").ilike("card_name", `%${query}%`),
+      admin
+        .from("orders")
+        .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, restoration_tier")
+        .or(`customer_name.ilike.%${query}%,customer_email.ilike.%${query}%`)
+        .order("created_at", { ascending: false }),
+    ]);
 
-    const orderIds = [...new Set((matchingCards ?? []).map((c) => c.order_id))];
+    const cardOrderIds = [...new Set((matchingCards ?? []).map((c) => c.order_id))];
 
-    const { data: matchedOrders } = orderIds.length > 0
+    const { data: cardOrders } = cardOrderIds.length > 0
       ? await admin
           .from("orders")
           .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, restoration_tier")
-          .in("id", orderIds)
+          .in("id", cardOrderIds)
           .order("created_at", { ascending: false })
       : { data: [] };
+
+    // Merge and deduplicate
+    const seen = new Set<string>();
+    const matchedOrders: typeof nameMatches = [];
+    for (const o of [...(nameMatches ?? []), ...(cardOrders ?? [])]) {
+      if (!seen.has(o.id)) { seen.add(o.id); matchedOrders.push(o); }
+    }
+    matchedOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     // Map order_id → matching card names for display
     const hitsByOrder: Record<string, string[]> = {};
@@ -68,7 +80,7 @@ export default async function AdminPage({
             <div className="flex-1">
               <h1 className="font-heading font-black text-3xl text-foreground">Orders</h1>
               <p className="text-muted-foreground text-sm mt-1">
-                {matchedOrders?.length ?? 0} order{matchedOrders?.length !== 1 ? "s" : ""} containing &ldquo;{query}&rdquo;
+                {matchedOrders?.length ?? 0} order{matchedOrders?.length !== 1 ? "s" : ""} matching &ldquo;{query}&rdquo;
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -86,7 +98,7 @@ export default async function AdminPage({
 
           {(!matchedOrders || matchedOrders.length === 0) ? (
             <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
-              No orders found with a card matching &ldquo;{query}&rdquo;.
+              No orders found matching &ldquo;{query}&rdquo;.
             </div>
           ) : (
             <div className="flex flex-col gap-3">
