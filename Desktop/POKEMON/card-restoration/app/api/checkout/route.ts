@@ -171,9 +171,6 @@ export async function POST(request: Request) {
       customer_notes: data.customer_notes ?? null,
       affiliate_code: data.affiliate_code ?? null,
       restoration_tier: restorationTier ?? null,
-      insurance_declared_value_cents: data.insurance_declared_value_cents ?? 0,
-      insurance_type: data.insurance_type ?? "none",
-      insurance_charge_cents: insuranceChargeCents,
       status: "awaiting_payment",
       payment_status: "pending",
     })
