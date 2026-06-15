@@ -41,3 +41,11 @@ export interface ShippingRate {
   days: number | null;
   duration_terms: string;
 }
+
+export type InsuranceType = "none" | "inbound" | "round_trip";
+
+export interface InsuranceSelection {
+  declaredValueCents: number;
+  type: InsuranceType;
+  chargeCents: number;
+}

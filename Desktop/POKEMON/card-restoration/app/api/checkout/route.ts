@@ -48,6 +48,9 @@ const BodySchema = z.object({
     .optional(),
   customer_notes: z.string().optional(),
   affiliate_code: z.string().optional(),
+  insurance_declared_value_cents: z.number().int().min(100).max(1_000_000).optional(),
+  insurance_type: z.enum(["inbound", "round_trip"]).optional(),
+  insurance_charge_cents: z.number().int().nonnegative().optional(),
 });
 
 export async function POST(request: Request) {
@@ -114,12 +117,11 @@ export async function POST(request: Request) {
   }
 
   const isInternational = data.customer.address.country !== "US";
-  // buy_label charges inbound rate (doubled in UI for round-trip)
-  // international self_ship charges the return shipping rate chosen by customer
   const shippingCents = data.shipping_rate
     ? (data.shipping_method === "buy_label" || isInternational ? data.shipping_rate.amount_cents : 0)
     : 0;
-  const totalCents = subtotalCents - discountCents + shippingCents;
+  const insuranceChargeCents = data.insurance_charge_cents ?? 0;
+  const totalCents = subtotalCents - discountCents + shippingCents + insuranceChargeCents;
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -159,6 +161,9 @@ export async function POST(request: Request) {
       customer_notes: data.customer_notes ?? null,
       affiliate_code: data.affiliate_code ?? null,
       restoration_tier: restorationTier ?? null,
+      insurance_declared_value_cents: data.insurance_declared_value_cents ?? 0,
+      insurance_type: data.insurance_type ?? "none",
+      insurance_charge_cents: insuranceChargeCents,
       status: "awaiting_payment",
       payment_status: "pending",
     })
@@ -234,6 +239,15 @@ export async function POST(request: Request) {
         product_data: { name: shippingLabel },
         unit_amount: shippingCents,
       },
+      quantity: 1,
+    });
+  }
+  if (insuranceChargeCents > 0 && data.insurance_type) {
+    const insLabel = data.insurance_type === "round_trip"
+      ? "Package Insurance — Round Trip (both directions)"
+      : "Package Insurance — Inbound (you → The Card Doc)";
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: insLabel }, unit_amount: insuranceChargeCents },
       quantity: 1,
     });
   }

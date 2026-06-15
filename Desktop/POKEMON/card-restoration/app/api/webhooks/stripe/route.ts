@@ -206,12 +206,26 @@ export async function POST(request: Request) {
     const rateObjectId = session.metadata?.shipping_rate_object_id;
     const isInternational = session.metadata?.is_international === "true";
     if (rateObjectId && !isInternational) {
+      // Fetch order to check insurance
+      const { data: orderForInsurance } = await admin.from("orders").select("insurance_declared_value_cents,insurance_type").eq("id", orderId).single();
+      const hasInboundInsurance = orderForInsurance && orderForInsurance.insurance_type !== "none" && (orderForInsurance.insurance_declared_value_cents ?? 0) > 0;
       try {
-        const transaction = await shippo.transactions.create({
+        const txPayload: Parameters<typeof shippo.transactions.create>[0] = {
           rate: rateObjectId,
           labelFileType: "PDF",
           async: false,
-        });
+          ...(hasInboundInsurance ? {
+            extra: {
+              insurance: {
+                amount: String((orderForInsurance.insurance_declared_value_cents / 100).toFixed(2)),
+                currency: "USD",
+                provider: "SHIPPO",
+                content: "Trading cards",
+              },
+            },
+          } : {}),
+        };
+        const transaction = await shippo.transactions.create(txPayload);
         if (transaction.status === "SUCCESS" && transaction.labelUrl) {
           shippingLabelUrl = transaction.labelUrl;
           inboundTrackingNumber = transaction.trackingNumber ?? null;

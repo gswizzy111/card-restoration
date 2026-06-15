@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import { getTierById, formatCents } from "@/lib/restoration-tiers";
-import type { Service, CardEntry, CustomerInfo, ShippingRate } from "@/lib/types";
+import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 interface StepReviewProps {
@@ -26,6 +26,8 @@ interface StepReviewProps {
   onTermsChange: (v: boolean) => void;
   onEditStep: (step: number) => void;
   selectedTier?: RestorationTierId;
+  insurance: InsuranceSelection;
+  onInsuranceChange: (ins: InsuranceSelection) => void;
 }
 
 export function StepReview({
@@ -44,9 +46,60 @@ export function StepReview({
   onTermsChange,
   onEditStep,
   selectedTier,
+  insurance,
+  onInsuranceChange,
 }: StepReviewProps) {
   const [codeStatus, setCodeStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [codeName, setCodeName] = useState("");
+  const [insuranceQuote, setInsuranceQuote] = useState<{ customerChargeCents: number; roundTripChargeCents: number } | null>(null);
+  const [quotingInsurance, setQuotingInsurance] = useState(false);
+  const [insuranceDollars, setInsuranceDollars] = useState(
+    insurance.declaredValueCents > 0 ? String(insurance.declaredValueCents / 100) : ""
+  );
+
+  async function fetchInsuranceQuote(declaredValueCents: number) {
+    if (declaredValueCents < 100) { setInsuranceQuote(null); return; }
+    setQuotingInsurance(true);
+    try {
+      const res = await fetch(`/api/insurance/quote?declared_value_cents=${declaredValueCents}`);
+      const data = await res.json();
+      if (res.ok) {
+        setInsuranceQuote({ customerChargeCents: data.customerChargeCents, roundTripChargeCents: data.roundTripChargeCents });
+        if (insurance.type !== "none") {
+          const charge = insurance.type === "round_trip" ? data.roundTripChargeCents : data.customerChargeCents;
+          onInsuranceChange({ ...insurance, declaredValueCents, chargeCents: charge });
+        } else {
+          onInsuranceChange({ ...insurance, declaredValueCents });
+        }
+      }
+    } finally {
+      setQuotingInsurance(false);
+    }
+  }
+
+  function handleDeclaredValueBlur() {
+    const dollars = parseFloat(insuranceDollars.replace(/[^0-9.]/g, ""));
+    if (isNaN(dollars) || dollars < 1) {
+      setInsuranceDollars("");
+      onInsuranceChange({ declaredValueCents: 0, type: "none", chargeCents: 0 });
+      setInsuranceQuote(null);
+      return;
+    }
+    const clamped = Math.min(Math.floor(dollars), 10000);
+    setInsuranceDollars(String(clamped));
+    fetchInsuranceQuote(clamped * 100);
+  }
+
+  function handleInsuranceTypeChange(type: "none" | "inbound" | "round_trip") {
+    if (type === "none") {
+      onInsuranceChange({ declaredValueCents: insurance.declaredValueCents, type: "none", chargeCents: 0 });
+    } else if (insuranceQuote) {
+      const charge = type === "round_trip" ? insuranceQuote.roundTripChargeCents : insuranceQuote.customerChargeCents;
+      onInsuranceChange({ ...insurance, type, chargeCents: charge });
+    } else {
+      onInsuranceChange({ ...insurance, type, chargeCents: 0 });
+    }
+  }
 
   async function validateCode() {
     const trimmed = affiliateCode.trim().toUpperCase();
@@ -81,7 +134,7 @@ export function StepReview({
 
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const total = subtotal - discountCents + shipping;
+  const total = subtotal - discountCents + shipping + insurance.chargeCents;
 
   return (
     <div className="flex flex-col gap-8">
@@ -161,6 +214,62 @@ export function StepReview({
         </p>
       </div>
 
+      {/* Insurance */}
+      <div className="flex flex-col gap-3">
+        <h3 className="font-medium text-foreground">Package Insurance <span className="text-xs font-normal text-muted-foreground">(optional)</span></h3>
+        <p className="text-xs text-muted-foreground">Insure your cards against loss or damage in transit via Shippo / ShipSurance. Up to $10,000.</p>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Declared Value</label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">$</span>
+            <input
+              type="number"
+              min={1}
+              max={10000}
+              step={1}
+              value={insuranceDollars}
+              onChange={(e) => setInsuranceDollars(e.target.value)}
+              onBlur={handleDeclaredValueBlur}
+              placeholder="e.g. 500"
+              className="w-36 h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:border-primary transition-colors"
+            />
+            {quotingInsurance && <span className="text-xs text-muted-foreground">Getting rate...</span>}
+          </div>
+          <p className="text-xs text-muted-foreground">Enter the value of cards you&apos;re sending ($1–$10,000)</p>
+        </div>
+
+        {insuranceQuote && insurance.declaredValueCents > 0 && (
+          <div className="flex flex-col gap-2">
+            {(["none", "inbound", "round_trip"] as const).map((type) => {
+              const label = type === "none" ? "No insurance" : type === "inbound" ? "Inbound only" : "Round trip";
+              const sublabel = type === "none" ? "" : type === "inbound" ? "You → The Card Doc" : "Both ways (you → us → back to you)";
+              const price = type === "none" ? null : type === "inbound" ? insuranceQuote.customerChargeCents : insuranceQuote.roundTripChargeCents;
+              return (
+                <label key={type} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${insurance.type === type ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
+                  <input
+                    type="radio"
+                    name="insurance-type"
+                    checked={insurance.type === type}
+                    onChange={() => handleInsuranceTypeChange(type)}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-foreground">{label}</span>
+                    {price !== null && <span className="text-sm font-semibold text-primary ml-2">{formatCurrency(price)}</span>}
+                    {sublabel && <p className="text-xs text-muted-foreground mt-0.5">{sublabel}</p>}
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        {!insuranceQuote && insurance.declaredValueCents === 0 && (
+          <p className="text-xs text-muted-foreground italic">Enter a declared value above to see insurance pricing.</p>
+        )}
+      </div>
+
       {/* Customer info */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -203,6 +312,12 @@ export function StepReview({
           <span>Shipping</span>
           <span>{shippingMethod === "self_ship" ? "Self-ship" : formatCurrency(shipping)}</span>
         </div>
+        {insurance.chargeCents > 0 && (
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>Insurance ({insurance.type === "round_trip" ? "round trip" : "inbound"})</span>
+            <span>{formatCurrency(insurance.chargeCents)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-medium text-foreground pt-2 border-t border-border">
           <span>Total</span>
           <span>{formatCurrency(total)}</span>

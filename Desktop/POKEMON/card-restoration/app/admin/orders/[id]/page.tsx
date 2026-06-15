@@ -231,7 +231,12 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               )}
 
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Return to Customer</p>
-              <ReturnLabelButton orderId={order.id} existingLabelUrl={order.return_label_url} />
+              <ReturnLabelButton
+                orderId={order.id}
+                existingLabelUrl={order.return_label_url}
+                insuranceType={order.insurance_type}
+                insuranceDeclaredValueCents={order.insurance_declared_value_cents}
+              />
             </div>
 
             {/* Notes */}

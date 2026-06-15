@@ -85,11 +85,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { rateObjectId } = await req.json();
   if (!rateObjectId) return Response.json({ error: "Missing rateObjectId" }, { status: 400 });
 
-  const transaction = await shippo.transactions.create({
+  const hasRoundTripInsurance = order.insurance_type === "round_trip" && (order.insurance_declared_value_cents ?? 0) > 0;
+  const txPayload: Parameters<typeof shippo.transactions.create>[0] = {
     rate: rateObjectId,
     labelFileType: "PDF",
     async: false,
-  });
+    ...(hasRoundTripInsurance ? {
+      extra: {
+        insurance: {
+          amount: String((order.insurance_declared_value_cents / 100).toFixed(2)),
+          currency: "USD",
+          provider: "SHIPPO",
+          content: "Trading cards",
+        },
+      },
+    } : {}),
+  };
+  const transaction = await shippo.transactions.create(txPayload);
 
   if (transaction.status !== "SUCCESS" || !transaction.labelUrl) {
     return Response.json({ error: "Label purchase failed" }, { status: 500 });

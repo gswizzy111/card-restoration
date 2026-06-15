@@ -9,7 +9,7 @@ import { StepCards } from "./step-cards";
 import { StepCustomer } from "./step-customer";
 import { StepShipping } from "./step-shipping";
 import { StepReview } from "./step-review";
-import type { Service, CardEntry, CustomerInfo, ShippingRate } from "@/lib/types";
+import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 function defaultCard(serviceId: string): CardEntry {
@@ -61,6 +61,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [discountPercent, setDiscountPercent] = useState(0);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [insurance, setInsurance] = useState<InsuranceSelection>({ declaredValueCents: 0, type: "none", chargeCents: 0 });
 
   function canAdvance(): boolean {
     if (step === 1) return cards.every((c) => c.card_name.trim().length > 0);
@@ -122,6 +123,9 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           customer_notes: customerNotes || undefined,
           affiliate_code: affiliateCode.trim().toUpperCase() || undefined,
           discount_percent: discountPercent > 0 ? discountPercent : undefined,
+          insurance_declared_value_cents: insurance.declaredValueCents > 0 ? insurance.declaredValueCents : undefined,
+          insurance_type: insurance.type !== "none" ? insurance.type : undefined,
+          insurance_charge_cents: insurance.chargeCents > 0 ? insurance.chargeCents : undefined,
         }),
       });
 
@@ -183,6 +187,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               onDiscountChange={setDiscountPercent}
               termsAccepted={termsAccepted}
               onTermsChange={setTermsAccepted}
+              insurance={insurance}
+              onInsuranceChange={setInsurance}
               onEditStep={(s) => {
                 // remap review edit targets to new step numbers
                 if (s === 2) setStep(1); // cards
@@ -222,6 +228,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               discountPercent={discountPercent}
               isInternational={!!(customer.country && customer.country !== "US")}
               selectedTier={selectedTier}
+              insurance={insurance}
             />
           </div>
         </div>

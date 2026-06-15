@@ -1,7 +1,7 @@
 import { formatCurrency } from "@/lib/utils";
 import { getPriceCents } from "@/lib/pricing";
 import { getTierById, formatCents } from "@/lib/restoration-tiers";
-import type { CardEntry, ShippingRate } from "@/lib/types";
+import type { CardEntry, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 interface OrderSummaryProps {
@@ -11,9 +11,10 @@ interface OrderSummaryProps {
   discountPercent?: number;
   isInternational?: boolean;
   selectedTier?: RestorationTierId;
+  insurance?: InsuranceSelection;
 }
 
-export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0, isInternational = false, selectedTier }: OrderSummaryProps) {
+export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0, isInternational = false, selectedTier, insurance }: OrderSummaryProps) {
   // Use tier-based pricing if selected, otherwise volume-based
   let subtotal: number;
   let priceDescription: string;
@@ -29,7 +30,8 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
 
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const total = subtotal - discountCents + shipping;
+  const insuranceCents = insurance?.chargeCents ?? 0;
+  const total = subtotal - discountCents + shipping + insuranceCents;
 
   // Get turnaround description
   let turnaroundText = "Est. turnaround: 5–8 days from receipt";
@@ -69,6 +71,12 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
               : shippingMethod === "self_ship" ? "Self-ship" : selectedRate ? formatCurrency(selectedRate.amount_cents) : "—"}
           </span>
         </div>
+        {insuranceCents > 0 && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>Insurance</span>
+            <span>{formatCurrency(insuranceCents)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold text-foreground pt-1 border-t border-border text-base">
           <span>Total</span>
           <span className="text-primary">{formatCurrency(total)}</span>
