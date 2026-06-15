@@ -10,8 +10,9 @@ export const INSURANCE_ENABLED = false;
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── TIER SELECTION ────────────────────────────────────────────────────────────
-// Set to true to enable the new restoration tier selection page.
-// When false, uses existing volume-based pricing. Set to true to preview,
-// false to deploy to production with old pricing until fully ready.
 export const TIER_SELECTION_ENABLED = true;
+
+// Tiers listed here are shown as sold out on the tier selection page.
+// Add/remove tier IDs to control availability without a full deploy.
+export const SOLD_OUT_TIERS: string[] = ["regular"];
 // ─────────────────────────────────────────────────────────────────────────────

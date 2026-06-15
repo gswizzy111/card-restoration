@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { getAllTiers, formatCents, formatMaxValue } from "@/lib/restoration-tiers";
+import { SOLD_OUT_TIERS } from "@/lib/site-config";
 import { CheckCircle, Zap, Crown, Star } from "lucide-react";
 
 const iconMap = {
@@ -32,28 +33,38 @@ export default function TierSelectionPage() {
           {tiers.map((tier) => {
             const IconComponent = iconMap[tier.id as keyof typeof iconMap];
             const isUltraPremium = tier.id === "ultra_premium";
+            const isSoldOut = SOLD_OUT_TIERS.includes(tier.id);
 
             return (
               <div
                 key={tier.id}
-                className={`relative rounded-lg overflow-hidden transition-all duration-200 hover:shadow-lg ${
-                  isUltraPremium
-                    ? "border-2 border-[#1a8fe0] bg-gradient-to-br from-blue-50 to-blue-100/50 md:col-span-2 lg:col-span-1"
-                    : "border border-blue-200 bg-white"
+                className={`relative rounded-lg overflow-hidden transition-all duration-200 ${
+                  isSoldOut
+                    ? "border border-gray-200 bg-gray-50 opacity-60"
+                    : isUltraPremium
+                    ? "border-2 border-[#1a8fe0] bg-gradient-to-br from-blue-50 to-blue-100/50 md:col-span-2 lg:col-span-1 hover:shadow-lg"
+                    : "border border-blue-200 bg-white hover:shadow-lg"
                 }`}
               >
+                {/* Sold Out Banner */}
+                {isSoldOut && (
+                  <div className="absolute top-0 left-0 right-0 bg-gray-500 text-white text-xs font-bold text-center py-1 z-10">
+                    SOLD OUT
+                  </div>
+                )}
+
                 {/* Badge */}
-                {tier.badge && (
+                {tier.badge && !isSoldOut && (
                   <div className="absolute top-0 right-0 bg-[#1a8fe0] text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
                     {tier.badge}
                   </div>
                 )}
 
                 {/* Card Content */}
-                <div className="p-6 md:p-8 flex flex-col h-full">
+                <div className={`p-6 md:p-8 flex flex-col h-full ${isSoldOut ? "pt-8" : ""}`}>
                   {/* Icon & Title */}
                   <div className="flex items-start gap-3 mb-4">
-                    <IconComponent className="w-6 h-6 text-[#1a8fe0] flex-shrink-0 mt-1" />
+                    <IconComponent className={`w-6 h-6 flex-shrink-0 mt-1 ${isSoldOut ? "text-gray-400" : "text-[#1a8fe0]"}`} />
                     <div>
                       <h3 className="font-heading text-xl md:text-2xl font-bold text-foreground">
                         {tier.name}
@@ -64,19 +75,25 @@ export default function TierSelectionPage() {
 
                   {/* Pricing */}
                   <div className="mb-6">
-                    <div className="text-3xl md:text-4xl font-bold text-[#1a8fe0] mb-1">
+                    <div className={`text-3xl md:text-4xl font-bold mb-1 ${isSoldOut ? "text-gray-400" : "text-[#1a8fe0]"}`}>
                       {formatCents(tier.price_cents)}
                     </div>
                     <p className="text-sm text-muted-foreground">per card</p>
                   </div>
 
-                  {/* Select Button - Higher up for visibility */}
+                  {/* Select Button */}
+                  {isSoldOut ? (
+                    <div className="w-full py-3 px-4 rounded-3xl font-semibold text-center bg-gray-200 text-gray-500 cursor-not-allowed mb-6">
+                      Sold Out
+                    </div>
+                  ) : (
                   <Link
                     href={`/restoration?tier=${tier.id}`}
                     className="w-full py-3 px-4 rounded-3xl font-semibold text-center transition-colors duration-150 bg-[#1a8fe0] text-white hover:bg-[#1570c9] mb-6"
                   >
                     Select {tier.name}
                   </Link>
+                  )}
 
                   {/* Features */}
                   <div className="space-y-3 flex-grow">
