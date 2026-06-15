@@ -24,7 +24,7 @@ export function Nav() {
 
   return (
     <header
-      className={`sticky top-0 z-50 bg-[#1a8fe0] transition-shadow duration-200 ${
+      className={`relative bg-[#1a8fe0] transition-shadow duration-200 ${
         scrolled ? "shadow-md" : ""
       }`}
     >

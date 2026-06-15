@@ -6,8 +6,10 @@ import { CartProvider } from "@/lib/cart-context";
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
     <CartProvider>
-      <Nav />
-      <CountdownTicker />
+      <div className="sticky top-0 z-50">
+        <Nav />
+        <CountdownTicker />
+      </div>
       <main className="flex-1">{children}</main>
       <Footer />
     </CartProvider>
