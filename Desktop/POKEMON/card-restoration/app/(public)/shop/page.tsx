@@ -37,7 +37,9 @@ const TESTIMONIALS = [
   { src: "/testimonial-4.jpeg", alt: "Customer review 4" },
   { src: "/testimonial-5.png",  alt: "Customer review 5" },
   { src: "/testimonial-6.png",  alt: "Customer review 6" },
-  { src: "/before-after-mickey-mantle.png", alt: "1952 Topps Mickey Mantle — Before & After" },
+  { src: "/testimonial-11.png", alt: "Customer review 11" },
+  { src: "/testimonial-12.png", alt: "Customer review 12" },
+  { src: "/testimonial-13.png", alt: "Customer review 13" },
 ];
 
 export default async function ShopPage() {
@@ -135,7 +137,7 @@ export default async function ShopPage() {
       <div className="mt-20">
         <div className="mb-8 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary mb-3">What Our Customers Say</p>
-          <h2 className="font-heading text-3xl md:text-4xl text-foreground">Reviews &amp; Before and Afters</h2>
+          <h2 className="font-heading text-3xl md:text-4xl text-foreground">What our customers have to say</h2>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
           {TESTIMONIALS.map((t) => (
