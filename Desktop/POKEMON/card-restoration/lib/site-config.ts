@@ -1,8 +1,6 @@
 // ─── SOLD OUT MODE ────────────────────────────────────────────────────────────
-// Store opens at 11:59 PM EDT on June 14, 2026 (03:59 UTC June 15).
-const STORE_OPEN_TIME = new Date("2026-06-15T03:59:00.000Z");
 export function isSoldOut(): boolean {
-  return Date.now() < STORE_OPEN_TIME.getTime();
+  return false;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 

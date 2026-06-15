@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 
-const OPEN_TIME = new Date("2026-06-15T03:59:00.000Z"); // 11:59 PM EDT June 14, 2026
+const OPEN_TIME = new Date("2026-06-14T00:00:00.000Z"); // store is open
 
 function getTimeLeft(): string | null {
   const diff = OPEN_TIME.getTime() - Date.now();
