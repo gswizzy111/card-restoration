@@ -2,7 +2,7 @@ import { Suspense, ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrderBuilder } from "@/components/order-builder/builder";
-import { SOLD_OUT_MODE, TIER_SELECTION_ENABLED } from "@/lib/site-config";
+import { isSoldOut, TIER_SELECTION_ENABLED } from "@/lib/site-config";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 interface PageProps {
@@ -19,7 +19,7 @@ export default async function RestorationPage({ searchParams }: PageProps) {
     redirect("/tier-selection");
   }
 
-  if (SOLD_OUT_MODE) {
+  if (isSoldOut()) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-24 text-center">
         <p className="text-xs font-bold uppercase tracking-widest text-primary mb-4">Restoration Services</p>

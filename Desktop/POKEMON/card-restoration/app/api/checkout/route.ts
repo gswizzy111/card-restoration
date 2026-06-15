@@ -5,7 +5,7 @@ import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import { getTierById } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
-import { SOLD_OUT_MODE } from "@/lib/site-config";
+import { isSoldOut } from "@/lib/site-config";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -51,7 +51,7 @@ const BodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  if (SOLD_OUT_MODE) {
+  if (isSoldOut()) {
     return Response.json({ error: "Restoration services are currently unavailable. Please check back soon." }, { status: 503 });
   }
 

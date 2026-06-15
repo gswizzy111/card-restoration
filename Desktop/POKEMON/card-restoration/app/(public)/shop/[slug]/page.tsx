@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AddToCartButtonLarge } from "./add-to-cart-button-large";
 import { RefreshCw } from "lucide-react";
-import { SOLD_OUT_MODE } from "@/lib/site-config";
+import { isSoldOut } from "@/lib/site-config";
 
 export const dynamic = "force-dynamic";
 
@@ -115,7 +115,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           )}
 
           <div className="border-t border-border pt-6 flex flex-col gap-4">
-            {SOLD_OUT_MODE ? (
+            {isSoldOut() ? (
               <div className="flex items-center justify-center h-13 rounded-xl bg-secondary border border-border">
                 <span className="font-bold text-muted-foreground tracking-widest uppercase text-sm">Sold Out — Back Soon</span>
               </div>
@@ -133,7 +133,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               />
             )}
 
-            {!SOLD_OUT_MODE && product.name.toLowerCase().includes("kit") && (
+            {!isSoldOut() && product.name.toLowerCase().includes("kit") && (
               <Link
                 href="/subscribe"
                 className="w-full flex items-center justify-center gap-2 h-13 font-semibold text-sm tracking-wide border-2 border-primary text-primary hover:bg-primary/5 active:scale-[0.98] transition-all duration-150 rounded-xl"
