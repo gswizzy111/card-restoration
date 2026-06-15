@@ -170,7 +170,6 @@ export async function POST(request: Request) {
       total_cents: totalCents,
       customer_notes: data.customer_notes ?? null,
       affiliate_code: data.affiliate_code ?? null,
-      restoration_tier: restorationTier ?? null,
       status: "awaiting_payment",
       payment_status: "pending",
     })
@@ -208,7 +207,9 @@ export async function POST(request: Request) {
   await admin.from("order_events").insert({
     order_id: order.id,
     event_type: "checkout_initiated",
-    description: "Checkout session created",
+    description: restorationTier
+      ? `Checkout session created — tier: ${restorationTier}`
+      : "Checkout session created",
     is_customer_visible: false,
   });
 
