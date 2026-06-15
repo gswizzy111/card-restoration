@@ -24,11 +24,11 @@ export function CountdownTicker() {
 
   if (timeLeft === null) return null;
 
-  const segment = `⚡ STORE OPENS IN ${timeLeft} — The Card Doc Shop is back TONIGHT at 11:59 PM EST   ✦`;
+  const segment = `Kits restock and limited slots for restoration open in ${timeLeft}   ✦`;
   const content = Array(6).fill(segment).join("   ");
 
   return (
-    <div className="w-full bg-[#1a8fe0] text-white overflow-hidden py-2.5 select-none">
+    <div className="w-full bg-black text-white overflow-hidden py-2.5 select-none">
       <div className="ticker-track flex whitespace-nowrap">
         <span className="text-sm font-semibold tracking-wide">{content}&nbsp;&nbsp;&nbsp;</span>
         <span className="text-sm font-semibold tracking-wide" aria-hidden>{content}&nbsp;&nbsp;&nbsp;</span>
