@@ -170,6 +170,7 @@ export async function POST(request: Request) {
       total_cents: totalCents,
       customer_notes: data.customer_notes ?? null,
       affiliate_code: data.affiliate_code ?? null,
+      restoration_tier: restorationTier ?? null,
       status: "awaiting_payment",
       payment_status: "pending",
     })

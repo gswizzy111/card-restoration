@@ -5,6 +5,14 @@ import Link from "next/link";
 import { RevenueChart } from "./revenue-chart";
 import { CardSearch } from "./card-search";
 import { Suspense } from "react";
+import type { RestorationTierId } from "@/lib/restoration-tiers";
+
+const TIER_BADGES: Record<string, { label: string; color: string }> = {
+  regular:       { label: "Regular",       color: "bg-gray-100 text-gray-700" },
+  expedited:     { label: "Expedited",     color: "bg-yellow-100 text-yellow-800" },
+  premium:       { label: "Premium",       color: "bg-blue-100 text-blue-800" },
+  ultra_premium: { label: "Ultra Premium", color: "bg-purple-100 text-purple-800" },
+};
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +49,7 @@ export default async function AdminPage({
     const { data: matchedOrders } = orderIds.length > 0
       ? await admin
           .from("orders")
-          .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at")
+          .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, restoration_tier")
           .in("id", orderIds)
           .order("created_at", { ascending: false })
       : { data: [] };
@@ -89,11 +97,16 @@ export default async function AdminPage({
                   className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1">
+                    <div className="flex items-center gap-3 mb-1 flex-wrap">
                       <span className="font-heading font-black text-foreground">#{order.order_number}</span>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
                         {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
                       </span>
+                      {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier].color}`}>
+                          {TIER_BADGES[order.restoration_tier].label}
+                        </span>
+                      )}
                     </div>
                     <p className="font-medium text-foreground">{order.customer_name}</p>
                     <p className="text-sm text-muted-foreground">{order.customer_email}</p>
@@ -119,7 +132,7 @@ export default async function AdminPage({
   // ── Default: all orders ───────────────────────────────────────────────────
   const { data: orders } = await admin
     .from("orders")
-    .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method")
+    .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier")
     .neq("status", "awaiting_payment")
     .order("created_at", { ascending: false });
 
@@ -209,11 +222,16 @@ export default async function AdminPage({
                 className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
+                  <div className="flex items-center gap-3 mb-1 flex-wrap">
                     <span className="font-heading font-black text-foreground">#{order.order_number}</span>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
                       {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
                     </span>
+                    {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier as RestorationTierId].color}`}>
+                        {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
+                      </span>
+                    )}
                   </div>
                   <p className="font-medium text-foreground">{order.customer_name}</p>
                   <p className="text-sm text-muted-foreground">{order.customer_email}</p>
@@ -246,11 +264,16 @@ export default async function AdminPage({
                   className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors opacity-70 hover:opacity-100"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1">
+                    <div className="flex items-center gap-3 mb-1 flex-wrap">
                       <span className="font-heading font-black text-foreground">#{order.order_number}</span>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
                         {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
                       </span>
+                      {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier as RestorationTierId].color}`}>
+                          {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
+                        </span>
+                      )}
                     </div>
                     <p className="font-medium text-foreground">{order.customer_name}</p>
                     <p className="text-sm text-muted-foreground">{order.customer_email}</p>
