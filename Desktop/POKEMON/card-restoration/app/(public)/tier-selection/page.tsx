@@ -70,8 +70,16 @@ export default function TierSelectionPage() {
                     <p className="text-sm text-muted-foreground">per card</p>
                   </div>
 
+                  {/* Select Button - Higher up for visibility */}
+                  <Link
+                    href={`/restoration?tier=${tier.id}`}
+                    className="w-full py-3 px-4 rounded-3xl font-semibold text-center transition-colors duration-150 bg-[#1a8fe0] text-white hover:bg-[#1570c9] mb-6"
+                  >
+                    Select {tier.name}
+                  </Link>
+
                   {/* Features */}
-                  <div className="space-y-3 mb-6 flex-grow">
+                  <div className="space-y-3 flex-grow">
                     <div className="text-sm">
                       <p className="font-semibold text-foreground mb-1">Turnaround</p>
                       <p className="text-muted-foreground">
@@ -92,18 +100,6 @@ export default function TierSelectionPage() {
                       </ul>
                     </div>
                   </div>
-
-                  {/* Select Button */}
-                  <Link
-                    href={`/restoration?tier=${tier.id}`}
-                    className={`w-full py-3 px-4 rounded-lg font-semibold text-center transition-colors duration-150 ${
-                      isUltraPremium
-                        ? "bg-[#1a8fe0] text-white hover:bg-[#1570c9]"
-                        : "bg-[#1a8fe0] text-white hover:bg-[#1570c9]"
-                    }`}
-                  >
-                    Select {tier.name}
-                  </Link>
                 </div>
               </div>
             );
