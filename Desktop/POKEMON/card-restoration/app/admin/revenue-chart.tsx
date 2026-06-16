@@ -130,7 +130,7 @@ function CustomTooltip({ active, payload, label, range }: { active?: boolean; pa
   );
 }
 
-export function RevenueChart({ entries }: { entries: Entry[] }) {
+export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[]; label?: string }) {
   const [range, setRange] = useState<Range>("30d");
 
   const data = useMemo(() => buildBuckets(entries, range), [entries, range]);
@@ -151,7 +151,7 @@ export function RevenueChart({ entries }: { entries: Entry[] }) {
   return (
     <div className="bg-white rounded-xl border border-border p-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-        <h2 className="font-heading font-black text-lg text-foreground">Revenue — {titles[range]}</h2>
+        <h2 className="font-heading font-black text-lg text-foreground">{label} — {titles[range]}</h2>
         <div className="flex gap-1 bg-secondary/50 rounded-lg p-1">
           {RANGES.map((r) => (
             <button

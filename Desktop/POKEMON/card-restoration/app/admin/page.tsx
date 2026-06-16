@@ -181,6 +181,7 @@ export default async function AdminPage({
   const monthRevenue = thisMonthRevenue.reduce((sum, o) => sum + o.total_cents, 0);
   const thisMonthOrderCount = thisMonthRevenue.length;
   const revenueEntries = allRevenue.map((o) => ({ cents: o.total_cents, createdAt: o.created_at }));
+  const kitRevenueEntries = (shopOrders ?? []).map((o) => ({ cents: o.total_cents ?? 0, createdAt: o.created_at }));
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -215,9 +216,10 @@ export default async function AdminPage({
           </div>
         </div>
 
-        {/* Chart */}
-        <div className="mb-8">
-          <RevenueChart entries={revenueEntries} />
+        {/* Charts */}
+        <div className="mb-8 flex flex-col gap-6">
+          <RevenueChart entries={revenueEntries} label="Total Revenue" />
+          <RevenueChart entries={kitRevenueEntries} label="Kit Sales" />
         </div>
 
         {/* Active orders */}
