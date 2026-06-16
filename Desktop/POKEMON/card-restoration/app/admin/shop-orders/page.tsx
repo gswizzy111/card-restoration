@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/utils";
 import Stripe from "stripe";
 import { ReturnLabelButton } from "./return-label-button";
 import { KitStatusUpdater } from "./status-updater";
+import { RevenueChart } from "../revenue-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -128,6 +129,13 @@ export default async function ShopOrdersPage() {
             <h1 className="font-heading font-black text-3xl text-foreground">Kit Orders</h1>
             <p className="text-muted-foreground text-sm mt-1">{orders?.length ?? 0} total</p>
           </div>
+        </div>
+
+        <div className="mb-8">
+          <RevenueChart
+            entries={(orders ?? []).map((o) => ({ cents: o.total_cents ?? 0, createdAt: o.created_at }))}
+            label="Kit Sales"
+          />
         </div>
 
         {(!orders || orders.length === 0) && (
