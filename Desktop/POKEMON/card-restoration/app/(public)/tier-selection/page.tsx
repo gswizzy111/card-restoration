@@ -1,9 +1,10 @@
-"use client";
-
 import Link from "next/link";
 import { getAllTiers, formatCents, formatMaxValue } from "@/lib/restoration-tiers";
-import { SOLD_OUT_TIERS } from "@/lib/site-config";
+import { SOLD_OUT_TIERS, TIER_MAX_SLOTS } from "@/lib/site-config";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { CheckCircle, Zap, Crown, Star } from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 const iconMap = {
   regular: CheckCircle,
@@ -12,8 +13,27 @@ const iconMap = {
   ultra_premium: Star,
 };
 
-export default function TierSelectionPage() {
+export default async function TierSelectionPage() {
   const tiers = getAllTiers();
+
+  // Count paid orders per tier that has a slot limit
+  const admin = createAdminClient();
+  const slotCounts: Record<string, number> = {};
+  const limitedTierIds = Object.keys(TIER_MAX_SLOTS);
+
+  if (limitedTierIds.length > 0) {
+    const { data } = await admin
+      .from("orders")
+      .select("restoration_tier")
+      .in("restoration_tier", limitedTierIds)
+      .eq("payment_status", "paid");
+
+    for (const row of data ?? []) {
+      if (row.restoration_tier) {
+        slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
+      }
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -23,7 +43,7 @@ export default function TierSelectionPage() {
           Choose Your Restoration Level
         </h1>
         <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto">
-          Select the tier that best fits your cards' needs. Each tier includes professional grading notes.
+          Select the tier that best fits your cards&apos; needs. Each tier includes professional grading notes.
         </p>
       </div>
 
@@ -33,7 +53,11 @@ export default function TierSelectionPage() {
           {tiers.map((tier) => {
             const IconComponent = iconMap[tier.id as keyof typeof iconMap];
             const isUltraPremium = tier.id === "ultra_premium";
-            const isSoldOut = SOLD_OUT_TIERS.includes(tier.id);
+
+            const maxSlots = TIER_MAX_SLOTS[tier.id];
+            const usedSlots = slotCounts[tier.id] ?? 0;
+            const slotsLeft = maxSlots !== undefined ? Math.max(0, maxSlots - usedSlots) : null;
+            const isSoldOut = SOLD_OUT_TIERS.includes(tier.id) || (slotsLeft !== null && slotsLeft === 0);
 
             return (
               <div
@@ -53,15 +77,24 @@ export default function TierSelectionPage() {
                   </div>
                 )}
 
-                {/* Badge */}
-                {tier.badge && !isSoldOut && (
+                {/* Slots remaining banner */}
+                {!isSoldOut && slotsLeft !== null && (
+                  <div className={`absolute top-0 left-0 right-0 text-white text-xs font-bold text-center py-1 z-10 ${
+                    slotsLeft <= 3 ? "bg-red-500" : "bg-orange-500"
+                  }`}>
+                    {slotsLeft} slot{slotsLeft !== 1 ? "s" : ""} remaining
+                  </div>
+                )}
+
+                {/* "Front of Queue" badge for Ultra Premium */}
+                {tier.badge && !isSoldOut && slotsLeft === null && (
                   <div className="absolute top-0 right-0 bg-[#1a8fe0] text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
                     {tier.badge}
                   </div>
                 )}
 
                 {/* Card Content */}
-                <div className={`p-6 md:p-8 flex flex-col h-full ${isSoldOut ? "pt-8" : ""}`}>
+                <div className={`p-6 md:p-8 flex flex-col h-full ${isSoldOut || slotsLeft !== null ? "pt-8" : ""}`}>
                   {/* Icon & Title */}
                   <div className="flex items-start gap-3 mb-4">
                     <IconComponent className={`w-6 h-6 flex-shrink-0 mt-1 ${isSoldOut ? "text-gray-400" : "text-[#1a8fe0]"}`} />
@@ -87,12 +120,12 @@ export default function TierSelectionPage() {
                       Sold Out
                     </div>
                   ) : (
-                  <Link
-                    href={`/restoration?tier=${tier.id}`}
-                    className="w-full py-3 px-4 rounded-3xl font-semibold text-center transition-colors duration-150 bg-[#1a8fe0] text-white hover:bg-[#1570c9] mb-6"
-                  >
-                    Select {tier.name}
-                  </Link>
+                    <Link
+                      href={`/restoration?tier=${tier.id}`}
+                      className="w-full py-3 px-4 rounded-3xl font-semibold text-center transition-colors duration-150 bg-[#1a8fe0] text-white hover:bg-[#1570c9] mb-6"
+                    >
+                      Select {tier.name}
+                    </Link>
                   )}
 
                   {/* Features */}
