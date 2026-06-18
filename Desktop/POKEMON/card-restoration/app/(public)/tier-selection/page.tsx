@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getAllTiers, formatCents, formatMaxValue } from "@/lib/restoration-tiers";
-import { SOLD_OUT_TIERS, TIER_MAX_SLOTS } from "@/lib/site-config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CheckCircle, Zap, Crown, Star } from "lucide-react";
 
@@ -15,24 +14,18 @@ const iconMap = {
 
 export default async function TierSelectionPage() {
   const tiers = getAllTiers();
-
-  // Count paid orders per tier that has a slot limit
   const admin = createAdminClient();
+
+  // Load tier settings and slot usage from DB
+  const [{ data: tierSettings }, { data: paidOrders }] = await Promise.all([
+    admin.from("restoration_settings").select("tier, is_open, max_slots"),
+    admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null),
+  ]);
+
+  const settingsMap = Object.fromEntries((tierSettings ?? []).map((s) => [s.tier, s]));
   const slotCounts: Record<string, number> = {};
-  const limitedTierIds = Object.keys(TIER_MAX_SLOTS);
-
-  if (limitedTierIds.length > 0) {
-    const { data } = await admin
-      .from("orders")
-      .select("restoration_tier")
-      .in("restoration_tier", limitedTierIds)
-      .eq("payment_status", "paid");
-
-    for (const row of data ?? []) {
-      if (row.restoration_tier) {
-        slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
-      }
-    }
+  for (const row of paidOrders ?? []) {
+    if (row.restoration_tier) slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
   }
 
   return (
@@ -54,10 +47,11 @@ export default async function TierSelectionPage() {
             const IconComponent = iconMap[tier.id as keyof typeof iconMap];
             const isUltraPremium = tier.id === "ultra_premium";
 
-            const maxSlots = TIER_MAX_SLOTS[tier.id];
+            const s = settingsMap[tier.id];
+            const maxSlots = s?.max_slots ?? null;
             const usedSlots = slotCounts[tier.id] ?? 0;
-            const slotsLeft = maxSlots !== undefined ? Math.max(0, maxSlots - usedSlots) : null;
-            const isSoldOut = SOLD_OUT_TIERS.includes(tier.id) || (slotsLeft !== null && slotsLeft === 0);
+            const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
+            const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
 
             return (
               <div

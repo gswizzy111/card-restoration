@@ -5,7 +5,7 @@ import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import { getTierById } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
-import { isSoldOut, INSURANCE_ENABLED, SOLD_OUT_TIERS, TIER_MAX_SLOTS } from "@/lib/site-config";
+import { isSoldOut, INSURANCE_ENABLED } from "@/lib/site-config";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -76,18 +76,23 @@ export async function POST(request: Request) {
   if (data.restoration_tier) {
     restorationTier = data.restoration_tier;
 
-    // Enforce sold-out and slot limits server-side
-    if (SOLD_OUT_TIERS.includes(restorationTier)) {
-      return Response.json({ error: "That service level is currently sold out." }, { status: 409 });
+    // Enforce tier availability from DB
+    const { data: tierSetting } = await admin
+      .from("restoration_settings")
+      .select("is_open, max_slots")
+      .eq("tier", restorationTier)
+      .single();
+
+    if (tierSetting && !tierSetting.is_open) {
+      return Response.json({ error: "That service level is currently closed." }, { status: 409 });
     }
-    const maxSlots = TIER_MAX_SLOTS[restorationTier];
-    if (maxSlots !== undefined) {
+    if (tierSetting?.max_slots) {
       const { count } = await admin
         .from("orders")
         .select("id", { count: "exact", head: true })
         .eq("restoration_tier", restorationTier)
         .eq("payment_status", "paid");
-      if ((count ?? 0) >= maxSlots) {
+      if ((count ?? 0) >= tierSetting.max_slots) {
         return Response.json({ error: "Sorry, all slots for that service level have been filled." }, { status: 409 });
       }
     }
