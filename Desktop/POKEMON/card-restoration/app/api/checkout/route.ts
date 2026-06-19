@@ -29,6 +29,7 @@ const BodySchema = z.object({
       notes: z.string().optional(),
       photo_urls: z.array(z.string()),
       service_ids: z.array(z.string()),
+      tier: z.enum(["regular", "expedited", "premium", "ultra_premium"]).optional(),
     })
   ).min(1),
   customer: z.object({
@@ -67,41 +68,60 @@ export async function POST(request: Request) {
   const data = parsed.data;
   const admin = createAdminClient();
 
-  // Calculate subtotal based on tier or services
+  // Determine tiers — either a single order-level tier, or per-card tiers
   let subtotalCents: number;
   let serviceName: string;
   let serviceId: string | null = null;
   let restorationTier: RestorationTierId | null = null;
 
-  if (data.restoration_tier) {
-    restorationTier = data.restoration_tier;
+  // Resolve effective tier per card: card-level tier > order-level tier
+  const cardTiers = data.cards.map((c) =>
+    (c.tier ?? data.restoration_tier ?? null) as RestorationTierId | null
+  );
+  const uniqueTiers = [...new Set(cardTiers.filter(Boolean))] as RestorationTierId[];
+  const isMixed = uniqueTiers.length > 1;
 
-    // Enforce tier availability from DB
-    const { data: tierSetting } = await admin
+  if (uniqueTiers.length > 0) {
+    // Enforce availability for each unique tier from DB
+    const { data: tierSettings } = await admin
       .from("restoration_settings")
-      .select("is_open, max_slots")
-      .eq("tier", restorationTier)
-      .single();
+      .select("tier, is_open, max_slots")
+      .in("tier", uniqueTiers);
 
-    if (tierSetting && !tierSetting.is_open) {
-      return Response.json({ error: "That service level is currently closed." }, { status: 409 });
-    }
-    if (tierSetting?.max_slots) {
-      const { count } = await admin
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("restoration_tier", restorationTier)
-        .eq("payment_status", "paid");
-      if ((count ?? 0) >= tierSetting.max_slots) {
-        return Response.json({ error: "Sorry, all slots for that service level have been filled." }, { status: 409 });
+    const settingsMap = Object.fromEntries((tierSettings ?? []).map((s) => [s.tier, s]));
+
+    for (const tierId of uniqueTiers) {
+      const s = settingsMap[tierId];
+      if (s && !s.is_open) {
+        return Response.json({ error: `The ${getTierById(tierId).name} service level is currently closed.` }, { status: 409 });
+      }
+      if (s?.max_slots) {
+        const cardCount = cardTiers.filter((t) => t === tierId).length;
+        const { count } = await admin
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("restoration_tier", tierId)
+          .eq("payment_status", "paid");
+        if ((count ?? 0) + cardCount > s.max_slots) {
+          return Response.json({ error: `Not enough slots available for the ${getTierById(tierId).name} tier.` }, { status: 409 });
+        }
       }
     }
 
-    const tier = getTierById(restorationTier);
-    subtotalCents = tier.price_cents * data.cards.length;
-    serviceName = `${tier.name} - Full Restoration & PSA Prep`;
+    // Calculate subtotal as sum of per-card tier prices
+    subtotalCents = cardTiers.reduce((sum, tierId) => {
+      return sum + (tierId ? getTierById(tierId).price_cents : 0);
+    }, 0);
+
+    if (isMixed) {
+      restorationTier = null;
+      serviceName = uniqueTiers.map((t) => getTierById(t).name).join(" + ") + " - Full Restoration & PSA Prep";
+    } else {
+      restorationTier = uniqueTiers[0];
+      serviceName = `${getTierById(restorationTier).name} - Full Restoration & PSA Prep`;
+    }
   } else {
-    // Refetch service prices from DB (never trust client)
+    // Fallback: volume-based pricing (legacy, no tier selected)
     if (!data.services || data.services.length === 0) {
       return Response.json({ error: "Invalid order data. Please select a service." }, { status: 400 });
     }
@@ -230,36 +250,36 @@ export async function POST(request: Request) {
   await admin.from("order_events").insert({
     order_id: order.id,
     event_type: "checkout_initiated",
-    description: restorationTier
+    description: isMixed
+      ? `Checkout session created — mixed tiers: ${uniqueTiers.join(", ")}`
+      : restorationTier
       ? `Checkout session created — tier: ${restorationTier}`
       : "Checkout session created",
     is_customer_visible: false,
   });
 
-  // Build Stripe line items — use tier pricing if selected, otherwise flat block pricing
-  const cardCount = data.cards.length;
-  let pricePerCardCents: number;
-  let productName: string;
+  // Build Stripe line items — one per tier (or one flat line for legacy/volume pricing)
+  const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [];
 
-  if (restorationTier) {
-    const tier = getTierById(restorationTier);
-    pricePerCardCents = tier.price_cents;
-    productName = `${tier.name} - Full Restoration & PSA Prep`;
+  if (uniqueTiers.length > 0) {
+    // Group cards by tier for line items
+    const tierCardCounts: Partial<Record<RestorationTierId, number>> = {};
+    for (const tierId of cardTiers) {
+      if (tierId) tierCardCounts[tierId] = (tierCardCounts[tierId] ?? 0) + 1;
+    }
+    for (const [tierId, count] of Object.entries(tierCardCounts) as [RestorationTierId, number][]) {
+      const tier = getTierById(tierId);
+      lineItems.push({
+        price_data: { currency: "usd", product_data: { name: `${tier.name} - Full Restoration & PSA Prep` }, unit_amount: tier.price_cents },
+        quantity: count,
+      });
+    }
   } else {
-    pricePerCardCents = getRatePerCard(cardCount);
-    productName = "Full Restoration & PSA Prep";
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: "Full Restoration & PSA Prep" }, unit_amount: getRatePerCard(data.cards.length) },
+      quantity: data.cards.length,
+    });
   }
-
-  const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [
-    {
-      price_data: {
-        currency: "usd",
-        product_data: { name: productName },
-        unit_amount: pricePerCardCents,
-      },
-      quantity: cardCount,
-    },
-  ];
   if (shippingCents > 0 && data.shipping_rate) {
     const shippingLabel = isInternational
       ? `Return Shipping — ${data.shipping_rate.carrier} ${data.shipping_rate.service_level}`

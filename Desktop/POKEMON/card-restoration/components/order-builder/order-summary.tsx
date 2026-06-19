@@ -1,6 +1,5 @@
 import { formatCurrency } from "@/lib/utils";
-import { getPriceCents } from "@/lib/pricing";
-import { getTierById, formatCents } from "@/lib/restoration-tiers";
+import { getTierById, formatCents, RESTORATION_TIERS } from "@/lib/restoration-tiers";
 import type { CardEntry, ShippingRate, InsuranceSelection } from "@/lib/types";
 import { INSURANCE_ENABLED } from "@/lib/site-config";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
@@ -16,41 +15,58 @@ interface OrderSummaryProps {
 }
 
 export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0, isInternational = false, selectedTier, insurance }: OrderSummaryProps) {
-  // Use tier-based pricing if selected, otherwise volume-based
-  let subtotal: number;
-  let priceDescription: string;
+  // Build per-tier breakdown
+  const tierCounts: Partial<Record<RestorationTierId, number>> = {};
+  let subtotal = 0;
 
-  if (selectedTier) {
-    const tier = getTierById(selectedTier);
-    subtotal = tier.price_cents * cards.length;
-    priceDescription = `${formatCents(tier.price_cents)} each`;
-  } else {
-    subtotal = getPriceCents(cards.length);
-    priceDescription = "$75 each · $65 each for 3+ cards · $60 each for 6+ cards";
+  for (const card of cards) {
+    const tierId = card.tier ?? selectedTier;
+    if (tierId) {
+      tierCounts[tierId] = (tierCounts[tierId] ?? 0) + 1;
+      subtotal += getTierById(tierId).price_cents;
+    }
   }
+
+  const tierEntries = Object.entries(tierCounts) as [RestorationTierId, number][];
+  const isMixed = tierEntries.length > 1;
 
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
   const insuranceCents = INSURANCE_ENABLED ? (insurance?.chargeCents ?? 0) : 0;
   const total = subtotal - discountCents + shipping + insuranceCents;
 
-  // Get turnaround description
-  let turnaroundText = "Est. turnaround: 5–8 days from receipt";
-  if (selectedTier) {
-    const tier = getTierById(selectedTier);
-    turnaroundText = `Est. turnaround: ${tier.turnaround_min_days}–${tier.turnaround_max_days} days from receipt`;
-  }
+  const turnaroundText = isMixed
+    ? "Turnaround varies by tier"
+    : tierEntries[0]
+    ? `Est. turnaround: ${getTierById(tierEntries[0][0]).turnaround_min_days}–${getTierById(tierEntries[0][0]).turnaround_max_days} days from receipt`
+    : "Est. turnaround: 15–20 days from receipt";
 
   return (
     <div className="bg-white border-2 border-border rounded-xl p-6 flex flex-col gap-4">
       <h3 className="font-heading font-black text-lg text-foreground">Order Summary</h3>
 
       <div className="flex flex-col gap-1 text-sm border-b border-border pb-3">
-        <div className="flex justify-between text-muted-foreground">
-          <span>{selectedTier ? getTierById(selectedTier).name : "Full Restoration & PSA Prep"}</span>
-          <span>{cards.length} card{cards.length !== 1 ? "s" : ""}</span>
-        </div>
-        <p className="text-xs text-muted-foreground">{priceDescription}</p>
+        {isMixed ? (
+          tierEntries.map(([tierId, count]) => {
+            const tier = getTierById(tierId);
+            return (
+              <div key={tierId} className="flex justify-between text-muted-foreground">
+                <span>{tier.name} × {count}</span>
+                <span>{formatCents(tier.price_cents * count)}</span>
+              </div>
+            );
+          })
+        ) : (
+          <>
+            <div className="flex justify-between text-muted-foreground">
+              <span>{tierEntries[0] ? getTierById(tierEntries[0][0]).name : "Full Restoration & PSA Prep"}</span>
+              <span>{cards.length} card{cards.length !== 1 ? "s" : ""}</span>
+            </div>
+            {tierEntries[0] && (
+              <p className="text-xs text-muted-foreground">{formatCents(getTierById(tierEntries[0][0]).price_cents)} each</p>
+            )}
+          </>
+        )}
       </div>
 
       <div className="flex flex-col gap-1 text-sm">

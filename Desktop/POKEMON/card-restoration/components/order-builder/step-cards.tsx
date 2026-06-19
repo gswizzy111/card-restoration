@@ -7,15 +7,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { PhotoUploader } from "./photo-uploader";
 import type { Service, CardEntry } from "@/lib/types";
+import { getAllTiers, formatCents } from "@/lib/restoration-tiers";
+import type { RestorationTierId } from "@/lib/restoration-tiers";
+
+const ALL_TIERS = getAllTiers();
 
 interface StepCardsProps {
   cards: CardEntry[];
   services: Service[];
   selectedServiceIds: string[];
   onChange: (cards: CardEntry[]) => void;
+  defaultTier?: RestorationTierId;
 }
 
-export function StepCards({ cards, services, selectedServiceIds, onChange }: StepCardsProps) {
+export function StepCards({ cards, services, selectedServiceIds, onChange, defaultTier }: StepCardsProps) {
   const availableServices = services.filter((s) => selectedServiceIds.includes(s.id));
 
   function updateCard(id: string, patch: Partial<CardEntry>) {
@@ -33,6 +38,7 @@ export function StepCards({ cards, services, selectedServiceIds, onChange }: Ste
       notes: "",
       photo_urls: [],
       service_ids: [...selectedServiceIds],
+      tier: defaultTier,
     };
     onChange([...cards, newCard]);
   }
@@ -129,6 +135,31 @@ export function StepCards({ cards, services, selectedServiceIds, onChange }: Ste
                   onChange={(e) => updateCard(card.id, { notes: e.target.value })}
                   rows={2}
                 />
+              </div>
+            </div>
+
+            {/* Per-card tier selector */}
+            <div className="flex flex-col gap-2">
+              <Label>Service Level</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {ALL_TIERS.map((t) => {
+                  const selected = (card.tier ?? defaultTier) === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => updateCard(card.id, { tier: t.id as RestorationTierId })}
+                      className={`text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
+                        selected
+                          ? "border-[#1a8fe0] bg-blue-50 text-[#1a8fe0] font-semibold"
+                          : "border-border text-muted-foreground hover:border-[#1a8fe0]/50"
+                      }`}
+                    >
+                      <span className="block font-semibold">{t.name}</span>
+                      <span className="text-xs">{formatCents(t.price_cents)}/card · {t.turnaround_min_days}–{t.turnaround_max_days} days</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

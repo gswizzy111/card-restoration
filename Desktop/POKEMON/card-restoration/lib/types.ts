@@ -19,6 +19,7 @@ export interface CardEntry {
   notes: string;
   photo_urls: string[];
   service_ids: string[];
+  tier?: import("@/lib/restoration-tiers").RestorationTierId;
 }
 
 export interface CustomerInfo {

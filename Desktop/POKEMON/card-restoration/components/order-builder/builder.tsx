@@ -11,8 +11,9 @@ import { StepShipping } from "./step-shipping";
 import { StepReview } from "./step-review";
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
+import { getTierById } from "@/lib/restoration-tiers";
 
-function defaultCard(serviceId: string): CardEntry {
+function defaultCard(serviceId: string, tier?: RestorationTierId): CardEntry {
   return {
     id: crypto.randomUUID(),
     card_name: "",
@@ -23,6 +24,7 @@ function defaultCard(serviceId: string): CardEntry {
     notes: "",
     photo_urls: [],
     service_ids: [serviceId],
+    tier,
   };
 }
 
@@ -52,7 +54,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const serviceId = service?.id ?? "";
 
   const [step, setStep] = useState(1);
-  const [cards, setCards] = useState<CardEntry[]>([defaultCard(serviceId)]);
+  const [cards, setCards] = useState<CardEntry[]>([defaultCard(serviceId, selectedTier)]);
   const [customer, setCustomer] = useState<CustomerInfo>(emptyCustomer());
   const [shippingMethod, setShippingMethod] = useState<"buy_label" | "self_ship" | null>(null);
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
@@ -83,11 +85,18 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   async function handleSubmit() {
     setSubmitting(true);
     try {
+      // Determine if all cards share one tier or have mixed tiers
+      const tiers = cards.map((c) => c.tier ?? selectedTier);
+      const uniqueTiers = [...new Set(tiers.filter(Boolean))];
+      const singleTier = uniqueTiers.length === 1 ? uniqueTiers[0] : undefined;
+
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...(selectedTier ? { restoration_tier: selectedTier } : { services: [{ id: serviceId, quantity: cards.length }] }),
+          ...(singleTier
+            ? { restoration_tier: singleTier }
+            : { services: [{ id: serviceId, quantity: cards.length }] }),
           cards: cards.map((c) => ({
             card_name: c.card_name,
             card_set: c.card_set || undefined,
@@ -97,6 +106,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
             notes: c.notes || undefined,
             photo_urls: c.photo_urls,
             service_ids: [serviceId],
+            tier: c.tier ?? selectedTier,
           })),
           customer: {
             name: customer.name,
@@ -158,6 +168,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               services={services}
               selectedServiceIds={[serviceId]}
               onChange={setCards}
+              defaultTier={selectedTier}
             />
           )}
           {step === 2 && <StepCustomer customer={customer} onChange={setCustomer} />}
