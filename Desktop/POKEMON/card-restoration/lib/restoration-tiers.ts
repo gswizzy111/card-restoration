@@ -40,7 +40,7 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
     id: "premium",
     name: "Premium",
     price_cents: 11999, // $119.99
-    description: "Priority restoration with extended warranty",
+    description: "Priority restoration service",
     turnaround_min_days: 5,
     turnaround_max_days: 8,
     max_card_value_cents: 350000, // $3,500
