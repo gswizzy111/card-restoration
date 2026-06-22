@@ -5,6 +5,8 @@ import { formatCurrency } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Track } from "shippo/models/components";
+import { UpgradeSection } from "./upgrade-section";
+import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 function shippoCarrierToken(provider: string): string {
   const map: Record<string, string> = {
@@ -97,6 +99,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
           })}
         </div>
       </div>
+
+      {/* Upgrade section — only while awaiting cards */}
+      {order.status === "awaiting_cards" && (
+        <UpgradeSection
+          orderNumber={order.order_number}
+          customerEmail={order.customer_email}
+          currentTier={(order.restoration_tier as RestorationTierId | null)}
+          currentSubtotalCents={order.subtotal_cents ?? 0}
+          cardCount={cards?.length ?? 1}
+        />
+      )}
 
       {/* Live inbound tracking (while we're waiting for the cards) */}
       {inboundTrack && (

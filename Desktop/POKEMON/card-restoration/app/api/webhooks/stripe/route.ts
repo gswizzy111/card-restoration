@@ -193,6 +193,38 @@ export async function POST(request: Request) {
       return Response.json({ received: true });
     }
 
+    // ── Tier upgrade ──────────────────────────────────────────────────────
+    if (session.metadata?.type === "tier_upgrade") {
+      const upgradeOrderId = session.metadata.order_id;
+      const newTier = session.metadata.new_tier;
+      if (upgradeOrderId && newTier) {
+        // Fetch order to compute new totals
+        const { data: upgradeOrder } = await admin
+          .from("orders")
+          .select("subtotal_cents, total_cents")
+          .eq("id", upgradeOrderId)
+          .single();
+
+        const upgradePaidCents = session.amount_total ?? 0;
+
+        await admin
+          .from("orders")
+          .update({
+            restoration_tier: newTier,
+            total_cents: (upgradeOrder?.total_cents ?? 0) + upgradePaidCents,
+          })
+          .eq("id", upgradeOrderId);
+
+        await admin.from("order_events").insert({
+          order_id: upgradeOrderId,
+          event_type: "tier_upgraded",
+          description: `Upgraded to ${newTier} tier — additional payment of $${(upgradePaidCents / 100).toFixed(2)} received`,
+          is_customer_visible: true,
+        });
+      }
+      return Response.json({ received: true });
+    }
+
     // ── Restoration order ─────────────────────────────────────────────────
     const orderId = session.metadata?.order_id;
     if (!orderId) return Response.json({ error: "No order_id in metadata" }, { status: 400 });
