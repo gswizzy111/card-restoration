@@ -120,22 +120,23 @@ export function StepReview({
 
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
 
-  // Tier-based or volume-based pricing
-  let subtotal: number;
-  let pricePerCard: string;
-
-  if (selectedTier) {
-    const tier = getTierById(selectedTier);
-    subtotal = tier.price_cents * cards.length;
-    pricePerCard = formatCents(tier.price_cents);
-  } else {
-    subtotal = getPriceCents(cards.length);
-    pricePerCard = formatCurrency(getRatePerCard(cards.length));
+  // Sum per-card tier prices (supports mixed tiers)
+  let subtotal = 0;
+  for (const card of cards) {
+    const tierId = card.tier ?? selectedTier;
+    if (tierId) {
+      subtotal += getTierById(tierId).price_cents;
+    } else {
+      subtotal = getPriceCents(cards.length);
+      break;
+    }
   }
 
+  const TAX_RATE = 0.065;
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
+  const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const total = subtotal - discountCents + shipping + (INSURANCE_ENABLED ? insurance.chargeCents : 0);
+  const total = subtotal - discountCents + taxCents + shipping + (INSURANCE_ENABLED ? insurance.chargeCents : 0);
 
   return (
     <div className="flex flex-col gap-8">
@@ -309,6 +310,10 @@ export function StepReview({
             <span>−{formatCurrency(discountCents)}</span>
           </div>
         )}
+        <div className="flex justify-between text-sm text-muted-foreground">
+          <span>Sales Tax (6.5%)</span>
+          <span>{formatCurrency(taxCents)}</span>
+        </div>
         <div className="flex justify-between text-sm text-muted-foreground">
           <span>Shipping</span>
           <span>{shippingMethod === "self_ship" ? "Self-ship" : formatCurrency(shipping)}</span>

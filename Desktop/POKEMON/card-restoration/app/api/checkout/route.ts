@@ -162,6 +162,10 @@ export async function POST(request: Request) {
     ? (data.shipping_method === "buy_label" || isInternational ? data.shipping_rate.amount_cents : 0)
     : 0;
 
+  // Sales tax — 6.5% on subtotal after discount
+  const TAX_RATE = 0.065;
+  const taxCents = Math.round((subtotalCents - discountCents) * TAX_RATE);
+
   // Compute insurance server-side — never trust client price
   const SHIPPO_RATE = 0.015;
   const SHIPPO_MIN_CENTS = 250;
@@ -173,7 +177,7 @@ export async function POST(request: Request) {
     insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;
   }
 
-  const totalCents = subtotalCents - discountCents + shippingCents + insuranceChargeCents;
+  const totalCents = subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents;
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -280,6 +284,11 @@ export async function POST(request: Request) {
       quantity: data.cards.length,
     });
   }
+  lineItems.push({
+    price_data: { currency: "usd", product_data: { name: "Sales Tax (6.5%)" }, unit_amount: taxCents },
+    quantity: 1,
+  });
+
   if (shippingCents > 0 && data.shipping_rate) {
     const shippingLabel = isInternational
       ? `Return Shipping — ${data.shipping_rate.carrier} ${data.shipping_rate.service_level}`
