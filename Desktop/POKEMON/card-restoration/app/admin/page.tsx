@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
@@ -6,6 +7,7 @@ import { RevenueChart } from "./revenue-chart";
 import { CardSearch } from "./card-search";
 import { Suspense } from "react";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
+import type { Track } from "shippo/models/components";
 
 const TIER_BADGES: Record<string, { label: string; color: string }> = {
   regular:       { label: "Regular",       color: "bg-gray-100 text-gray-700" },
@@ -50,7 +52,7 @@ export default async function AdminPage({
 }) {
   const { q, tab } = await searchParams;
   const query = q?.trim() ?? "";
-  const activeTab = tab === "fulfillment" ? "fulfillment" : "orders";
+  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : "orders";
 
   const admin = createAdminClient();
 
@@ -156,11 +158,12 @@ export default async function AdminPage({
     );
   }
 
-  // ── Fetch data for both tabs in parallel ──────────────────────────────────
+  // ── Fetch data for all tabs in parallel ───────────────────────────────────
   const [
     { data: orders },
     { data: shopOrders },
     { data: fulfillmentOrders },
+    { data: shippedRaw },
   ] = await Promise.all([
     admin
       .from("orders")
@@ -177,7 +180,31 @@ export default async function AdminPage({
       .in("status", ["received", "in_progress"])
       .eq("payment_status", "paid")
       .order("created_at", { ascending: true }),
+    admin
+      .from("orders")
+      .select("id, order_number, customer_name, customer_email, created_at, tracking_number")
+      .eq("status", "shipped_back")
+      .not("tracking_number", "is", null)
+      .order("created_at", { ascending: true }),
   ]);
+
+  // Query Shippo live tracking for each shipped order (only when shipped tab is active)
+  type ShippedWithTracking = typeof shippedRaw extends (infer T)[] | null ? T & { track: Track | null } : never;
+  let shippedOrders: ShippedWithTracking[] = [];
+  if (activeTab === "shipped" && shippedRaw && shippedRaw.length > 0) {
+    const results = await Promise.allSettled(
+      shippedRaw.map(async (o) => {
+        let track: Track | null = null;
+        try {
+          track = await shippo.trackingStatus.get(o.tracking_number!, "usps");
+        } catch { /* fail silently per order */ }
+        return { ...o, track };
+      })
+    );
+    shippedOrders = results
+      .filter((r): r is PromiseFulfilledResult<ShippedWithTracking> => r.status === "fulfilled")
+      .map((r) => r.value);
+  }
 
   const orderIds = orders?.map((o) => o.id) ?? [];
   const { data: allCards } = orderIds.length > 0
@@ -221,6 +248,7 @@ export default async function AdminPage({
   const kitRevenueEntries = (shopOrders ?? []).map((o) => ({ cents: o.total_cents ?? 0, createdAt: o.created_at }));
 
   const fulfillmentCount = fulfillmentOrders?.length ?? 0;
+  const shippedCount = shippedRaw?.length ?? 0;
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -279,6 +307,23 @@ export default async function AdminPage({
                 activeTab === "fulfillment" ? "bg-primary/10 text-primary" : "bg-primary text-white"
               }`}>
                 {fulfillmentCount}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/admin?tab=shipped"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+              activeTab === "shipped"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Shipped Out
+            {shippedCount > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeTab === "shipped" ? "bg-cyan-100 text-cyan-700" : "bg-cyan-600 text-white"
+              }`}>
+                {shippedCount}
               </span>
             )}
           </Link>
@@ -459,6 +504,88 @@ export default async function AdminPage({
                               <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusStyle.cls}`}>
                                 {statusStyle.label}
                               </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Link href={`/admin/orders/${order.id}`} className="text-xs font-bold text-primary hover:underline">
+                              View →
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── SHIPPED OUT TAB ── */}
+        {activeTab === "shipped" && (
+          <>
+            {shippedCount === 0 ? (
+              <div className="bg-white rounded-xl border border-border p-16 text-center">
+                <p className="text-2xl mb-2">📦</p>
+                <p className="font-heading font-black text-lg text-foreground">No packages out</p>
+                <p className="text-sm text-muted-foreground mt-1">No orders have been shipped yet.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/40">
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Order</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tracking #</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Details</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(activeTab === "shipped" ? shippedOrders : (shippedRaw ?? [])).map((order) => {
+                      const trackStatus = (order as ShippedWithTracking).track?.trackingStatus?.status ?? "UNKNOWN";
+                      const statusDetails = (order as ShippedWithTracking).track?.trackingStatus?.statusDetails ?? null;
+                      const eta = (order as ShippedWithTracking).track?.eta ?? null;
+
+                      const SHIP_BADGE: Record<string, { label: string; cls: string }> = {
+                        UNKNOWN:     { label: "Waiting to be Shipped Out", cls: "bg-gray-100 text-gray-700" },
+                        PRE_TRANSIT: { label: "Waiting to be Shipped Out", cls: "bg-gray-100 text-gray-700" },
+                        TRANSIT:     { label: "Out for Delivery",           cls: "bg-blue-100 text-blue-700" },
+                        DELIVERED:   { label: "Delivered",                  cls: "bg-green-100 text-green-700" },
+                        RETURNED:    { label: "Being Returned",             cls: "bg-orange-100 text-orange-700" },
+                        FAILURE:     { label: "Delivery Issue",             cls: "bg-red-100 text-red-700" },
+                      };
+                      const badge = SHIP_BADGE[trackStatus] ?? SHIP_BADGE.UNKNOWN;
+
+                      return (
+                        <tr key={order.id} className="border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
+                          <td className="px-4 py-3">
+                            <Link href={`/admin/orders/${order.id}`} className="font-mono font-bold text-primary hover:underline">
+                              #{order.order_number}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-foreground">{order.customer_name}</p>
+                            <p className="text-xs text-muted-foreground">{order.customer_email}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-mono text-xs text-foreground">{order.tracking_number}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${badge.cls}`}>
+                              {badge.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 max-w-[200px]">
+                            {statusDetails && (
+                              <p className="text-xs text-muted-foreground truncate">{statusDetails}</p>
+                            )}
+                            {eta && (
+                              <p className="text-xs font-semibold text-foreground mt-0.5">
+                                ETA: {new Date(eta).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </p>
                             )}
                           </td>
                           <td className="px-4 py-3 text-right">

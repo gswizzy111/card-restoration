@@ -23,26 +23,46 @@ function shippoCarrierToken(provider: string): string {
 }
 
 const TRACKING_BADGE: Record<string, { label: string; cls: string }> = {
-  UNKNOWN:     { label: "Label Created", cls: "bg-gray-100 text-gray-600" },
-  PRE_TRANSIT: { label: "Label Created", cls: "bg-gray-100 text-gray-600" },
-  TRANSIT:     { label: "In Transit",    cls: "bg-blue-100 text-blue-700" },
-  DELIVERED:   { label: "Delivered",     cls: "bg-green-100 text-green-700" },
-  RETURNED:    { label: "Returned",      cls: "bg-orange-100 text-orange-700" },
-  FAILURE:     { label: "Issue",         cls: "bg-red-100 text-red-700" },
+  UNKNOWN:     { label: "Label Created",   cls: "bg-gray-100 text-gray-600" },
+  PRE_TRANSIT: { label: "Label Created",   cls: "bg-gray-100 text-gray-600" },
+  TRANSIT:     { label: "In Transit",      cls: "bg-blue-100 text-blue-700" },
+  DELIVERED:   { label: "Delivered",       cls: "bg-green-100 text-green-700" },
+  RETURNED:    { label: "Returned",        cls: "bg-orange-100 text-orange-700" },
+  FAILURE:     { label: "Issue",           cls: "bg-red-100 text-red-700" },
 };
 
 export default async function AdminOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const admin = createAdminClient();
 
-  const [{ data: order }, { data: cards }, { data: services }, { data: events }] = await Promise.all([
+  const [orderRes, { data: cards }, { data: services }, { data: events }] = await Promise.all([
     admin.from("orders").select("*").eq("id", id).single(),
     admin.from("cards").select("*").eq("order_id", id),
     admin.from("order_services").select("*").eq("order_id", id),
     admin.from("order_events").select("*").eq("order_id", id).order("created_at", { ascending: false }),
   ]);
 
+  let order = orderRes.data;
   if (!order) notFound();
+
+  // Auto-sync: if a return label was purchased but status wasn't updated to shipped_back,
+  // fix it now (handles labels created before the auto-ship feature was added)
+  if (
+    order.return_label_url &&
+    order.tracking_number &&
+    !["shipped_back", "delivered", "cancelled"].includes(order.status)
+  ) {
+    await Promise.all([
+      admin.from("orders").update({ status: "shipped_back" }).eq("id", id),
+      admin.from("order_events").insert({
+        order_id: id,
+        event_type: "status_updated",
+        description: `Marked Shipped Back — return label detected. Tracking: ${order.tracking_number}`,
+        is_customer_visible: true,
+      }),
+    ]);
+    order = { ...order, status: "shipped_back" };
+  }
 
   // Live inbound tracking
   let inboundTrack: Track | null = null;
@@ -52,6 +72,14 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
         order.inbound_tracking_number,
         shippoCarrierToken(order.inbound_carrier)
       );
+    } catch { /* fail silently */ }
+  }
+
+  // Live return tracking (when shipped back)
+  let returnTrack: Track | null = null;
+  if (order.status === "shipped_back" && order.tracking_number) {
+    try {
+      returnTrack = await shippo.trackingStatus.get(order.tracking_number, "usps");
     } catch { /* fail silently */ }
   }
 
@@ -237,6 +265,35 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 insuranceType={order.insurance_type}
                 insuranceDeclaredValueCents={order.insurance_declared_value_cents}
               />
+
+              {/* Live return tracking — shown once the return label is purchased */}
+              {order.tracking_number && (
+                <div className="mt-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Return Tracking #</p>
+                  <p className="font-mono text-sm font-semibold text-foreground mb-2">{order.tracking_number}</p>
+                  {returnTrack ? (
+                    <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-lg">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        TRACKING_BADGE[returnTrack.trackingStatus?.status ?? "UNKNOWN"]?.cls ?? "bg-gray-100 text-gray-600"
+                      }`}>
+                        {TRACKING_BADGE[returnTrack.trackingStatus?.status ?? "UNKNOWN"]?.label ?? "Unknown"}
+                      </span>
+                      {returnTrack.trackingStatus?.statusDetails && (
+                        <p className="text-xs text-cyan-800 mt-1.5">{returnTrack.trackingStatus.statusDetails}</p>
+                      )}
+                      {returnTrack.eta && (
+                        <p className="text-xs font-semibold text-cyan-900 mt-1">
+                          ETA: {new Date(returnTrack.eta).toLocaleDateString("en-US", {
+                            weekday: "short", month: "short", day: "numeric"
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Tracking status unavailable</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Notes */}
