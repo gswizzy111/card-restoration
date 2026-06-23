@@ -210,13 +210,19 @@ export default async function AdminPage({
 
   const orderIds = orders?.map((o) => o.id) ?? [];
   const { data: allCards } = orderIds.length > 0
-    ? await admin.from("cards").select("order_id, card_name").in("order_id", orderIds)
+    ? await admin.from("cards").select("order_id, card_name, photo_urls").in("order_id", orderIds)
     : { data: [] };
 
   const cardsByOrder: Record<string, string[]> = {};
+  const photosByOrder: Record<string, string[]> = {};
   for (const card of allCards ?? []) {
     if (!cardsByOrder[card.order_id]) cardsByOrder[card.order_id] = [];
     cardsByOrder[card.order_id].push(card.card_name);
+    const urls: string[] = Array.isArray(card.photo_urls) ? card.photo_urls : [];
+    if (urls.length > 0) {
+      if (!photosByOrder[card.order_id]) photosByOrder[card.order_id] = [];
+      photosByOrder[card.order_id].push(...urls);
+    }
   }
 
   // Card counts for fulfillment queue
@@ -383,6 +389,19 @@ export default async function AdminPage({
                       {cardsByOrder[order.id]?.length > 0 && (
                         <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
                       )}
+                      {photosByOrder[order.id]?.length > 0 && (
+                        <div className="flex gap-1.5 mt-2 flex-wrap">
+                          {photosByOrder[order.id].slice(0, 5).map((url, i) => (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img key={i} src={url} alt="Card" className="w-12 h-12 object-cover rounded-lg border border-border" />
+                          ))}
+                          {photosByOrder[order.id].length > 5 && (
+                            <div className="w-12 h-12 rounded-lg border border-border bg-secondary flex items-center justify-center text-xs font-bold text-muted-foreground">
+                              +{photosByOrder[order.id].length - 5}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
                       <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
@@ -423,6 +442,19 @@ export default async function AdminPage({
                         <p className="text-sm text-muted-foreground">{order.customer_email}</p>
                         {cardsByOrder[order.id]?.length > 0 && (
                           <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
+                        )}
+                        {photosByOrder[order.id]?.length > 0 && (
+                          <div className="flex gap-1.5 mt-2 flex-wrap">
+                            {photosByOrder[order.id].slice(0, 5).map((url, i) => (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img key={i} src={url} alt="Card" className="w-12 h-12 object-cover rounded-lg border border-border" />
+                            ))}
+                            {photosByOrder[order.id].length > 5 && (
+                              <div className="w-12 h-12 rounded-lg border border-border bg-secondary flex items-center justify-center text-xs font-bold text-muted-foreground">
+                                +{photosByOrder[order.id].length - 5}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                       <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
