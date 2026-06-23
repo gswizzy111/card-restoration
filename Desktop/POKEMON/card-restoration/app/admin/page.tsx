@@ -8,6 +8,7 @@ import { CardSearch } from "./card-search";
 import { Suspense } from "react";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import type { Track } from "shippo/models/components";
+import { SyncTrackingButton } from "./sync-tracking-button";
 
 const TIER_BADGES: Record<string, { label: string; color: string }> = {
   regular:       { label: "Regular",       color: "bg-gray-100 text-gray-700" },
@@ -182,22 +183,23 @@ export default async function AdminPage({
       .order("created_at", { ascending: true }),
     admin
       .from("orders")
-      .select("id, order_number, customer_name, customer_email, created_at, tracking_number")
+      .select("id, order_number, customer_name, customer_email, created_at, tracking_number, return_label_url")
       .eq("status", "shipped_back")
-      .not("tracking_number", "is", null)
       .order("created_at", { ascending: true }),
   ]);
 
-  // Query Shippo live tracking for each shipped order (only when shipped tab is active)
+  // Query Shippo live tracking for shipped orders that have a tracking number
   type ShippedWithTracking = typeof shippedRaw extends (infer T)[] | null ? T & { track: Track | null } : never;
   let shippedOrders: ShippedWithTracking[] = [];
   if (activeTab === "shipped" && shippedRaw && shippedRaw.length > 0) {
     const results = await Promise.allSettled(
       shippedRaw.map(async (o) => {
         let track: Track | null = null;
-        try {
-          track = await shippo.trackingStatus.get(o.tracking_number!, "usps");
-        } catch { /* fail silently per order */ }
+        if (o.tracking_number) {
+          try {
+            track = await shippo.trackingStatus.get(o.tracking_number, "usps");
+          } catch { /* fail silently per order */ }
+        }
         return { ...o, track };
       })
     );
@@ -522,86 +524,109 @@ export default async function AdminPage({
         )}
 
         {/* ── SHIPPED OUT TAB ── */}
-        {activeTab === "shipped" && (
-          <>
-            {shippedCount === 0 ? (
-              <div className="bg-white rounded-xl border border-border p-16 text-center">
-                <p className="text-2xl mb-2">📦</p>
-                <p className="font-heading font-black text-lg text-foreground">No packages out</p>
-                <p className="text-sm text-muted-foreground mt-1">No orders have been shipped yet.</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-border overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-secondary/40">
-                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Order</th>
-                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
-                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tracking #</th>
-                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
-                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Details</th>
-                      <th className="px-4 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(activeTab === "shipped" ? shippedOrders : (shippedRaw ?? [])).map((order) => {
-                      const trackStatus = (order as ShippedWithTracking).track?.trackingStatus?.status ?? "UNKNOWN";
-                      const statusDetails = (order as ShippedWithTracking).track?.trackingStatus?.statusDetails ?? null;
-                      const eta = (order as ShippedWithTracking).track?.eta ?? null;
+        {activeTab === "shipped" && (() => {
+          const missingTracking = shippedOrders.filter((o) => !o.tracking_number);
+          const SHIP_BADGE: Record<string, { label: string; cls: string }> = {
+            UNKNOWN:     { label: "Waiting to be Shipped Out", cls: "bg-gray-100 text-gray-700" },
+            PRE_TRANSIT: { label: "Waiting to be Shipped Out", cls: "bg-gray-100 text-gray-700" },
+            TRANSIT:     { label: "Out for Delivery",           cls: "bg-blue-100 text-blue-700" },
+            DELIVERED:   { label: "Delivered",                  cls: "bg-green-100 text-green-700" },
+            RETURNED:    { label: "Being Returned",             cls: "bg-orange-100 text-orange-700" },
+            FAILURE:     { label: "Delivery Issue",             cls: "bg-red-100 text-red-700" },
+          };
+          return (
+            <>
+              {/* Sync banner — shown when there are orders with no tracking number */}
+              {missingTracking.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-5 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1">
+                    <p className="font-bold text-yellow-800 text-sm">
+                      {missingTracking.length} order{missingTracking.length !== 1 ? "s" : ""} missing tracking numbers
+                    </p>
+                    <p className="text-xs text-yellow-700 mt-0.5">
+                      Click to pull tracking numbers from Shippo automatically. Orders with no Shippo label will need manual entry.
+                    </p>
+                  </div>
+                  <SyncTrackingButton />
+                </div>
+              )}
 
-                      const SHIP_BADGE: Record<string, { label: string; cls: string }> = {
-                        UNKNOWN:     { label: "Waiting to be Shipped Out", cls: "bg-gray-100 text-gray-700" },
-                        PRE_TRANSIT: { label: "Waiting to be Shipped Out", cls: "bg-gray-100 text-gray-700" },
-                        TRANSIT:     { label: "Out for Delivery",           cls: "bg-blue-100 text-blue-700" },
-                        DELIVERED:   { label: "Delivered",                  cls: "bg-green-100 text-green-700" },
-                        RETURNED:    { label: "Being Returned",             cls: "bg-orange-100 text-orange-700" },
-                        FAILURE:     { label: "Delivery Issue",             cls: "bg-red-100 text-red-700" },
-                      };
-                      const badge = SHIP_BADGE[trackStatus] ?? SHIP_BADGE.UNKNOWN;
+              {shippedCount === 0 ? (
+                <div className="bg-white rounded-xl border border-border p-16 text-center">
+                  <p className="text-2xl mb-2">📦</p>
+                  <p className="font-heading font-black text-lg text-foreground">No packages out</p>
+                  <p className="text-sm text-muted-foreground mt-1">No orders have been shipped yet.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-secondary/40">
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Order</th>
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tracking #</th>
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Details</th>
+                        <th className="px-4 py-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shippedOrders.map((order) => {
+                        const hasTracking = !!order.tracking_number;
+                        const trackStatus = order.track?.trackingStatus?.status ?? "UNKNOWN";
+                        const statusDetails = order.track?.trackingStatus?.statusDetails ?? null;
+                        const eta = order.track?.eta ?? null;
+                        const badge = hasTracking
+                          ? (SHIP_BADGE[trackStatus] ?? SHIP_BADGE.UNKNOWN)
+                          : { label: "No Tracking Number", cls: "bg-red-100 text-red-700" };
 
-                      return (
-                        <tr key={order.id} className="border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
-                          <td className="px-4 py-3">
-                            <Link href={`/admin/orders/${order.id}`} className="font-mono font-bold text-primary hover:underline">
-                              #{order.order_number}
-                            </Link>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-foreground">{order.customer_name}</p>
-                            <p className="text-xs text-muted-foreground">{order.customer_email}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="font-mono text-xs text-foreground">{order.tracking_number}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${badge.cls}`}>
-                              {badge.label}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 max-w-[200px]">
-                            {statusDetails && (
-                              <p className="text-xs text-muted-foreground truncate">{statusDetails}</p>
-                            )}
-                            {eta && (
-                              <p className="text-xs font-semibold text-foreground mt-0.5">
-                                ETA: {new Date(eta).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                              </p>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <Link href={`/admin/orders/${order.id}`} className="text-xs font-bold text-primary hover:underline">
-                              View →
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
+                        return (
+                          <tr key={order.id} className={`border-b border-border last:border-0 hover:bg-secondary/20 transition-colors ${!hasTracking ? "bg-red-50/30" : ""}`}>
+                            <td className="px-4 py-3">
+                              <Link href={`/admin/orders/${order.id}`} className="font-mono font-bold text-primary hover:underline">
+                                #{order.order_number}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-foreground">{order.customer_name}</p>
+                              <p className="text-xs text-muted-foreground">{order.customer_email}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              {hasTracking
+                                ? <p className="font-mono text-xs text-foreground">{order.tracking_number}</p>
+                                : <p className="text-xs text-red-500 font-medium">Missing</p>
+                              }
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${badge.cls}`}>
+                                {badge.label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 max-w-[200px]">
+                              {statusDetails && (
+                                <p className="text-xs text-muted-foreground truncate">{statusDetails}</p>
+                              )}
+                              {eta && (
+                                <p className="text-xs font-semibold text-foreground mt-0.5">
+                                  ETA: {new Date(eta).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <Link href={`/admin/orders/${order.id}`} className="text-xs font-bold text-primary hover:underline">
+                                View →
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
       </div>
     </div>
