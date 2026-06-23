@@ -10,6 +10,7 @@ export async function POST() {
 
   const admin = createAdminClient();
 
+  // All orders that aren't already done and have a tracking number
   const { data: orders } = await admin
     .from("orders")
     .select("id, order_number, tracking_number")
@@ -20,38 +21,55 @@ export async function POST() {
     return Response.json({ updated: 0, checked: 0, message: "Nothing to sync." });
   }
 
-  const results = await Promise.allSettled(
-    orders.map(async (order) => {
-      try {
-        const track = await shippo.trackingStatus.get(order.tracking_number!, "usps");
-        if (track?.trackingStatus?.status === "DELIVERED") {
-          await Promise.all([
-            admin.from("orders").update({ status: "delivered" }).eq("id", order.id),
-            admin.from("order_events").insert({
-              order_id: order.id,
-              event_type: "status_updated",
-              description: "Marked Delivered — USPS confirmed delivery of return package.",
-              is_customer_visible: true,
-            }),
-          ]);
-          return { order_number: order.order_number, status: "updated" as const };
+  // Build trackingNumber → "DELIVERED" | other  by paging Shippo transactions.
+  // The transaction object carries trackingStatus directly — no separate
+  // per-order tracking API call needed (those silently fail for older packages).
+  const trackingToStatus = new Map<string, string>();
+  for (let page = 1; page <= 20; page++) {
+    try {
+      const txList = await shippo.transactions.list({ page, results: 100 });
+      for (const tx of txList.results ?? []) {
+        if (tx.trackingNumber && tx.trackingStatus) {
+          trackingToStatus.set(tx.trackingNumber, tx.trackingStatus);
         }
-        return { order_number: order.order_number, status: "not_delivered" as const };
-      } catch {
-        return { order_number: order.order_number, status: "error" as const };
       }
-    })
-  );
+      if (!txList.next) break;
+    } catch {
+      break;
+    }
+  }
 
-  const settled = results
-    .filter((r) => r.status === "fulfilled")
-    .map((r) => (r as PromiseFulfilledResult<{ order_number: string; status: string }>).value);
+  // Match orders to Shippo tracking status and update the delivered ones
+  const updated: string[] = [];
+  const notDelivered: string[] = [];
+  const noMatch: string[] = [];
 
-  const updated = settled.filter((r) => r.status === "updated");
+  for (const order of orders) {
+    const status = trackingToStatus.get(order.tracking_number!);
+    if (!status) {
+      noMatch.push(order.order_number);
+      continue;
+    }
+    if (status === "DELIVERED") {
+      await Promise.all([
+        admin.from("orders").update({ status: "delivered" }).eq("id", order.id),
+        admin.from("order_events").insert({
+          order_id: order.id,
+          event_type: "status_updated",
+          description: "Marked Delivered — confirmed via Shippo transaction tracking.",
+          is_customer_visible: true,
+        }),
+      ]);
+      updated.push(order.order_number);
+    } else {
+      notDelivered.push(order.order_number);
+    }
+  }
 
   return Response.json({
     updated: updated.length,
     checked: orders.length,
-    results: updated,
+    results: updated.map((n) => ({ order_number: n, status: "updated" })),
+    noMatch: noMatch.length,
   });
 }
