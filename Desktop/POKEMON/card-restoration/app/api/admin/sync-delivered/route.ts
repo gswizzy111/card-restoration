@@ -13,8 +13,8 @@ export async function POST() {
   const { data: orders } = await admin
     .from("orders")
     .select("id, order_number, tracking_number")
-    .eq("status", "shipped_back")
-    .not("tracking_number", "is", null);
+    .not("tracking_number", "is", null)
+    .not("status", "in", '("delivered","cancelled")');
 
   if (!orders || orders.length === 0) {
     return Response.json({ updated: 0, checked: 0, message: "Nothing to sync." });
