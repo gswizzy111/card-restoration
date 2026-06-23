@@ -81,6 +81,20 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
     try {
       returnTrack = await shippo.trackingStatus.get(order.tracking_number, "usps");
     } catch { /* fail silently */ }
+
+    // Auto-advance to delivered if Shippo confirms delivery
+    if (returnTrack?.trackingStatus?.status === "DELIVERED") {
+      await Promise.all([
+        admin.from("orders").update({ status: "delivered" }).eq("id", id),
+        admin.from("order_events").insert({
+          order_id: id,
+          event_type: "status_updated",
+          description: "Marked Delivered — USPS confirmed delivery of return package.",
+          is_customer_visible: true,
+        }),
+      ]);
+      order = { ...order, status: "delivered" };
+    }
   }
 
   const address = order.ship_from_address as Record<string, string> | null;
