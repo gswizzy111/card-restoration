@@ -9,6 +9,7 @@ import { Suspense } from "react";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import type { Track } from "shippo/models/components";
 import { SyncTrackingButton } from "./sync-tracking-button";
+import { SyncDeliveredButton } from "./sync-delivered-button";
 
 const TIER_BADGES: Record<string, { label: string; color: string }> = {
   regular:       { label: "Regular",       color: "bg-gray-100 text-gray-700" },
@@ -646,6 +647,17 @@ export default async function AdminPage({
           };
           return (
             <>
+              {/* Sync delivered — always shown on shipped tab */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-1">
+                  <p className="font-bold text-emerald-800 text-sm">Sync delivered status</p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    Checks every shipped order against USPS via Shippo and marks any confirmed deliveries as Delivered.
+                  </p>
+                </div>
+                <SyncDeliveredButton />
+              </div>
+
               {/* Sync banner — shown when there are orders with no tracking number */}
               {missingTracking.length > 0 && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-5 flex flex-col sm:flex-row sm:items-center gap-3">
