@@ -53,7 +53,7 @@ export default async function AdminPage({
 }) {
   const { q, tab } = await searchParams;
   const query = q?.trim() ?? "";
-  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : "orders";
+  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : "orders";
 
   const admin = createAdminClient();
 
@@ -165,6 +165,7 @@ export default async function AdminPage({
     { data: shopOrders },
     { data: fulfillmentOrders },
     { data: shippedRaw },
+    { data: awaitingOrders },
   ] = await Promise.all([
     admin
       .from("orders")
@@ -185,6 +186,12 @@ export default async function AdminPage({
       .from("orders")
       .select("id, order_number, customer_name, customer_email, created_at, tracking_number, return_label_url")
       .eq("status", "shipped_back")
+      .order("created_at", { ascending: true }),
+    admin
+      .from("orders")
+      .select("id, order_number, customer_name, customer_email, created_at, total_cents, restoration_tier, inbound_method")
+      .eq("status", "awaiting_cards")
+      .eq("payment_status", "paid")
       .order("created_at", { ascending: true }),
   ]);
 
@@ -257,6 +264,7 @@ export default async function AdminPage({
 
   const fulfillmentCount = fulfillmentOrders?.length ?? 0;
   const shippedCount = shippedRaw?.length ?? 0;
+  const awaitingCount = awaitingOrders?.length ?? 0;
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -300,6 +308,23 @@ export default async function AdminPage({
             }`}
           >
             All Orders
+          </Link>
+          <Link
+            href="/admin?tab=awaiting"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+              activeTab === "awaiting"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Awaiting Cards
+            {awaitingCount > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeTab === "awaiting" ? "bg-orange-100 text-orange-700" : "bg-orange-500 text-white"
+              }`}>
+                {awaitingCount}
+              </span>
+            )}
           </Link>
           <Link
             href="/admin?tab=fulfillment"
@@ -468,6 +493,59 @@ export default async function AdminPage({
             )}
           </>
         )}
+
+        {/* ── AWAITING CARDS TAB ── */}
+        {activeTab === "awaiting" && (() => {
+          function ageBadge(createdAt: string) {
+            const days = Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
+            let cls: string;
+            if (days <= 3)       cls = "bg-green-100 text-green-700";
+            else if (days <= 7)  cls = "bg-yellow-100 text-yellow-800";
+            else if (days <= 14) cls = "bg-orange-100 text-orange-700";
+            else                 cls = "bg-red-100 text-red-700";
+            return { days, cls };
+          }
+
+          return awaitingCount === 0 ? (
+            <div className="bg-white rounded-xl border border-border p-16 text-center">
+              <p className="text-2xl mb-2">📬</p>
+              <p className="font-heading font-black text-lg text-foreground">All cards received!</p>
+              <p className="text-sm text-muted-foreground mt-1">No orders are waiting for cards to arrive.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {(awaitingOrders ?? []).map((order) => {
+                const { days, cls } = ageBadge(order.created_at);
+                return (
+                  <Link
+                    key={order.id}
+                    href={`/admin/orders/${order.id}`}
+                    className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-1 flex-wrap">
+                        <span className="font-heading font-black text-foreground">#{order.order_number}</span>
+                        {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier as RestorationTierId].color}`}>
+                            {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-medium text-foreground">{order.customer_name}</p>
+                      <p className="text-sm text-muted-foreground">{order.customer_email}</p>
+                    </div>
+                    <div className="flex sm:flex-col items-center sm:items-end gap-3">
+                      <span className={`text-xs font-black px-3 py-1.5 rounded-full ${cls}`}>
+                        {days === 0 ? "Today" : days === 1 ? "1 day" : `${days} days`}
+                      </span>
+                      <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* ── FULFILLMENT TAB ── */}
         {activeTab === "fulfillment" && (
