@@ -173,9 +173,9 @@ export function StepReview({
               Card {i + 1}: {card.card_name}
             </p>
             <div className="flex flex-wrap gap-1">
-              {selectedTier ? (
+              {(card.tier ?? selectedTier) ? (
                 <span className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground">
-                  {getTierById(selectedTier).name} Restoration — {pricePerCard}
+                  {getTierById(card.tier ?? selectedTier!).name} Restoration — {formatCents(getTierById(card.tier ?? selectedTier!).price_cents)}
                 </span>
               ) : (
                 card.service_ids.map((sid) => {
@@ -185,7 +185,7 @@ export function StepReview({
                       key={sid}
                       className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground"
                     >
-                      {svc.name} — {pricePerCard}
+                      {svc.name} — {formatCurrency(getRatePerCard(cards.length))}
                     </span>
                   ) : null;
                 })
