@@ -14,6 +14,13 @@ const TIER_BADGES: Record<string, { label: string; color: string }> = {
   ultra_premium: { label: "Ultra Premium", color: "bg-purple-100 text-purple-800" },
 };
 
+const TIER_STYLES: Record<string, { label: string; cls: string }> = {
+  regular:       { label: "Regular",       cls: "bg-gray-100 text-gray-700" },
+  expedited:     { label: "Expedited",     cls: "bg-yellow-100 text-yellow-800" },
+  premium:       { label: "Premium",       cls: "bg-blue-100 text-blue-800" },
+  ultra_premium: { label: "Ultra Premium", cls: "bg-purple-100 text-purple-800" },
+};
+
 export const dynamic = "force-dynamic";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -27,13 +34,23 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
+const FULFILLMENT_STATUS_STYLES: Record<string, { label: string; cls: string }> = {
+  received:    { label: "Cards Received", cls: "bg-blue-100 text-blue-700" },
+  in_progress: { label: "In Progress",    cls: "bg-purple-100 text-purple-700" },
+};
+
+function daysAgo(date: string) {
+  return Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24));
+}
+
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; tab?: string }>;
 }) {
-  const { q } = await searchParams;
+  const { q, tab } = await searchParams;
   const query = q?.trim() ?? "";
+  const activeTab = tab === "fulfillment" ? "fulfillment" : "orders";
 
   const admin = createAdminClient();
 
@@ -58,7 +75,6 @@ export default async function AdminPage({
           .order("created_at", { ascending: false })
       : { data: [] };
 
-    // Merge and deduplicate
     const seen = new Set<string>();
     const matchedOrders: typeof nameMatches = [];
     for (const o of [...(nameMatches ?? []), ...(cardOrders ?? [])]) {
@@ -66,7 +82,6 @@ export default async function AdminPage({
     }
     matchedOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-    // Map order_id → matching card names for display
     const hitsByOrder: Record<string, string[]> = {};
     for (const c of matchingCards ?? []) {
       if (!hitsByOrder[c.order_id]) hitsByOrder[c.order_id] = [];
@@ -141,17 +156,28 @@ export default async function AdminPage({
     );
   }
 
-  // ── Default: all orders ───────────────────────────────────────────────────
-  const { data: orders } = await admin
-    .from("orders")
-    .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier")
-    .neq("status", "awaiting_payment")
-    .order("created_at", { ascending: false });
-
-  const { data: shopOrders } = await admin
-    .from("shop_orders")
-    .select("id, total_cents, created_at")
-    .order("created_at", { ascending: false });
+  // ── Fetch data for both tabs in parallel ──────────────────────────────────
+  const [
+    { data: orders },
+    { data: shopOrders },
+    { data: fulfillmentOrders },
+  ] = await Promise.all([
+    admin
+      .from("orders")
+      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier")
+      .neq("status", "awaiting_payment")
+      .order("created_at", { ascending: false }),
+    admin
+      .from("shop_orders")
+      .select("id, total_cents, created_at")
+      .order("created_at", { ascending: false }),
+    admin
+      .from("orders")
+      .select("id, order_number, customer_name, customer_email, created_at, status, restoration_tier, total_cents")
+      .in("status", ["received", "in_progress"])
+      .eq("payment_status", "paid")
+      .order("created_at", { ascending: true }),
+  ]);
 
   const orderIds = orders?.map((o) => o.id) ?? [];
   const { data: allCards } = orderIds.length > 0
@@ -162,6 +188,17 @@ export default async function AdminPage({
   for (const card of allCards ?? []) {
     if (!cardsByOrder[card.order_id]) cardsByOrder[card.order_id] = [];
     cardsByOrder[card.order_id].push(card.card_name);
+  }
+
+  // Card counts for fulfillment queue
+  const fulfillmentIds = (fulfillmentOrders ?? []).map((o) => o.id);
+  const { data: fulfillmentCards } = fulfillmentIds.length > 0
+    ? await admin.from("cards").select("order_id").in("order_id", fulfillmentIds)
+    : { data: [] };
+
+  const cardCountByOrder: Record<string, number> = {};
+  for (const row of fulfillmentCards ?? []) {
+    cardCountByOrder[row.order_id] = (cardCountByOrder[row.order_id] ?? 0) + 1;
   }
 
   const PAST_STATUSES = ["shipped_back", "delivered"];
@@ -183,18 +220,30 @@ export default async function AdminPage({
   const revenueEntries = allRevenue.map((o) => ({ cents: o.total_cents, createdAt: o.created_at }));
   const kitRevenueEntries = (shopOrders ?? []).map((o) => ({ cents: o.total_cents ?? 0, createdAt: o.created_at }));
 
+  const fulfillmentCount = fulfillmentOrders?.length ?? 0;
+
   return (
     <div className="min-h-screen bg-secondary/30">
       <div className="max-w-6xl mx-auto px-6 py-10">
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center gap-4">
+
+        {/* Header */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex-1">
-            <h1 className="font-heading font-black text-3xl text-foreground">Orders</h1>
-            <p className="text-muted-foreground text-sm mt-1">{allRevenue.length} total</p>
+            <h1 className="font-heading font-black text-3xl text-foreground">
+              {activeTab === "fulfillment" ? "Fulfillment Queue" : "Orders"}
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              {activeTab === "fulfillment"
+                ? "Cards in your hands — sorted oldest first"
+                : `${allRevenue.length} total`}
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <Suspense>
-              <CardSearch />
-            </Suspense>
+            {activeTab === "orders" && (
+              <Suspense>
+                <CardSearch />
+              </Suspense>
+            )}
             <Link
               href="/admin/orders/new"
               className="h-9 px-4 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors flex items-center whitespace-nowrap"
@@ -204,106 +253,229 @@ export default async function AdminPage({
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Orders This Month</p>
-            <p className="font-heading font-black text-3xl text-foreground">{thisMonthOrderCount}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Revenue This Month</p>
-            <p className="font-heading font-black text-3xl text-primary">{formatCurrency(monthRevenue)}</p>
-          </div>
+        {/* Tabs */}
+        <div className="flex gap-1 mb-7 border-b border-border">
+          <Link
+            href="/admin"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors ${
+              activeTab === "orders"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            All Orders
+          </Link>
+          <Link
+            href="/admin?tab=fulfillment"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+              activeTab === "fulfillment"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Fulfillment Queue
+            {fulfillmentCount > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeTab === "fulfillment" ? "bg-primary/10 text-primary" : "bg-primary text-white"
+              }`}>
+                {fulfillmentCount}
+              </span>
+            )}
+          </Link>
         </div>
 
-        {/* Charts */}
-        <div className="mb-8 flex flex-col gap-6">
-          <RevenueChart entries={revenueEntries} label="Total Revenue" />
-          <RevenueChart entries={kitRevenueEntries} label="Kit Sales" />
-        </div>
+        {/* ── ORDERS TAB ── */}
+        {activeTab === "orders" && (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="bg-white rounded-xl border border-border p-5">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Orders This Month</p>
+                <p className="font-heading font-black text-3xl text-foreground">{thisMonthOrderCount}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-border p-5">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Revenue This Month</p>
+                <p className="font-heading font-black text-3xl text-primary">{formatCurrency(monthRevenue)}</p>
+              </div>
+            </div>
 
-        {/* Active orders */}
-        {activeOrders.length === 0 ? (
-          <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
-            No active orders.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {activeOrders.map((order) => (
-              <Link
-                key={order.id}
-                href={`/admin/orders/${order.id}`}
-                className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1 flex-wrap">
-                    <span className="font-heading font-black text-foreground">#{order.order_number}</span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
-                      {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
-                    </span>
-                    {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier as RestorationTierId].color}`}>
-                        {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-medium text-foreground">{order.customer_name}</p>
-                  <p className="text-sm text-muted-foreground">{order.customer_email}</p>
-                  {order.customer_phone && <p className="text-sm text-muted-foreground">{order.customer_phone}</p>}
-                  {cardsByOrder[order.id]?.length > 0 && (
-                    <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
-                  )}
-                </div>
-                <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
-                  <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
-                  <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
+            {/* Charts */}
+            <div className="mb-8 flex flex-col gap-6">
+              <RevenueChart entries={revenueEntries} label="Total Revenue" />
+              <RevenueChart entries={kitRevenueEntries} label="Kit Sales" />
+            </div>
 
-        {/* Past orders */}
-        {pastOrders.length > 0 && (
-          <div className="mt-10">
-            <h2 className="font-heading font-black text-xl text-foreground mb-4">
-              Past Orders
-              <span className="ml-2 text-sm font-normal text-muted-foreground">({pastOrders.length})</span>
-            </h2>
-            <div className="flex flex-col gap-3">
-              {pastOrders.map((order) => (
-                <Link
-                  key={order.id}
-                  href={`/admin/orders/${order.id}`}
-                  className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors opacity-70 hover:opacity-100"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1 flex-wrap">
-                      <span className="font-heading font-black text-foreground">#{order.order_number}</span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
-                        {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
-                      </span>
-                      {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier as RestorationTierId].color}`}>
-                          {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
+            {/* Active orders */}
+            {activeOrders.length === 0 ? (
+              <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
+                No active orders.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {activeOrders.map((order) => (
+                  <Link
+                    key={order.id}
+                    href={`/admin/orders/${order.id}`}
+                    className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-1 flex-wrap">
+                        <span className="font-heading font-black text-foreground">#{order.order_number}</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                          {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
                         </span>
+                        {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier as RestorationTierId].color}`}>
+                            {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-medium text-foreground">{order.customer_name}</p>
+                      <p className="text-sm text-muted-foreground">{order.customer_email}</p>
+                      {order.customer_phone && <p className="text-sm text-muted-foreground">{order.customer_phone}</p>}
+                      {cardsByOrder[order.id]?.length > 0 && (
+                        <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
                       )}
                     </div>
-                    <p className="font-medium text-foreground">{order.customer_name}</p>
-                    <p className="text-sm text-muted-foreground">{order.customer_email}</p>
-                    {cardsByOrder[order.id]?.length > 0 && (
-                      <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
-                    )}
-                  </div>
-                  <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
-                    <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
-                    <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
+                    <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
+                      <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {/* Past orders */}
+            {pastOrders.length > 0 && (
+              <div className="mt-10">
+                <h2 className="font-heading font-black text-xl text-foreground mb-4">
+                  Past Orders
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">({pastOrders.length})</span>
+                </h2>
+                <div className="flex flex-col gap-3">
+                  {pastOrders.map((order) => (
+                    <Link
+                      key={order.id}
+                      href={`/admin/orders/${order.id}`}
+                      className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors opacity-70 hover:opacity-100"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1 flex-wrap">
+                          <span className="font-heading font-black text-foreground">#{order.order_number}</span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                            {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
+                          </span>
+                          {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier as RestorationTierId].color}`}>
+                              {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
+                            </span>
+                          )}
+                        </div>
+                        <p className="font-medium text-foreground">{order.customer_name}</p>
+                        <p className="text-sm text-muted-foreground">{order.customer_email}</p>
+                        {cardsByOrder[order.id]?.length > 0 && (
+                          <p className="text-sm text-foreground font-medium mt-1">{cardsByOrder[order.id].join(", ")}</p>
+                        )}
+                      </div>
+                      <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
+                        <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
+                        <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
+
+        {/* ── FULFILLMENT TAB ── */}
+        {activeTab === "fulfillment" && (
+          <>
+            {fulfillmentCount === 0 ? (
+              <div className="bg-white rounded-xl border border-border p-16 text-center">
+                <p className="text-2xl mb-2">✅</p>
+                <p className="font-heading font-black text-lg text-foreground">All caught up!</p>
+                <p className="text-sm text-muted-foreground mt-1">No orders are waiting to be fulfilled.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/40">
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Order</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tier</th>
+                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Cards</th>
+                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Days Waiting</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(fulfillmentOrders ?? []).map((order) => {
+                      const tier = order.restoration_tier as RestorationTierId | null;
+                      const tierStyle = tier ? TIER_STYLES[tier] : null;
+                      const statusStyle = FULFILLMENT_STATUS_STYLES[order.status];
+                      const days = daysAgo(order.created_at);
+                      const cards = cardCountByOrder[order.id] ?? 0;
+
+                      return (
+                        <tr
+                          key={order.id}
+                          className={`border-b border-border last:border-0 hover:bg-secondary/20 transition-colors ${
+                            days >= 7 ? "bg-red-50/40" : days >= 4 ? "bg-yellow-50/30" : ""
+                          }`}
+                        >
+                          <td className="px-4 py-3">
+                            <Link href={`/admin/orders/${order.id}`} className="font-mono font-bold text-primary hover:underline">
+                              #{order.order_number}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-foreground">{order.customer_name}</p>
+                            <p className="text-xs text-muted-foreground">{order.customer_email}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            {tierStyle ? (
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tierStyle.cls}`}>
+                                {tierStyle.label}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center font-bold text-foreground">{cards}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`font-bold text-sm ${
+                              days >= 7 ? "text-red-600" : days >= 4 ? "text-yellow-600" : "text-foreground"
+                            }`}>
+                              {days}d
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {statusStyle && (
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusStyle.cls}`}>
+                                {statusStyle.label}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Link href={`/admin/orders/${order.id}`} className="text-xs font-bold text-primary hover:underline">
+                              View →
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
       </div>
     </div>
   );
