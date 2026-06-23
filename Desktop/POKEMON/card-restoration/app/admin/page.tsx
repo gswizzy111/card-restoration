@@ -233,6 +233,21 @@ export default async function AdminPage({
     }
   }
 
+  // Cards for awaiting queue (names + photos)
+  const awaitingIds = (awaitingOrders ?? []).map((o) => o.id);
+  const { data: awaitingCards } = awaitingIds.length > 0
+    ? await admin.from("cards").select("order_id, card_name, photo_urls").in("order_id", awaitingIds)
+    : { data: [] };
+
+  const awaitingCardsByOrder: Record<string, { name: string; photos: string[] }[]> = {};
+  for (const card of awaitingCards ?? []) {
+    if (!awaitingCardsByOrder[card.order_id]) awaitingCardsByOrder[card.order_id] = [];
+    awaitingCardsByOrder[card.order_id].push({
+      name: card.card_name,
+      photos: Array.isArray(card.photo_urls) ? card.photo_urls : [],
+    });
+  }
+
   // Card counts for fulfillment queue
   const fulfillmentIds = (fulfillmentOrders ?? []).map((o) => o.id);
   const { data: fulfillmentCards } = fulfillmentIds.length > 0
@@ -521,7 +536,7 @@ export default async function AdminPage({
                   <Link
                     key={order.id}
                     href={`/admin/orders/${order.id}`}
-                    className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
+                    className="bg-white rounded-xl border border-border p-5 flex flex-col sm:flex-row sm:items-start gap-4 hover:border-primary/40 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-1 flex-wrap">
@@ -533,9 +548,18 @@ export default async function AdminPage({
                         )}
                       </div>
                       <p className="font-medium text-foreground">{order.customer_name}</p>
-                      <p className="text-sm text-muted-foreground">{order.customer_email}</p>
+                      <p className="text-sm text-muted-foreground mb-3">{order.customer_email}</p>
+                      {(awaitingCardsByOrder[order.id] ?? []).map((card, i) => (
+                        <div key={i} className="flex items-center gap-3 mb-2">
+                          {card.photos[0] && (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={card.photos[0]} alt={card.name} className="w-12 h-12 object-cover rounded-lg border border-border flex-shrink-0" />
+                          )}
+                          <span className="text-sm font-medium text-foreground">{card.name}</span>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex sm:flex-col items-center sm:items-end gap-3">
+                    <div className="flex sm:flex-col items-center sm:items-end gap-3 sm:pt-0.5">
                       <span className={`text-xs font-black px-3 py-1.5 rounded-full ${cls}`}>
                         {days === 0 ? "Today" : days === 1 ? "1 day" : `${days} days`}
                       </span>
