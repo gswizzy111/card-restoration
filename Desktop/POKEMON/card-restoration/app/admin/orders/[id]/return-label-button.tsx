@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Rate = {
   objectId: string;
@@ -22,6 +23,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
   const [selectedRate, setSelectedRate] = useState<Rate | null>(null);
   const [labelUrl, setLabelUrl] = useState<string | null>(existingLabelUrl ?? null);
   const [errorMsg, setErrorMsg] = useState("");
+  const router = useRouter();
 
   if (labelUrl) {
     return (
@@ -66,6 +68,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
       if (!res.ok) throw new Error(data.error ?? "Purchase failed");
       setLabelUrl(data.labelUrl);
       setState("done");
+      router.refresh();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Unknown error");
       setState("error");

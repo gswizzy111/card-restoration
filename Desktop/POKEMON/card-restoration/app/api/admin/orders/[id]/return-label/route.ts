@@ -110,10 +110,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const admin = createAdminClient();
   await admin
     .from("orders")
-    .update({ return_label_url: transaction.labelUrl, tracking_number: transaction.trackingNumber ?? null })
+    .update({
+      return_label_url: transaction.labelUrl,
+      tracking_number: transaction.trackingNumber ?? null,
+      status: "shipped_back",
+    })
     .eq("id", id);
 
   const trackingNumber = transaction.trackingNumber ?? null;
+
+  await admin.from("order_events").insert({
+    order_id: id,
+    event_type: "status_updated",
+    description: trackingNumber
+      ? `Return label purchased — marked Shipped Back. Tracking: ${trackingNumber}`
+      : "Return label purchased — marked Shipped Back.",
+    is_customer_visible: true,
+  });
   const trackingUrl = transaction.trackingUrlProvider ?? null;
 
   if (order.customer_email && trackingNumber) {
