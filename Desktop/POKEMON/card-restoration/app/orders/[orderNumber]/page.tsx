@@ -224,7 +224,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
       </div>
 
       <p className="text-center text-sm text-muted-foreground">
-        Questions? Email us at <a href="mailto:gavinfraiman33@gmail.com" className="text-primary font-medium">gavinfraiman33@gmail.com</a>
+        Questions? Email us at <a href={`mailto:${process.env.CONTACT_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL}`} className="text-primary font-medium">{process.env.CONTACT_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL}</a>
       </p>
     </div>
   );

@@ -120,7 +120,7 @@ export async function POST(request: Request) {
       }
 
       // Notify admin
-      const adminEmail = process.env.ADMIN_NOTIFY_EMAIL ?? "gavinfraiman33@gmail.com";
+      const adminEmail = process.env.ADMIN_NOTIFY_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL ?? "";
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
       try {
         await resend.emails.send({
@@ -301,7 +301,7 @@ export async function POST(request: Request) {
     });
 
     // Notify admin of new restoration order
-    const adminEmail = process.env.ADMIN_NOTIFY_EMAIL ?? "gavinfraiman33@gmail.com";
+    const adminEmail = process.env.ADMIN_NOTIFY_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL ?? "";
     const appUrl2 = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
     const o = updated[0];
     const shipFromAddr = o.ship_from_address as Record<string, string> | null;

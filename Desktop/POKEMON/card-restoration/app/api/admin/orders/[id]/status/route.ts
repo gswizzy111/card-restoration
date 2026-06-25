@@ -90,7 +90,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               <p style="margin:4px 0 0;font-weight:700;font-size:16px">${statusLabel}</p>
             </div>
             <a href="${trackingUrl}" style="display:inline-block;background:#c0392b;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Track Your Order</a>
-            <p style="font-size:13px;color:#666;margin-top:24px">Questions? Email us at <a href="mailto:gavinfraiman33@gmail.com" style="color:#c0392b">gavinfraiman33@gmail.com</a></p>
+            <p style="font-size:13px;color:#666;margin-top:24px">Questions? Email us at <a href="mailto:${process.env.CONTACT_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL}" style="color:#c0392b">${process.env.CONTACT_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL}</a></p>
             <p style="font-size:13px;color:#999">${businessName}</p>
           </div>
         `,
@@ -102,7 +102,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // Notify admin when cards arrive
   if (status === "received" && order) {
-    const adminEmail = process.env.ADMIN_NOTIFY_EMAIL ?? "gavinfraiman33@gmail.com";
+    const adminEmail = process.env.ADMIN_NOTIFY_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL ?? "";
     try {
       await resend.emails.send({
         from: fromEmail,

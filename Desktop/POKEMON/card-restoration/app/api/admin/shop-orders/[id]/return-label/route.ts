@@ -149,7 +149,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             </div>
 
             <p style="font-size:14px;color:#666;">You can also copy the tracking number above and paste it on your carrier's website to follow your package.</p>
-            <p style="font-size:13px;color:#666;margin-top:24px">Questions? Email us at <a href="mailto:gavinfraiman33@gmail.com" style="color:#c0392b">gavinfraiman33@gmail.com</a></p>
+            <p style="font-size:13px;color:#666;margin-top:24px">Questions? Email us at <a href="mailto:${process.env.CONTACT_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL}" style="color:#c0392b">${process.env.CONTACT_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL}</a></p>
             <p style="font-size:13px;color:#999">${businessName}</p>
           </div>
         `,
