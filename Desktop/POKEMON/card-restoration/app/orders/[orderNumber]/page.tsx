@@ -142,7 +142,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
           <p className="text-xs font-bold uppercase tracking-widest text-cyan-700 mb-1">Return Tracking</p>
           <p className="font-mono font-black text-xl text-cyan-900 tracking-widest mb-3">{order.tracking_number}</p>
           <a
-            href={`https://www.17track.net/en/track?nums=${order.tracking_number}`}
+            href={`https://tools.usps.com/go/TrackConfirmAction?tLabels=${order.tracking_number}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block text-xs font-bold px-3 py-1.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors"
