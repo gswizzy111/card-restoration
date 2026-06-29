@@ -66,6 +66,17 @@ export async function POST(request: Request) {
     });
   }
 
+  // 6% sales tax on product subtotal (not shipping)
+  const productSubtotalCents = data.items.reduce(
+    (sum, item) => sum + productMap[item.id].price_cents * item.quantity,
+    0
+  );
+  const taxCents = Math.round(productSubtotalCents * 0.06);
+  lineItems.push({
+    price_data: { currency: "usd", product_data: { name: "Sales Tax (6%)" }, unit_amount: taxCents },
+    quantity: 1,
+  });
+
   // For international: add shipping as a line item
   if (isInternational && data.international_shipping_cents) {
     lineItems.push({
