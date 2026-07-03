@@ -70,7 +70,7 @@ function UpsellInner() {
 
         {/* Header */}
         <div className="mb-8 text-center">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Before you check out</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Pre-Checkout</p>
           <h1 className="font-heading font-black text-3xl md:text-4xl text-foreground">Want to add anything else?</h1>
           <p className="text-muted-foreground text-sm mt-2">These pair great with your order.</p>
         </div>

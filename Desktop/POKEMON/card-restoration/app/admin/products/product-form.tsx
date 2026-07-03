@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,6 @@ interface ProductFormProps {
     category: string;
     inventory_count: number;
     active: boolean;
-    is_upsell: boolean;
     images: string[];
     weight_oz: number;
   };
@@ -37,11 +36,44 @@ export function ProductForm({ initial }: ProductFormProps) {
     category: initial?.category ?? "Cleaning",
     inventory: initial?.inventory_count?.toString() ?? "0",
     active: initial?.active ?? true,
-    is_upsell: initial?.is_upsell ?? false,
     weight_oz: initial?.weight_oz?.toString() ?? "4",
   });
   const [imageUrls, setImageUrls] = useState<string[]>(initial?.images ?? []);
   const [uploading, setUploading] = useState(false);
+
+  // Upsell toggle — stored separately in storage config, not in DB column
+  const [isUpsell, setIsUpsell] = useState(false);
+  const [upsellSaving, setUpsellSaving] = useState(false);
+
+  useEffect(() => {
+    if (!initial?.id) return;
+    fetch("/api/shop/upsell-products/ids")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.ids)) setIsUpsell(d.ids.includes(initial.id));
+      })
+      .catch(() => {});
+  }, [initial?.id]);
+
+  async function handleUpsellToggle(enabled: boolean) {
+    if (!initial?.id) return;
+    setIsUpsell(enabled);
+    setUpsellSaving(true);
+    try {
+      const res = await fetch("/api/admin/products/upsell-toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: initial.id, enabled }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      toast.success(enabled ? "Added to checkout upsell" : "Removed from checkout upsell");
+    } catch {
+      setIsUpsell(!enabled); // revert
+      toast.error("Failed to update upsell setting");
+    }
+    setUpsellSaving(false);
+  }
 
   function set(field: string, value: string | boolean) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -80,7 +112,6 @@ export function ProductForm({ initial }: ProductFormProps) {
       category: form.category,
       inventory_count: parseInt(form.inventory) || 0,
       active: form.active,
-      is_upsell: form.is_upsell,
       images: imageUrls,
       weight_oz: parseFloat(form.weight_oz) || 4,
     };
@@ -161,16 +192,21 @@ export function ProductForm({ initial }: ProductFormProps) {
           />
           <Label htmlFor="active">Visible in shop</Label>
         </div>
-        <div className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            id="is_upsell"
-            checked={form.is_upsell as boolean}
-            onChange={(e) => set("is_upsell", e.target.checked)}
-            className="w-4 h-4 accent-primary"
-          />
-          <Label htmlFor="is_upsell">Show in checkout upsell</Label>
-        </div>
+        {initial?.id && (
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="is_upsell"
+              checked={isUpsell}
+              disabled={upsellSaving}
+              onChange={(e) => handleUpsellToggle(e.target.checked)}
+              className="w-4 h-4 accent-primary"
+            />
+            <Label htmlFor="is_upsell" className={upsellSaving ? "opacity-50" : ""}>
+              Show in checkout upsell {upsellSaving && "(saving…)"}
+            </Label>
+          </div>
+        )}
       </div>
 
       {/* Images */}
