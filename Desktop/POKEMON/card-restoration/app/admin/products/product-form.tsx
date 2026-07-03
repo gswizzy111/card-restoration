@@ -20,6 +20,7 @@ interface ProductFormProps {
     category: string;
     inventory_count: number;
     active: boolean;
+    is_upsell: boolean;
     images: string[];
     weight_oz: number;
   };
@@ -36,6 +37,7 @@ export function ProductForm({ initial }: ProductFormProps) {
     category: initial?.category ?? "Cleaning",
     inventory: initial?.inventory_count?.toString() ?? "0",
     active: initial?.active ?? true,
+    is_upsell: initial?.is_upsell ?? false,
     weight_oz: initial?.weight_oz?.toString() ?? "4",
   });
   const [imageUrls, setImageUrls] = useState<string[]>(initial?.images ?? []);
@@ -78,6 +80,7 @@ export function ProductForm({ initial }: ProductFormProps) {
       category: form.category,
       inventory_count: parseInt(form.inventory) || 0,
       active: form.active,
+      is_upsell: form.is_upsell,
       images: imageUrls,
       weight_oz: parseFloat(form.weight_oz) || 4,
     };
@@ -157,6 +160,16 @@ export function ProductForm({ initial }: ProductFormProps) {
             className="w-4 h-4 accent-primary"
           />
           <Label htmlFor="active">Visible in shop</Label>
+        </div>
+        <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            id="is_upsell"
+            checked={form.is_upsell as boolean}
+            onChange={(e) => set("is_upsell", e.target.checked)}
+            className="w-4 h-4 accent-primary"
+          />
+          <Label htmlFor="is_upsell">Show in checkout upsell</Label>
         </div>
       </div>
 

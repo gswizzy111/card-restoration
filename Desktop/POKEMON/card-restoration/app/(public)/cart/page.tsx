@@ -95,10 +95,10 @@ export default function CartPage() {
                 <span className="text-primary">{formatCurrency(totalCents + taxCents)}</span>
               </div>
             </div>
-            <Button render={<Link href="/cart/checkout" />} className="w-full font-semibold">
+            <Button render={<Link href="/cart/upsell" />} className="w-full font-semibold">
               Checkout — US Shipping
             </Button>
-            <Button render={<Link href="/cart/checkout?international=true" />} className="w-full font-semibold mt-2" variant="outline">
+            <Button render={<Link href="/cart/upsell?international=true" />} className="w-full font-semibold mt-2" variant="outline">
               International Shipping
             </Button>
             <Link href="/shop" className="block text-center text-sm text-muted-foreground hover:text-foreground mt-3 transition-colors">

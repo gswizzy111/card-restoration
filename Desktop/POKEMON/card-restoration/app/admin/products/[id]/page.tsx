@@ -26,6 +26,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           category: product.category,
           inventory_count: product.inventory_count,
           active: product.active,
+          is_upsell: product.is_upsell ?? false,
           images: product.images ?? [],
           weight_oz: product.weight_oz ?? 4,
         }} />
