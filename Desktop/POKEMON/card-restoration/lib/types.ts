@@ -20,6 +20,7 @@ export interface CardEntry {
   photo_urls: string[];
   service_ids: string[];
   tier?: import("@/lib/restoration-tiers").RestorationTierId;
+  needs_slab_crack?: boolean;
 }
 
 export interface CustomerInfo {

@@ -197,6 +197,23 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                 onChange={(urls) => updateCard(card.id, { photo_urls: urls })}
               />
             </div>
+
+            {/* Slab cracking */}
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+              <input
+                type="checkbox"
+                id={`slab-${card.id}`}
+                checked={card.needs_slab_crack ?? false}
+                onChange={(e) => updateCard(card.id, { needs_slab_crack: e.target.checked })}
+                className="w-4 h-4 mt-0.5 accent-amber-600 flex-shrink-0"
+              />
+              <label htmlFor={`slab-${card.id}`} className="text-sm cursor-pointer">
+                <span className="font-semibold text-amber-900">Need your slab cracked? +$7</span>
+                <span className="block text-amber-700 text-xs mt-0.5">
+                  Check this if your card is currently in a PSA, BGS, or other graded slab and needs to be removed before restoration.
+                </span>
+              </label>
+            </div>
           </div>
         ))}
       </div>

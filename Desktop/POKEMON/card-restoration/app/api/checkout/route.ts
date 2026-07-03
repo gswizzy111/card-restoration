@@ -51,6 +51,7 @@ const BodySchema = z.object({
   affiliate_code: z.string().optional(),
   insurance_declared_value_cents: z.number().int().min(100).max(1_000_000).optional(),
   insurance_type: z.enum(["inbound", "round_trip"]).optional(),
+  slab_crack_count: z.number().int().min(0).max(100).optional(),
 });
 
 export async function POST(request: Request) {
@@ -166,6 +167,10 @@ export async function POST(request: Request) {
   const TAX_RATE = 0.065;
   const taxCents = Math.round((subtotalCents - discountCents) * TAX_RATE);
 
+  // Slab cracking — $7/slab, server-side, capped at card count
+  const slabCrackCount = Math.min(data.slab_crack_count ?? 0, data.cards.length);
+  const slabCrackCents = slabCrackCount * 700;
+
   // Compute insurance server-side — never trust client price
   const SHIPPO_RATE = 0.015;
   const SHIPPO_MIN_CENTS = 250;
@@ -177,7 +182,7 @@ export async function POST(request: Request) {
     insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;
   }
 
-  const totalCents = subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents;
+  const totalCents = subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents;
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -309,6 +314,12 @@ export async function POST(request: Request) {
     lineItems.push({
       price_data: { currency: "usd", product_data: { name: insLabel }, unit_amount: insuranceChargeCents },
       quantity: 1,
+    });
+  }
+  if (slabCrackCents > 0) {
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: "Slab Cracking" }, unit_amount: 700 },
+      quantity: slabCrackCount,
     });
   }
 

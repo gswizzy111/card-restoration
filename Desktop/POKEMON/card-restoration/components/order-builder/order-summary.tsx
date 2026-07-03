@@ -33,7 +33,9 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
   const insuranceCents = INSURANCE_ENABLED ? (insurance?.chargeCents ?? 0) : 0;
-  const total = subtotal - discountCents + shipping + insuranceCents;
+  const slabCrackCount = cards.filter((c) => c.needs_slab_crack).length;
+  const slabCrackCents = slabCrackCount * 700;
+  const total = subtotal - discountCents + shipping + insuranceCents + slabCrackCents;
 
   const turnaroundText = isMixed
     ? "Turnaround varies by tier"
@@ -92,6 +94,12 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
           <div className="flex justify-between text-muted-foreground">
             <span>Insurance</span>
             <span>{formatCurrency(insuranceCents)}</span>
+          </div>
+        )}
+        {slabCrackCents > 0 && (
+          <div className="flex justify-between text-amber-700">
+            <span>Slab Cracking × {slabCrackCount}</span>
+            <span>{formatCurrency(slabCrackCents)}</span>
           </div>
         )}
         <div className="flex justify-between font-bold text-foreground pt-1 border-t border-border text-base">
