@@ -288,7 +288,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">17. Contact Us</h2>
             <p>
-              If you have any questions about these Terms or our Services, please contact us via DM on Instagram @thecarddoc. We reply
+              If you have any questions about these Terms or our Services, please contact us via DM on Instagram @thecarddoc1 or email thecarddoc1@gmail.com. We reply
               within 1 business day.
             </p>
           </section>
