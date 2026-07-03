@@ -29,12 +29,12 @@ export function Footer() {
           <div className="flex flex-col gap-3">
             <p className="text-xs font-bold uppercase tracking-widest text-white/40">Contact</p>
             <a
-              href="https://www.instagram.com/thecarddoc1"
+              href="https://www.instagram.com/the_card_doc"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-white/60 hover:text-white transition-colors"
             >
-              DM us on @thecarddoc1
+              DM us on @the_card_doc
             </a>
             <a
               href="mailto:thecarddoc1@gmail.com"
