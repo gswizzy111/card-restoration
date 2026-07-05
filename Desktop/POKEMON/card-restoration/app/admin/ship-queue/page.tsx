@@ -15,6 +15,7 @@ type ShippingAddress = {
 };
 
 type OrderItem = {
+  product_id?: string;
   product_name: string;
   quantity: number;
 };
@@ -52,6 +53,7 @@ export default async function ShipQueuePage() {
             {queue.map((order) => {
               const addr = order.shipping_address as ShippingAddress | null;
               const items = (order.items as OrderItem[] | null) ?? [];
+              const isSubscription = items.some((i) => i.product_id === "subscription");
 
               return (
                 <div key={order.id} className="bg-white rounded-xl border border-border p-6">
@@ -59,8 +61,11 @@ export default async function ShipQueuePage() {
 
                     {/* Order info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <p className="font-heading font-black text-lg text-foreground">{order.customer_name}</p>
+                        {isSubscription && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Subscription</span>
+                        )}
                         {order.status === "processing" && (
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Processing</span>
                         )}

@@ -148,16 +148,20 @@ export default async function ShopOrdersPage() {
           {orders?.map((order) => {
             const address = order.shipping_address as ShippingAddress | null;
             const items = (order.items ?? []) as ShopOrderItem[];
+            const isSubscription = items.some((i) => i.product_id === "subscription");
 
             return (
               <div key={order.id} className="bg-white rounded-xl border border-border p-6">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <p className="font-heading font-black text-lg text-foreground">{order.customer_name}</p>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
                         {order.status}
                       </span>
+                      {isSubscription && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Subscription</span>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">{order.customer_email}</p>
                     {order.customer_phone && <p className="text-sm text-muted-foreground">{order.customer_phone}</p>}
