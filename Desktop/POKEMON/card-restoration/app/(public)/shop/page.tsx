@@ -52,12 +52,30 @@ export default async function ShopPage() {
     .order("display_order", { ascending: true });
 
   return (
-    <div className="max-w-7xl mx-auto px-6 md:px-10 py-14">
+    <div className="max-w-7xl mx-auto px-6 md:px-10 py-14 pb-28 md:pb-14">
       {/* Header — centered */}
       <div className="mb-10 text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary mb-3">The Card Doc</p>
         <h1 className="font-heading text-4xl md:text-5xl text-foreground">Restoration Kits</h1>
       </div>
+
+      {/* Restoration CTA card */}
+      <a
+        href="/restoration"
+        className="flex items-center gap-5 bg-[#1a8fe0] rounded-2xl p-5 mb-10 hover:bg-[#1570c9] active:scale-[0.98] transition-all duration-150 group"
+        style={{ boxShadow: "0 4px 24px rgba(26,143,224,0.25)" }}
+      >
+        <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 text-3xl">
+          🃏
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-black text-white text-lg leading-tight">Book a Card Restoration</p>
+          <p className="text-white/80 text-sm mt-0.5">
+            Professional cleaning, crease removal &amp; PSA prep. Starting from $25/card.
+          </p>
+        </div>
+        <span className="text-white/80 text-2xl font-light flex-shrink-0 group-hover:translate-x-1 transition-transform">→</span>
+      </a>
 
       {/* Empty state */}
       {products?.length === 0 && (
