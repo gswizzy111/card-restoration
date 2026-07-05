@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { CreateKitOrderButton } from "./create-kit-order-button";
 
 export const dynamic = "force-dynamic";
 
@@ -185,15 +186,18 @@ export default async function AdminSubscriptionsPage() {
                   </p>
 
                   {/* Kit stats */}
-                  <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                    <span>
-                      <span className="font-bold text-foreground">{myOrders.length}</span> kits billed
+                  <div className="flex flex-wrap gap-3 mt-2">
+                    <span className="text-xs text-muted-foreground">
+                      <span className="font-bold text-foreground">{myOrders.length}</span> kit order{myOrders.length !== 1 ? "s" : ""} on record
                     </span>
-                    <span>
-                      <span className="font-bold text-foreground">{shippedCount}</span> shipped
+                    <span className="text-xs text-muted-foreground">
+                      <span className="font-bold text-foreground">{shippedCount}</span> shipped/delivered
                     </span>
                     {lastOrder && (
-                      <span>Last: {formatDate(lastOrder.created_at)}</span>
+                      <span className="text-xs text-muted-foreground">Last: {formatDate(lastOrder.created_at)}</span>
+                    )}
+                    {myOrders.length === 0 && sub.status === "active" && (
+                      <span className="text-xs font-bold text-red-600">No kit orders found — create one below</span>
                     )}
                   </div>
                 </div>
@@ -217,6 +221,11 @@ export default async function AdminSubscriptionsPage() {
                     >
                       Ship kit →
                     </Link>
+                  )}
+                  {pendingOrders.length === 0 && sub.status === "active" && (
+                    <div className="mt-2">
+                      <CreateKitOrderButton subscriptionId={sub.id} />
+                    </div>
                   )}
                 </div>
               </div>

@@ -166,6 +166,20 @@ export async function POST(request: Request) {
         status: "active",
       });
 
+      // Create the first kit order immediately — don't rely on invoice.paid which can race
+      await admin2.from("shop_orders").insert({
+        stripe_session_id: session.id,
+        customer_name: session.metadata.customer_name ?? "",
+        customer_email: session.customer_email ?? "",
+        customer_phone: session.metadata.customer_phone ?? "",
+        shipping_address: shippingAddress,
+        items: [{ product_id: "subscription", product_name: "Monthly Kit Club", quantity: 1, price_cents: 6299 }],
+        subtotal_cents: 6299,
+        shipping_cents: 0,
+        total_cents: 6299,
+        status: "paid",
+      });
+
       const subCustomerEmail = session.customer_email;
       const subCustomerName = session.metadata.customer_name ?? "";
       if (subCustomerEmail) {
@@ -390,6 +404,10 @@ export async function POST(request: Request) {
   // ── Invoice paid (recurring subscription billing) ─────────────────────
   if (event.type === "invoice.paid") {
     const invoice = event.data.object as Stripe.Invoice;
+    // Skip the first invoice — it's handled by checkout.session.completed above to avoid race conditions
+    if ((invoice as { billing_reason?: string | null }).billing_reason === "subscription_create") {
+      return Response.json({ received: true });
+    }
     const subscriptionId = (invoice as { subscription?: string | null }).subscription;
     if (subscriptionId) {
       const adminInv = createAdminClient();
