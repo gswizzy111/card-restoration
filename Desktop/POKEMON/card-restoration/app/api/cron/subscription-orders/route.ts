@@ -1,3 +1,4 @@
+import Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 
@@ -27,8 +28,9 @@ export async function GET(request: Request) {
       ...(startingAfter ? { starting_after: startingAfter } : {}),
     });
 
-    for (const invoice of invoices.data) {
-      if (!invoice.subscription) continue;
+    for (const invoice of invoices.data as Stripe.Invoice[]) {
+      const subscriptionId = (invoice as { subscription?: string | null }).subscription;
+      if (!subscriptionId) continue;
 
       // Already have a shop_order for this invoice?
       const { data: existing } = await admin
@@ -42,7 +44,7 @@ export async function GET(request: Request) {
       const { data: sub } = await admin
         .from("subscriptions")
         .select("*")
-        .eq("stripe_subscription_id", String(invoice.subscription))
+        .eq("stripe_subscription_id", subscriptionId)
         .maybeSingle();
       if (!sub) continue;
 
