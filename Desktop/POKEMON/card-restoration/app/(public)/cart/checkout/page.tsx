@@ -10,6 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { US_STATES } from "@/lib/constants";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
+
+const INPUT_CN = "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm";
 
 const COUNTRIES = [
   { code: "CA", name: "Canada" },
@@ -254,7 +257,13 @@ function CheckoutInner() {
               )}
               <div className="sm:col-span-2 flex flex-col gap-1.5">
                 <Label>Street Address *</Label>
-                <Input value={form.street1} onChange={(e) => set("street1", e.target.value)} placeholder="123 Main St" />
+                <AddressAutocomplete
+                  value={form.street1}
+                  onChange={(v) => set("street1", v)}
+                  onPlaceSelect={(f) => setForm((prev) => ({ ...prev, street1: f.street1, city: f.city, state: f.state, zip: f.zip }))}
+                  className={INPUT_CN}
+                  placeholder="123 Main St"
+                />
               </div>
               <div className="sm:col-span-2 flex flex-col gap-1.5">
                 <Label>Apt / Suite</Label>

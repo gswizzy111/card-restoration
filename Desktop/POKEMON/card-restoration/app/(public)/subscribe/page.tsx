@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { US_STATES } from "@/lib/constants";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 export default function SubscribePage() {
   const router = useRouter();
@@ -150,13 +151,11 @@ export default function SubscribePage() {
               <label htmlFor="street1" className="block text-sm font-medium text-foreground mb-1">
                 Street Address *
               </label>
-              <input
+              <AddressAutocomplete
                 id="street1"
-                name="street1"
-                type="text"
-                required
                 value={form.street1}
-                onChange={handleChange}
+                onChange={(v) => setForm((prev) => ({ ...prev, street1: v }))}
+                onPlaceSelect={(f) => setForm((prev) => ({ ...prev, street1: f.street1, city: f.city, state: f.state, zip: f.zip }))}
                 placeholder="123 Main St"
                 className="w-full rounded-lg border border-border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
