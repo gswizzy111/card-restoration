@@ -372,8 +372,8 @@ export async function POST(request: Request) {
           <p style="margin:0 0 8px;font-weight:700;color:#78350f">Ship Your Cards To Us</p>
           <p style="margin:0 0 4px;color:#92400e;font-size:14px">Please send your cards to the address below using a tracked, insured method:</p>
           <p style="margin:8px 0 0;color:#78350f;font-weight:600;font-size:14px">
-            The Card Doc<br>
-            ${process.env.BUSINESS_SHIPPING_STREET1 ?? ""}<br>
+            ${process.env.BUSINESS_SHIPPING_NAME ?? "The Card Doc"}<br>
+            ${process.env.BUSINESS_SHIPPING_STREET1 ?? ""}${process.env.BUSINESS_SHIPPING_STREET2 ? `<br>${process.env.BUSINESS_SHIPPING_STREET2}` : ""}<br>
             ${process.env.BUSINESS_SHIPPING_CITY ?? ""}, ${process.env.BUSINESS_SHIPPING_STATE ?? ""} ${process.env.BUSINESS_SHIPPING_ZIP ?? ""}<br>
             United States
           </p>
