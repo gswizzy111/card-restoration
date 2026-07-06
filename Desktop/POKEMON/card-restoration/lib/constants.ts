@@ -73,6 +73,7 @@ export const US_STATES = [
   { value: "WI", label: "Wisconsin" },
   { value: "WY", label: "Wyoming" },
   { value: "DC", label: "Washington, D.C." },
+  { value: "PR", label: "Puerto Rico" },
 ];
 
 export const INTERNATIONAL_COUNTRIES = [
