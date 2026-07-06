@@ -52,19 +52,19 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
   const products = productResult.data ?? [];
   const productMap = new Map(products.map((p) => [p.id, p.name]));
 
+  // NJ sales tax rate — applied to all revenue (shipping excluded)
+  const TAX_RATE = 0.06625;
+
   // ── Kit Sales ────────────────────────────────────────
   type ProductStat = { name: string; units: number; revenue_cents: number; cogs_cents: number };
   const productStats: Record<string, ProductStat> = {};
   let kitRevenue = 0;
   let kitShipping = 0;
-  let taxCollected = 0;
   let kitCogs = 0;
 
   for (const order of shopOrders) {
     kitRevenue += order.total_cents ?? 0;
     kitShipping += order.shipping_cents ?? 0;
-    const tax = Math.max(0, (order.total_cents ?? 0) - (order.subtotal_cents ?? 0) - (order.shipping_cents ?? 0));
-    taxCollected += tax;
 
     const items: Array<{ product_id?: string; product_name?: string; quantity?: number; price_cents?: number }> =
       Array.isArray(order.items) ? order.items : [];
@@ -111,7 +111,10 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
   // ── Totals ───────────────────────────────────────────
   const totalRevenue = kitRevenue + restRevenue;
   const totalCogs = kitCogs + restCogs;
-  const netProfit = totalRevenue - totalCogs - taxCollected;
+  // Tax owed = 6.625% of all revenue excluding shipping (shipping is not taxable in NJ)
+  const taxableRevenue = (kitRevenue - kitShipping) + restRevenue;
+  const taxOwed = Math.round(taxableRevenue * TAX_RATE);
+  const netProfit = totalRevenue - totalCogs - taxOwed;
   const margin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
   const hasCosts = Object.values(costConfig.products).some((p) => p.cost_cents > 0) ||
     Object.values(costConfig.restoration).some((v) => v > 0);
@@ -138,7 +141,7 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard label="Gross Revenue" value={formatCurrency(totalRevenue)} color="green" />
         <StatCard label="Cost of Goods" value={formatCurrency(totalCogs)} color="red" />
-        <StatCard label="Tax Owed (NJ)" value={formatCurrency(taxCollected)} color="orange" />
+        <StatCard label="Tax Owed (NJ)" value={formatCurrency(taxOwed)} color="orange" />
         <StatCard label="Net Profit" value={formatCurrency(netProfit)} color={netProfit >= 0 ? "blue" : "red"} />
         <StatCard label="Profit Margin" value={`${margin}%`} color={margin >= 20 ? "purple" : margin >= 0 ? "blue" : "red"} />
       </div>
@@ -150,7 +153,7 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
           <div className="flex flex-col gap-2.5 text-sm">
             <Row label="Kit Sales" value={formatCurrency(kitRevenue)} />
             <Row label="  Shipping collected" value={formatCurrency(kitShipping)} muted />
-            <Row label="  Tax collected" value={formatCurrency(taxCollected)} muted />
+            <Row label="  Tax owed (6.625%)" value={formatCurrency(taxOwed)} muted />
             <Row label="Restoration Services" value={formatCurrency(restRevenue)} />
             <div className="border-t border-border pt-2.5 mt-1">
               <Row label="Total Revenue" value={formatCurrency(totalRevenue)} bold />
@@ -162,9 +165,9 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
           <div className="flex flex-col gap-2.5 text-sm">
             <Row label="Kit product costs (COGS)" value={formatCurrency(kitCogs)} />
             <Row label="Restoration supply costs" value={formatCurrency(restCogs)} />
-            <Row label="Sales tax owed to NJ" value={formatCurrency(taxCollected)} />
+            <Row label="Sales tax owed to NJ" value={formatCurrency(taxOwed)} />
             <div className="border-t border-border pt-2.5 mt-1">
-              <Row label="Total Costs" value={formatCurrency(totalCogs + taxCollected)} bold />
+              <Row label="Total Costs" value={formatCurrency(totalCogs + taxOwed)} bold />
             </div>
           </div>
         </div>
