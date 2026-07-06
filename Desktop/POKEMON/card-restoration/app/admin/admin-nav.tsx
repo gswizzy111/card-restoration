@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/admin/affiliates",     label: "Affiliates & Coupons", icon: "🎯" },
   { href: "/admin/subscriptions",  label: "Subscriptions", icon: "🔁" },
   { href: "/admin/customers",      label: "Customers",     icon: "👥" },
+  { href: "/admin/profit-loss",    label: "P&L",           icon: "💰" },
 ];
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {

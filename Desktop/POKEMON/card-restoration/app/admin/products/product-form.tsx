@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import type { ProductCostsConfig } from "@/lib/product-costs";
 
 const CATEGORIES = ["Cleaning", "Tools", "Storage", "Kits"];
 
@@ -40,6 +41,23 @@ export function ProductForm({ initial }: ProductFormProps) {
   });
   const [imageUrls, setImageUrls] = useState<string[]>(initial?.images ?? []);
   const [uploading, setUploading] = useState(false);
+
+  // Cost breakdown
+  const [components, setComponents] = useState<Array<{ name: string; cost_str: string }>>([]);
+  const [costsSaving, setCostsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!initial?.id) return;
+    fetch("/api/admin/product-costs")
+      .then((r) => r.json())
+      .then((config: ProductCostsConfig) => {
+        const entry = config.products[initial.id];
+        if (entry?.components?.length) {
+          setComponents(entry.components.map((c) => ({ name: c.name, cost_str: (c.cost_cents / 100).toFixed(2) })));
+        }
+      })
+      .catch(() => {});
+  }, [initial?.id]);
 
   // Upsell toggle — stored separately in storage config, not in DB column
   const [isUpsell, setIsUpsell] = useState(false);
@@ -117,11 +135,14 @@ export function ProductForm({ initial }: ProductFormProps) {
     };
 
     const url = initial ? `/api/admin/products/${initial.id}` : "/api/admin/products";
-    const res = await fetch(url, {
-      method: initial ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const [res] = await Promise.all([
+      fetch(url, {
+        method: initial ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+      initial?.id ? saveCosts(initial.id) : Promise.resolve(),
+    ]);
     const data = await res.json();
     setSaving(false);
     if (data.ok) {
@@ -132,6 +153,21 @@ export function ProductForm({ initial }: ProductFormProps) {
       toast.error(data.error ?? "Failed to save.");
     }
   }
+
+  async function saveCosts(productId: string) {
+    const validComponents = components
+      .filter((c) => c.name.trim())
+      .map((c) => ({ name: c.name.trim(), cost_cents: Math.round(parseFloat(c.cost_str || "0") * 100) }));
+    const cost_cents = validComponents.reduce((s, c) => s + c.cost_cents, 0);
+
+    setCostsSaving(true);
+    const config: ProductCostsConfig = await fetch("/api/admin/product-costs").then((r) => r.json()).catch(() => ({ products: {}, restoration: { regular_cents: 0, expedited_cents: 0, premium_cents: 0, ultra_premium_cents: 0 } }));
+    config.products[productId] = { components: validComponents, cost_cents };
+    await fetch("/api/admin/product-costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config) });
+    setCostsSaving(false);
+  }
+
+  const totalCogs = components.reduce((s, c) => s + (parseFloat(c.cost_str || "0") || 0), 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -228,6 +264,72 @@ export function ProductForm({ initial }: ProductFormProps) {
           {uploading ? "Uploading..." : "+ Add Images"}
           <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
         </label>
+      </div>
+
+      {/* Cost Breakdown */}
+      <div className="bg-white rounded-xl border border-border p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-heading font-black text-lg text-foreground">Cost Breakdown (COGS)</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">List every item that goes into this product so P&amp;L can calculate your profit.</p>
+          </div>
+          {totalCogs > 0 && (
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Total Cost</p>
+              <p className="font-heading font-black text-xl text-red-600">${totalCogs.toFixed(2)}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 mb-4">
+          {components.map((comp, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <Input
+                placeholder="Item name (e.g. Cleaning solution)"
+                value={comp.name}
+                onChange={(e) => setComponents((prev) => prev.map((c, j) => j === i ? { ...c, name: e.target.value } : c))}
+                className="flex-1"
+              />
+              <div className="relative w-28 flex-shrink-0">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={comp.cost_str}
+                  onChange={(e) => setComponents((prev) => prev.map((c, j) => j === i ? { ...c, cost_str: e.target.value } : c))}
+                  className="pl-6"
+                />
+              </div>
+              <button
+                onClick={() => setComponents((prev) => prev.filter((_, j) => j !== i))}
+                className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-destructive rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+              >×</button>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={() => setComponents((prev) => [...prev, { name: "", cost_str: "" }])}
+          className="text-sm text-primary font-medium hover:underline"
+        >
+          + Add component
+        </button>
+
+        {initial?.id && components.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-border flex items-center gap-3">
+            {form.price && totalCogs > 0 && (
+              <div className="flex-1 text-sm text-muted-foreground">
+                Margin: <span className="font-bold text-foreground">${(parseFloat(form.price) - totalCogs).toFixed(2)}</span>
+                {" "}({Math.round(((parseFloat(form.price) - totalCogs) / parseFloat(form.price)) * 100)}%)
+              </div>
+            )}
+            <Button variant="outline" size="sm" onClick={() => saveCosts(initial.id)} disabled={costsSaving}>
+              {costsSaving ? "Saving..." : "Save Costs"}
+            </Button>
+          </div>
+        )}
       </div>
 
       <Button onClick={handleSave} disabled={saving} className="font-bold h-12">
