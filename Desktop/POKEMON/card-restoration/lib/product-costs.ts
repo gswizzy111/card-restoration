@@ -20,14 +20,22 @@ export interface RestorationCosts {
   ultra_premium_cents: number;
 }
 
+export interface ComponentPreset {
+  id: string;
+  name: string;
+  components: ProductComponent[];
+}
+
 export interface ProductCostsConfig {
   products: Record<string, ProductCostEntry>;
   restoration: RestorationCosts;
+  presets: ComponentPreset[];
 }
 
 const DEFAULT: ProductCostsConfig = {
   products: {},
   restoration: { regular_cents: 0, expedited_cents: 0, premium_cents: 0, ultra_premium_cents: 0 },
+  presets: [],
 };
 
 async function ensureBucket(admin: ReturnType<typeof createAdminClient>) {
@@ -44,6 +52,7 @@ export async function getProductCosts(): Promise<ProductCostsConfig> {
     return {
       products: parsed.products ?? {},
       restoration: { ...DEFAULT.restoration, ...(parsed.restoration ?? {}) },
+      presets: parsed.presets ?? [],
     };
   } catch {
     return DEFAULT;

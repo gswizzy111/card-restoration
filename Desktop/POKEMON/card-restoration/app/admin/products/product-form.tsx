@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import type { ProductCostsConfig } from "@/lib/product-costs";
+import type { ProductCostsConfig, ComponentPreset } from "@/lib/product-costs";
 
 const CATEGORIES = ["Cleaning", "Tools", "Storage", "Kits"];
 
@@ -45,12 +45,17 @@ export function ProductForm({ initial }: ProductFormProps) {
   // Cost breakdown
   const [components, setComponents] = useState<Array<{ name: string; cost_str: string }>>([]);
   const [costsSaving, setCostsSaving] = useState(false);
+  const [presets, setPresets] = useState<ComponentPreset[]>([]);
+  const [presetName, setPresetName] = useState("");
+  const [showPresetInput, setShowPresetInput] = useState(false);
+  const [presetSaving, setPresetSaving] = useState(false);
 
   useEffect(() => {
     if (!initial?.id) return;
     fetch("/api/admin/product-costs")
       .then((r) => r.json())
       .then((config: ProductCostsConfig) => {
+        setPresets(config.presets ?? []);
         const entry = config.products[initial.id];
         if (entry?.components?.length) {
           setComponents(entry.components.map((c) => ({ name: c.name, cost_str: (c.cost_cents / 100).toFixed(2) })));
@@ -167,6 +172,37 @@ export function ProductForm({ initial }: ProductFormProps) {
     setCostsSaving(false);
   }
 
+  async function saveAsPreset() {
+    if (!presetName.trim()) return;
+    const validComponents = components
+      .filter((c) => c.name.trim())
+      .map((c) => ({ name: c.name.trim(), cost_cents: Math.round(parseFloat(c.cost_str || "0") * 100) }));
+    if (!validComponents.length) { toast.error("Add at least one component first."); return; }
+    setPresetSaving(true);
+    const config: ProductCostsConfig = await fetch("/api/admin/product-costs").then((r) => r.json()).catch(() => ({ products: {}, restoration: { regular_cents: 0, expedited_cents: 0, premium_cents: 0, ultra_premium_cents: 0 }, presets: [] }));
+    const newPreset: ComponentPreset = { id: crypto.randomUUID(), name: presetName.trim(), components: validComponents };
+    config.presets = [...(config.presets ?? []), newPreset];
+    await fetch("/api/admin/product-costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config) });
+    setPresets(config.presets);
+    setPresetName("");
+    setShowPresetInput(false);
+    setPresetSaving(false);
+    toast.success(`Preset "${newPreset.name}" saved`);
+  }
+
+  async function deletePreset(id: string) {
+    const config: ProductCostsConfig = await fetch("/api/admin/product-costs").then((r) => r.json()).catch(() => ({ products: {}, restoration: { regular_cents: 0, expedited_cents: 0, premium_cents: 0, ultra_premium_cents: 0 }, presets: [] }));
+    config.presets = (config.presets ?? []).filter((p) => p.id !== id);
+    await fetch("/api/admin/product-costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config) });
+    setPresets(config.presets);
+    toast.success("Preset deleted");
+  }
+
+  function applyPreset(preset: ComponentPreset) {
+    setComponents(preset.components.map((c) => ({ name: c.name, cost_str: (c.cost_cents / 100).toFixed(2) })));
+    toast.success(`Applied "${preset.name}"`);
+  }
+
   const totalCogs = components.reduce((s, c) => s + (parseFloat(c.cost_str || "0") || 0), 0);
 
   return (
@@ -281,6 +317,30 @@ export function ProductForm({ initial }: ProductFormProps) {
           )}
         </div>
 
+        {/* Presets */}
+        {presets.length > 0 && (
+          <div className="mb-4 p-3 bg-muted/40 rounded-lg flex flex-col gap-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Saved Presets</p>
+            <div className="flex flex-wrap gap-2">
+              {presets.map((preset) => (
+                <div key={preset.id} className="flex items-center gap-1 bg-white border border-border rounded-lg pl-3 pr-1 py-1">
+                  <button
+                    onClick={() => applyPreset(preset)}
+                    className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                  >
+                    {preset.name}
+                  </button>
+                  <button
+                    onClick={() => deletePreset(preset.id)}
+                    className="w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-destructive rounded transition-colors text-xs"
+                    title="Delete preset"
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col gap-2 mb-4">
           {components.map((comp, i) => (
             <div key={i} className="flex gap-2 items-center">
@@ -310,12 +370,38 @@ export function ProductForm({ initial }: ProductFormProps) {
           ))}
         </div>
 
-        <button
-          onClick={() => setComponents((prev) => [...prev, { name: "", cost_str: "" }])}
-          className="text-sm text-primary font-medium hover:underline"
-        >
-          + Add component
-        </button>
+        <div className="flex items-center gap-4 flex-wrap">
+          <button
+            onClick={() => setComponents((prev) => [...prev, { name: "", cost_str: "" }])}
+            className="text-sm text-primary font-medium hover:underline"
+          >
+            + Add component
+          </button>
+          {components.filter((c) => c.name.trim()).length > 0 && (
+            <button
+              onClick={() => setShowPresetInput((v) => !v)}
+              className="text-sm text-muted-foreground font-medium hover:text-foreground hover:underline"
+            >
+              {showPresetInput ? "Cancel" : "Save as preset"}
+            </button>
+          )}
+        </div>
+
+        {showPresetInput && (
+          <div className="flex gap-2 mt-2">
+            <Input
+              placeholder="Preset name (e.g. Basic Kit)"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") saveAsPreset(); }}
+              className="flex-1"
+              autoFocus
+            />
+            <Button variant="outline" size="sm" onClick={saveAsPreset} disabled={presetSaving || !presetName.trim()}>
+              {presetSaving ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        )}
 
         {initial?.id && components.length > 0 && (
           <div className="mt-4 pt-4 border-t border-border flex items-center gap-3">
