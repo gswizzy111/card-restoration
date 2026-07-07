@@ -5,6 +5,7 @@ import Stripe from "stripe";
 import { ReturnLabelButton } from "./return-label-button";
 import { KitStatusUpdater } from "./status-updater";
 import { RevenueChart } from "../revenue-chart";
+import { SyncKitOrdersButton } from "./sync-kit-orders-button";
 
 export const dynamic = "force-dynamic";
 
@@ -109,13 +110,6 @@ async function syncFromStripe() {
 export default async function ShopOrdersPage() {
   const admin = createAdminClient();
 
-  // Sync any Stripe kit orders not yet in the DB
-  try {
-    await syncFromStripe();
-  } catch (err) {
-    console.error("Stripe sync error:", err);
-  }
-
   const { data: orders } = await admin
     .from("shop_orders")
     .select("*")
@@ -129,6 +123,7 @@ export default async function ShopOrdersPage() {
             <h1 className="font-heading font-black text-3xl text-foreground">Kit Orders</h1>
             <p className="text-muted-foreground text-sm mt-1">{orders?.length ?? 0} total</p>
           </div>
+          <SyncKitOrdersButton />
         </div>
 
         <div className="mb-8">

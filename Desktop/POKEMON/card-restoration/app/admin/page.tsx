@@ -47,12 +47,19 @@ function daysAgo(date: string) {
   return Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24));
 }
 
+const TIER_TURNAROUND_DAYS: Record<string, number> = {
+  regular:       20,
+  expedited:     15,
+  premium:       8,
+  ultra_premium: 5,
+};
+
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tab?: string }>;
+  searchParams: Promise<{ q?: string; tab?: string; tier?: string }>;
 }) {
-  const { q, tab } = await searchParams;
+  const { q, tab, tier: tierFilter } = await searchParams;
   const query = q?.trim() ?? "";
   const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : "orders";
 
@@ -258,6 +265,31 @@ export default async function AdminPage({
   for (const row of fulfillmentCards ?? []) {
     cardCountByOrder[row.order_id] = (cardCountByOrder[row.order_id] ?? 0) + 1;
   }
+
+  // Find when each fulfillment order was marked received (for accurate "days since received")
+  const { data: receivedEvents } = fulfillmentIds.length > 0
+    ? await admin.from("order_events")
+        .select("order_id, created_at")
+        .in("order_id", fulfillmentIds)
+        .like("description", "%Cards Received%")
+        .order("created_at", { ascending: true })
+    : { data: [] };
+
+  const receivedAtByOrder: Record<string, string> = {};
+  for (const ev of receivedEvents ?? []) {
+    if (!receivedAtByOrder[ev.order_id]) receivedAtByOrder[ev.order_id] = ev.created_at;
+  }
+
+  // Sort fulfillment orders by due date (most urgent first)
+  const sortedFulfillmentOrders = [...(fulfillmentOrders ?? [])].sort((a, b) => {
+    const recA = receivedAtByOrder[a.id] ?? a.created_at;
+    const recB = receivedAtByOrder[b.id] ?? b.created_at;
+    const daysA = TIER_TURNAROUND_DAYS[(a.restoration_tier as string) ?? "regular"] ?? 20;
+    const daysB = TIER_TURNAROUND_DAYS[(b.restoration_tier as string) ?? "regular"] ?? 20;
+    const dueA = new Date(recA).getTime() + daysA * 86400000;
+    const dueB = new Date(recB).getTime() + daysB * 86400000;
+    return dueA - dueB;
+  }).filter((o) => !tierFilter || tierFilter === "all" || o.restoration_tier === tierFilter);
 
   const PAST_STATUSES = ["shipped_back", "delivered"];
   const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status));
@@ -575,11 +607,32 @@ export default async function AdminPage({
         {/* ── FULFILLMENT TAB ── */}
         {activeTab === "fulfillment" && (
           <>
+            {/* Tier filter */}
+            <div className="flex gap-2 flex-wrap mb-3">
+              {[["all", "All Tiers"], ["ultra_premium", "Ultra Premium"], ["premium", "Premium"], ["expedited", "Expedited"], ["regular", "Regular"]].map(([val, label]) => (
+                <Link
+                  key={val}
+                  href={`/admin?tab=fulfillment&tier=${val}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                    (tierFilter ?? "all") === val
+                      ? "bg-foreground text-background border-foreground"
+                      : "bg-white text-muted-foreground border-border hover:border-foreground"
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+
             {fulfillmentCount === 0 ? (
               <div className="bg-white rounded-xl border border-border p-16 text-center">
                 <p className="text-2xl mb-2">✅</p>
                 <p className="font-heading font-black text-lg text-foreground">All caught up!</p>
                 <p className="text-sm text-muted-foreground mt-1">No orders are waiting to be fulfilled.</p>
+              </div>
+            ) : sortedFulfillmentOrders.length === 0 ? (
+              <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground text-sm">
+                No {tierFilter && tierFilter !== "all" ? TIER_STYLES[tierFilter]?.label : ""} orders in queue.
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-border overflow-hidden">
@@ -590,24 +643,31 @@ export default async function AdminPage({
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tier</th>
                       <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Cards</th>
-                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Days Waiting</th>
+                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Since Rcvd</th>
+                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Due In</th>
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
                       <th className="px-4 py-3" />
                     </tr>
                   </thead>
                   <tbody>
-                    {(fulfillmentOrders ?? []).map((order) => {
-                      const tier = order.restoration_tier as RestorationTierId | null;
-                      const tierStyle = tier ? TIER_STYLES[tier] : null;
+                    {sortedFulfillmentOrders.map((order) => {
+                      const tier = (order.restoration_tier as RestorationTierId | null) ?? "regular";
+                      const tierStyle = TIER_STYLES[tier] ?? null;
                       const statusStyle = FULFILLMENT_STATUS_STYLES[order.status];
-                      const days = daysAgo(order.created_at);
+                      const receivedAt = receivedAtByOrder[order.id] ?? order.created_at;
+                      const daysSinceReceived = daysAgo(receivedAt);
+                      const turnaround = TIER_TURNAROUND_DAYS[tier] ?? 20;
+                      const dueDate = new Date(new Date(receivedAt).getTime() + turnaround * 86400000);
+                      const daysUntilDue = Math.ceil((dueDate.getTime() - Date.now()) / 86400000);
+                      const isOverdue = daysUntilDue < 0;
+                      const isDueSoon = daysUntilDue >= 0 && daysUntilDue <= 2;
                       const cards = cardCountByOrder[order.id] ?? 0;
 
                       return (
                         <tr
                           key={order.id}
                           className={`border-b border-border last:border-0 hover:bg-secondary/20 transition-colors ${
-                            days >= 7 ? "bg-red-50/40" : days >= 4 ? "bg-yellow-50/30" : ""
+                            isOverdue ? "bg-red-50/50" : isDueSoon ? "bg-yellow-50/40" : ""
                           }`}
                         >
                           <td className="px-4 py-3">
@@ -630,10 +690,11 @@ export default async function AdminPage({
                           </td>
                           <td className="px-4 py-3 text-center font-bold text-foreground">{cards}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`font-bold text-sm ${
-                              days >= 7 ? "text-red-600" : days >= 4 ? "text-yellow-600" : "text-foreground"
-                            }`}>
-                              {days}d
+                            <span className="font-bold text-sm text-foreground">{daysSinceReceived}d</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`font-black text-sm ${isOverdue ? "text-red-600" : isDueSoon ? "text-yellow-600" : "text-green-600"}`}>
+                              {isOverdue ? `${Math.abs(daysUntilDue)}d overdue` : `${daysUntilDue}d`}
                             </span>
                           </td>
                           <td className="px-4 py-3">
