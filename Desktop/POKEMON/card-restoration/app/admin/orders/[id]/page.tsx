@@ -116,8 +116,22 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             <div className="bg-white rounded-xl border border-border p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h1 className="font-heading font-black text-2xl text-foreground">Order #{order.order_number}</h1>
-                  <p className="text-sm text-muted-foreground mt-1">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</p>
+                  <div className="flex items-center gap-3 flex-wrap mb-1">
+                    <h1 className="font-heading font-black text-2xl text-foreground">Order #{order.order_number}</h1>
+                    {order.restoration_tier && (() => {
+                      const TIER_BADGE: Record<string, { label: string; cls: string }> = {
+                        ultra_premium: { label: "Ultra Premium", cls: "bg-purple-100 text-purple-700 border border-purple-200" },
+                        premium:       { label: "Premium",       cls: "bg-blue-100 text-blue-700 border border-blue-200" },
+                        expedited:     { label: "Expedited",     cls: "bg-yellow-100 text-yellow-700 border border-yellow-200" },
+                        regular:       { label: "Regular",       cls: "bg-gray-100 text-gray-600 border border-gray-200" },
+                      };
+                      const badge = TIER_BADGE[order.restoration_tier] ?? { label: order.restoration_tier, cls: "bg-gray-100 text-gray-600 border border-gray-200" };
+                      return (
+                        <span className={`text-sm font-bold px-3 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
+                      );
+                    })()}
+                  </div>
+                  <p className="text-sm text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</p>
                 </div>
                 <span className="font-heading font-black text-2xl text-primary">{formatCurrency(order.total_cents)}</span>
               </div>
@@ -167,9 +181,23 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 Cards ({cards?.length ?? 0})
               </h2>
               <div className="flex flex-col gap-4">
-                {cards?.map((card, i) => (
+                {cards?.map((card, i) => {
+                  const CARD_TIER_BADGE: Record<string, { label: string; cls: string }> = {
+                    ultra_premium: { label: "Ultra Premium", cls: "bg-purple-100 text-purple-700" },
+                    premium:       { label: "Premium",       cls: "bg-blue-100 text-blue-700" },
+                    expedited:     { label: "Expedited",     cls: "bg-yellow-100 text-yellow-700" },
+                    regular:       { label: "Regular",       cls: "bg-gray-100 text-gray-600" },
+                  };
+                  const cardTier = card.tier ?? order.restoration_tier;
+                  const tierBadge = cardTier ? (CARD_TIER_BADGE[cardTier] ?? { label: cardTier, cls: "bg-gray-100 text-gray-600" }) : null;
+                  return (
                   <div key={card.id} className="p-4 rounded-lg bg-secondary/40 border border-border">
-                    <p className="font-bold text-foreground">{i + 1}. {card.card_name}</p>
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <p className="font-bold text-foreground">{i + 1}. {card.card_name}</p>
+                      {tierBadge && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tierBadge.cls}`}>{tierBadge.label}</span>
+                      )}
+                    </div>
                     {card.card_set && <p className="text-sm text-muted-foreground">Set: {card.card_set}</p>}
                     {card.card_year && <p className="text-sm text-muted-foreground">Year: {card.card_year}</p>}
                     {card.card_number && <p className="text-sm text-muted-foreground">Card #: {card.card_number}</p>}
@@ -188,7 +216,8 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

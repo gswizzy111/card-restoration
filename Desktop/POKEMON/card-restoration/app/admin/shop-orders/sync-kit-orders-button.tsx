@@ -27,7 +27,7 @@ export function SyncKitOrdersButton() {
       disabled={state === "loading"}
       className="text-sm font-medium px-4 py-2 rounded-lg border border-border bg-white hover:bg-secondary/50 transition-colors disabled:opacity-50"
     >
-      {state === "loading" ? "Syncing…" : state === "done" ? "Synced ✓" : state === "error" ? "Error — retry" : "Sync from Stripe"}
+      {state === "loading" ? "Syncing…" : state === "done" ? "Synced ✓" : state === "error" ? "Error — retry" : "Sync All Orders"}
     </button>
   );
 }

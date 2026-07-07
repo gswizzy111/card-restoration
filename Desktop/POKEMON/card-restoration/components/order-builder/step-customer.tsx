@@ -9,9 +9,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { US_STATES, INTERNATIONAL_COUNTRIES } from "@/lib/constants";
 import type { CustomerInfo } from "@/lib/types";
 import type { ChangeEvent } from "react";
+
+const INPUT_CN = "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm";
 
 
 interface StepCustomerProps {
@@ -92,11 +95,12 @@ export function StepCustomer({ customer, onChange }: StepCustomerProps) {
 
         <div className="sm:col-span-2 flex flex-col gap-1.5">
           <Label htmlFor="street1">Street Address *</Label>
-          <Input
+          <AddressAutocomplete
             id="street1"
             value={customer.street1}
-            onChange={(e) => update({ street1: e.target.value })}
-            autoComplete="address-line1"
+            onChange={(v) => update({ street1: v })}
+            onPlaceSelect={(f) => update({ street1: f.street1, city: f.city, state: f.state, zip: f.zip })}
+            className={INPUT_CN}
           />
         </div>
 

@@ -32,75 +32,77 @@ type ShippingAddress = {
   country: string;
 };
 
-async function syncFromStripe() {
+// Fast auto-sync: only checks the 15 most recent Stripe sessions (single API call).
+// Use the "Sync All Orders" button to backfill older history.
+async function syncRecentFromStripe() {
   const admin = createAdminClient();
+
+  const sessions = await stripe.checkout.sessions.list({ limit: 15, status: "complete" });
+  const shopSessions = sessions.data.filter((s) => s.metadata?.type === "shop");
+  if (shopSessions.length === 0) return;
 
   const { data: existing } = await admin
     .from("shop_orders")
-    .select("stripe_session_id");
+    .select("stripe_session_id")
+    .in("stripe_session_id", shopSessions.map((s) => s.id));
   const existingIds = new Set((existing ?? []).map((o) => o.stripe_session_id));
 
-  const toInsert: Record<string, unknown>[] = [];
-  let startingAfter: string | undefined;
+  const newSessions = shopSessions.filter((s) => !existingIds.has(s.id));
+  if (newSessions.length === 0) return;
 
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const sessions = await stripe.checkout.sessions.list({
-      limit: 100,
-      status: "complete",
-      ...(startingAfter ? { starting_after: startingAfter } : {}),
-    });
+  const productIds = [...new Set(newSessions.flatMap((s) => {
+    const items: { id: string }[] = JSON.parse(s.metadata?.items ?? "[]");
+    return items.map((i) => i.id).filter(Boolean);
+  }))];
+  const { data: products } = productIds.length > 0
+    ? await admin.from("products").select("id, name, price_cents").in("id", productIds)
+    : { data: [] };
+  const productMap = Object.fromEntries((products ?? []).map((p) => [p.id, p]));
 
-    for (const session of sessions.data) {
-      if (session.metadata?.type !== "shop") continue;
-      if (existingIds.has(session.id)) continue;
+  const toInsert = newSessions.map((session) => {
+    const items: { id: string; qty: number }[] = JSON.parse(session.metadata?.items ?? "[]");
+    const itemsForDb = items.map((i) => ({
+      product_id: i.id,
+      product_name: productMap[i.id]?.name ?? "Unknown product",
+      quantity: i.qty,
+      price_cents: productMap[i.id]?.price_cents ?? 0,
+    }));
 
-      const items: { id: string; qty: number }[] = JSON.parse(session.metadata.items ?? "[]");
-      const productIds = items.map((i) => i.id).filter(Boolean);
+    const typedSession = session as Stripe.Checkout.Session;
+    const addr = typedSession.collected_information?.shipping_details?.address;
+    let shippingAddress = addr ? {
+      street1: addr.line1 ?? "",
+      street2: addr.line2 ?? null,
+      city: addr.city ?? "",
+      state: addr.state ?? "",
+      zip: addr.postal_code ?? "",
+      country: addr.country ?? "US",
+    } : null;
 
-      const { data: products } = productIds.length > 0
-        ? await admin.from("products").select("id, name, price_cents").in("id", productIds)
-        : { data: [] };
-      const productMap = Object.fromEntries((products ?? []).map((p) => [p.id, p]));
-
-      const itemsForDb = items.map((i) => ({
-        product_id: i.id,
-        product_name: productMap[i.id]?.name ?? "Unknown product",
-        quantity: i.qty,
-        price_cents: productMap[i.id]?.price_cents ?? 0,
-      }));
-
-      const typedSession = session as Stripe.Checkout.Session;
-      const addr = typedSession.collected_information?.shipping_details?.address;
-      const shippingAddress = addr ? {
-        street1: addr.line1 ?? "",
-        street2: addr.line2 ?? null,
-        city: addr.city ?? "",
-        state: addr.state ?? "",
-        zip: addr.postal_code ?? "",
-        country: addr.country ?? "US",
-      } : null;
-
-      const totalCents = session.amount_total ?? 0;
-
-      toInsert.push({
-        stripe_session_id: session.id,
-        customer_name: session.metadata.customer_name ?? session.customer_details?.name ?? "",
-        customer_email: session.customer_email ?? session.customer_details?.email ?? "",
-        customer_phone: session.metadata.customer_phone ?? "",
-        shipping_address: shippingAddress,
-        items: itemsForDb,
-        subtotal_cents: Math.max(0, totalCents - 599),
-        shipping_cents: 599,
-        total_cents: totalCents,
-        status: "paid",
-      });
+    const isInternational = session.metadata?.is_international === "true";
+    if (!shippingAddress && isInternational && session.metadata?.shipping_address_json) {
+      try { shippingAddress = JSON.parse(session.metadata.shipping_address_json); } catch { /* ignore */ }
     }
 
-    if (!sessions.has_more) break;
-    startingAfter = sessions.data[sessions.data.length - 1]?.id;
-    if (toInsert.length >= 500) break;
-  }
+    const totalCents = session.amount_total ?? 0;
+    const shippingCents = isInternational
+      ? (totalCents - (session.amount_subtotal ?? totalCents - 599))
+      : 599;
+
+    return {
+      stripe_session_id: session.id,
+      customer_name: session.metadata?.customer_name ?? session.customer_details?.name ?? "",
+      customer_email: session.customer_email ?? session.customer_details?.email ?? "",
+      customer_phone: session.metadata?.customer_phone ?? "",
+      shipping_address: shippingAddress,
+      items: itemsForDb,
+      subtotal_cents: Math.max(0, totalCents - shippingCents),
+      shipping_cents: shippingCents,
+      total_cents: totalCents,
+      status: "paid",
+      affiliate_code: session.metadata?.affiliate_code || null,
+    };
+  });
 
   if (toInsert.length > 0) {
     await admin.from("shop_orders").insert(toInsert);
@@ -109,6 +111,8 @@ async function syncFromStripe() {
 
 export default async function ShopOrdersPage() {
   const admin = createAdminClient();
+
+  await syncRecentFromStripe();
 
   const { data: orders } = await admin
     .from("shop_orders")
