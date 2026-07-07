@@ -62,7 +62,7 @@ export function Nav() {
           </Link>
           <Link
             href="/restoration"
-            className="text-sm font-semibold text-[#1a8fe0] bg-white border border-white px-4 py-2 hover:bg-white/90 transition-colors duration-150 rounded-lg"
+            className="text-sm font-bold text-[#1a8fe0] bg-white border border-white px-4 py-2 hover:bg-white/90 transition-colors duration-150 rounded-lg"
           >
             Book Restoration
           </Link>
@@ -104,7 +104,7 @@ export function Nav() {
           <Link
             href="/restoration"
             onClick={() => setOpen(false)}
-            className="text-sm font-semibold text-[#1a8fe0] bg-white border border-white px-4 py-3 text-center hover:bg-white/90 transition-colors rounded-lg"
+            className="text-sm font-bold text-[#1a8fe0] bg-white border border-white px-4 py-3 text-center hover:bg-white/90 transition-colors rounded-lg"
           >
             Book Restoration
           </Link>
