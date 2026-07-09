@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type InternalCase = {
   id: string;
   title: string;
@@ -24,20 +22,186 @@ type SupportCase = {
   updated_at: string;
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function shortId(id: string) {
   return id.slice(0, 8).toUpperCase();
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  open:        "bg-blue-100 text-blue-700",
-  in_progress: "bg-yellow-100 text-yellow-700",
-  resolved:    "bg-green-100 text-green-700",
+// ─── New Case Modal ───────────────────────────────────────────────────────────
+
+function NewCaseModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [type, setType] = useState<"internal" | "support">("internal");
+  const [title, setTitle] = useState("");
+  const [notes, setNotes] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [subject, setSubject] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    if (type === "internal") {
+      const res = await fetch("/api/admin/cases/internal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, notes, due_date: dueDate || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Error"); setSaving(false); return; }
+    } else {
+      const res = await fetch("/api/admin/cases/support", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_name: customerName, customer_email: customerEmail, subject, notes }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Error"); setSaving(false); return; }
+    }
+    setSaving(false);
+    onCreated();
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
+        <h2 className="font-heading font-black text-xl text-foreground mb-4">New Case</h2>
+
+        {/* Type toggle */}
+        <div className="flex gap-1 bg-secondary rounded-xl p-1 mb-5">
+          {(["internal", "support"] as const).map(t => (
+            <button key={t} onClick={() => setType(t)}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${type === t ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              {t === "internal" ? "Internal Reminder" : "Support Case"}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          {type === "internal" ? (
+            <>
+              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title *" required
+                className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes (optional)" rows={3}
+                className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">Due date (optional)</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                  className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Customer name *" required
+                  className="border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                <input type="email" value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} placeholder="Email *" required
+                  className="border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              </div>
+              <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject *" required
+                className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes for customer (optional)" rows={3}
+                className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
+              <p className="text-xs text-muted-foreground">Customer will receive an email with this case reference.</p>
+            </>
+          )}
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex gap-2 mt-1">
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              {saving ? "Saving…" : type === "internal" ? "Add Reminder" : "Open Case & Email Customer"}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg transition-colors">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Post-it Card: Internal ───────────────────────────────────────────────────
+
+function InternalPostIt({ c, onResolve, onDelete }: { c: InternalCase; onResolve: () => void; onDelete: () => void }) {
+  const [checking, setChecking] = useState(false);
+
+  async function check() {
+    setChecking(true);
+    await fetch("/api/admin/cases/internal", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: c.id, status: "resolved" }),
+    });
+    onResolve();
+  }
+
+  async function del() {
+    await fetch("/api/admin/cases/internal", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: c.id }),
+    });
+    onDelete();
+  }
+
+  const isOverdue = c.due_date && new Date(c.due_date) < new Date();
+
+  return (
+    <div className="relative bg-[#fef08a] rounded-sm shadow-md hover:shadow-lg transition-shadow duration-200 p-5 flex flex-col gap-3 min-h-[200px]"
+      style={{ transform: `rotate(${(parseInt(c.id[0], 16) % 5) - 2}deg)` }}>
+      {/* Delete */}
+      <button onClick={del} className="absolute top-3 right-3 text-yellow-700/50 hover:text-red-500 transition-colors text-lg leading-none font-bold">×</button>
+
+      {/* Label */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-black uppercase tracking-widest text-yellow-700/60">Reminder</span>
+      </div>
+
+      {/* Title */}
+      <p className="font-heading font-black text-gray-800 text-lg leading-tight pr-4">{c.title}</p>
+
+      {/* Notes */}
+      {c.notes && <p className="text-sm text-gray-700 leading-relaxed flex-1">{c.notes}</p>}
+
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-auto pt-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs text-yellow-700/60">{fmtDate(c.created_at)}</span>
+          {c.due_date && (
+            <span className={`text-xs font-bold ${isOverdue ? "text-red-600" : "text-yellow-800"}`}>
+              Due {fmtDate(c.due_date)}{isOverdue ? " — OVERDUE" : ""}
+            </span>
+          )}
+        </div>
+        <button onClick={check} disabled={checking}
+          className="w-8 h-8 rounded-full border-2 border-yellow-700/40 hover:border-green-600 hover:bg-green-100 flex items-center justify-center transition-all disabled:opacity-50">
+          {checking
+            ? <div className="w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+            : <svg className="w-4 h-4 text-yellow-700/40 hover:text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+          }
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Post-it Card: Support ────────────────────────────────────────────────────
+
+const SUPPORT_COLORS: Record<string, string> = {
+  open: "bg-[#bfdbfe]",
+  in_progress: "bg-[#fde68a]",
+  resolved: "bg-[#bbf7d0]",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -46,461 +210,88 @@ const STATUS_LABELS: Record<string, string> = {
   resolved: "Resolved",
 };
 
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[status] ?? "bg-secondary text-muted-foreground"}`}>
-      {STATUS_LABELS[status] ?? status}
-    </span>
-  );
-}
-
-// ─── Internal Cases Tab ───────────────────────────────────────────────────────
-
-function InternalTab() {
-  const [cases, setCases] = useState<InternalCase[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
-
-  const [title, setTitle] = useState("");
-  const [notes, setNotes] = useState("");
-  const [dueDate, setDueDate] = useState("");
+function SupportPostIt({ c, onUpdate }: { c: SupportCase; onUpdate: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [editNotes, setEditNotes] = useState(c.notes ?? "");
+  const [editStatus, setEditStatus] = useState(c.status);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
 
-  const [editNotes, setEditNotes] = useState<Record<string, string>>({});
-  const [updating, setUpdating] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const res = await fetch("/api/admin/cases/internal");
-    const json = await res.json();
-    setCases(json.cases ?? []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return;
+  async function save() {
     setSaving(true);
-    setError("");
-    const res = await fetch("/api/admin/cases/internal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, notes, due_date: dueDate || null }),
-    });
-    const json = await res.json();
-    if (!res.ok) { setError(json.error ?? "Error"); setSaving(false); return; }
-    setTitle(""); setNotes(""); setDueDate(""); setCreating(false);
-    setSaving(false);
-    load();
-  }
-
-  async function toggleStatus(c: InternalCase) {
-    const newStatus = c.status === "open" ? "resolved" : "open";
-    setUpdating(c.id);
-    await fetch("/api/admin/cases/internal", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: c.id, status: newStatus }),
-    });
-    setUpdating(null);
-    load();
-  }
-
-  async function saveNotes(c: InternalCase) {
-    setUpdating(c.id);
-    await fetch("/api/admin/cases/internal", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: c.id, notes: editNotes[c.id] ?? c.notes }),
-    });
-    setUpdating(null);
-    load();
-  }
-
-  async function deleteCase(id: string) {
-    if (!confirm("Delete this reminder?")) return;
-    await fetch("/api/admin/cases/internal", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    load();
-  }
-
-  const open = cases.filter(c => c.status === "open");
-  const resolved = cases.filter(c => c.status === "resolved");
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="font-heading font-black text-xl text-foreground">Internal Reminders</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Private notes and to-dos for your team.</p>
-        </div>
-        <button
-          onClick={() => setCreating(!creating)}
-          className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:bg-primary/90 transition-colors"
-        >
-          + New Reminder
-        </button>
-      </div>
-
-      {/* Create form */}
-      {creating && (
-        <form onSubmit={handleCreate} className="bg-white border border-border rounded-xl p-5 mb-6 flex flex-col gap-3">
-          <input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Title *"
-            required
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Notes (optional)"
-            rows={3}
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-          />
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <label className="text-xs text-muted-foreground font-medium block mb-1">Due date (optional)</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              {saving ? "Saving…" : "Save Reminder"}
-            </button>
-            <button type="button" onClick={() => setCreating(false)} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-
-      {loading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {open.length === 0 && !creating && (
-            <div className="text-center py-12 text-muted-foreground text-sm">No open reminders. Click + New Reminder to add one.</div>
-          )}
-          {open.map(c => (
-            <div key={c.id} className="bg-white border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center gap-3 px-5 py-4">
-                <button
-                  onClick={() => toggleStatus(c)}
-                  disabled={updating === c.id}
-                  className="w-5 h-5 rounded-full border-2 border-border hover:border-primary transition-colors flex-shrink-0"
-                  title="Mark resolved"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-foreground leading-tight">{c.title}</p>
-                  {c.due_date && (
-                    <p className="text-xs text-muted-foreground mt-0.5">Due {fmtDate(c.due_date)}</p>
-                  )}
-                </div>
-                <span className="text-xs text-muted-foreground flex-shrink-0">{fmtDate(c.created_at)}</span>
-                <button
-                  onClick={() => setExpanded(expanded === c.id ? null : c.id)}
-                  className="text-xs text-primary font-semibold hover:underline flex-shrink-0"
-                >
-                  {expanded === c.id ? "Hide" : "Details"}
-                </button>
-                <button
-                  onClick={() => deleteCase(c.id)}
-                  className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 text-lg leading-none"
-                  title="Delete"
-                >
-                  ×
-                </button>
-              </div>
-              {expanded === c.id && (
-                <div className="border-t border-border px-5 py-4 bg-secondary/30 flex flex-col gap-3">
-                  <textarea
-                    value={editNotes[c.id] ?? (c.notes ?? "")}
-                    onChange={e => setEditNotes(prev => ({ ...prev, [c.id]: e.target.value }))}
-                    rows={3}
-                    placeholder="Notes…"
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none bg-white"
-                  />
-                  <button
-                    onClick={() => saveNotes(c)}
-                    disabled={updating === c.id}
-                    className="self-start px-3 py-1.5 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                  >
-                    {updating === c.id ? "Saving…" : "Save Notes"}
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {resolved.length > 0 && (
-            <details className="mt-4">
-              <summary className="text-sm text-muted-foreground font-medium cursor-pointer hover:text-foreground">
-                {resolved.length} resolved reminder{resolved.length !== 1 ? "s" : ""}
-              </summary>
-              <div className="flex flex-col gap-2 mt-3">
-                {resolved.map(c => (
-                  <div key={c.id} className="bg-white border border-border rounded-xl px-5 py-3 flex items-center gap-3 opacity-60">
-                    <button onClick={() => toggleStatus(c)} className="w-5 h-5 rounded-full bg-green-400 border-2 border-green-400 flex-shrink-0" title="Reopen" />
-                    <p className="flex-1 text-sm line-through text-muted-foreground">{c.title}</p>
-                    <button onClick={() => deleteCase(c.id)} className="text-muted-foreground hover:text-red-500 transition-colors text-lg leading-none">×</button>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Support Cases Tab ────────────────────────────────────────────────────────
-
-function SupportTab() {
-  const [cases, setCases] = useState<SupportCase[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
-
-  const [form, setForm] = useState({ customer_name: "", customer_email: "", subject: "", notes: "" });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const [editState, setEditState] = useState<Record<string, { notes: string; status: string }>>({});
-  const [updating, setUpdating] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const res = await fetch("/api/admin/cases/support");
-    const json = await res.json();
-    setCases(json.cases ?? []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  function initEdit(c: SupportCase) {
-    if (!editState[c.id]) {
-      setEditState(prev => ({ ...prev, [c.id]: { notes: c.notes ?? "", status: c.status } }));
-    }
-  }
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError("");
-    const res = await fetch("/api/admin/cases/support", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const json = await res.json();
-    if (!res.ok) { setError(json.error ?? "Error"); setSaving(false); return; }
-    setForm({ customer_name: "", customer_email: "", subject: "", notes: "" });
-    setCreating(false);
-    setSaving(false);
-    load();
-  }
-
-  async function handleUpdate(c: SupportCase) {
-    const state = editState[c.id];
-    if (!state) return;
-    setUpdating(c.id);
     await fetch("/api/admin/cases/support", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: c.id, notes: state.notes || null, status: state.status }),
+      body: JSON.stringify({ id: c.id, notes: editNotes || null, status: editStatus }),
     });
-    setUpdating(null);
-    load();
+    setSaving(false);
+    setExpanded(false);
+    onUpdate();
   }
 
-  const active = cases.filter(c => c.status !== "resolved");
-  const resolved = cases.filter(c => c.status === "resolved");
+  const bg = SUPPORT_COLORS[c.status] ?? "bg-[#bfdbfe]";
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="font-heading font-black text-xl text-foreground">Support Cases</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Open a case for a customer — they get email updates automatically.</p>
-        </div>
-        <button
-          onClick={() => setCreating(!creating)}
-          className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:bg-primary/90 transition-colors"
-        >
-          + Open Case
-        </button>
+    <div className={`relative ${bg} rounded-sm shadow-md hover:shadow-lg transition-shadow duration-200 p-5 flex flex-col gap-3 min-h-[200px]`}
+      style={{ transform: `rotate(${(parseInt(c.id[1], 16) % 5) - 2}deg)` }}>
+
+      {/* Label + case ref */}
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-black uppercase tracking-widest text-blue-900/50">Support · CASE-{shortId(c.id)}</span>
+        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
+          c.status === "open" ? "bg-blue-200 text-blue-800" :
+          c.status === "in_progress" ? "bg-yellow-200 text-yellow-800" :
+          "bg-green-200 text-green-800"
+        }`}>{STATUS_LABELS[c.status]}</span>
       </div>
 
-      {/* Create form */}
-      {creating && (
-        <form onSubmit={handleCreate} className="bg-white border border-border rounded-xl p-5 mb-6 flex flex-col gap-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">Customer Name *</label>
-              <input
-                value={form.customer_name}
-                onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))}
-                placeholder="John Smith"
-                required
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">Customer Email *</label>
-              <input
-                type="email"
-                value={form.customer_email}
-                onChange={e => setForm(p => ({ ...p, customer_email: e.target.value }))}
-                placeholder="john@example.com"
-                required
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
+      {/* Subject */}
+      <p className="font-heading font-black text-gray-800 text-lg leading-tight">{c.subject}</p>
+
+      {/* Customer */}
+      <p className="text-sm font-semibold text-gray-700">{c.customer_name}</p>
+      <p className="text-xs text-gray-500 -mt-2">{c.customer_email}</p>
+
+      {/* Notes preview */}
+      {c.notes && !expanded && (
+        <p className="text-sm text-gray-700 leading-relaxed flex-1 line-clamp-2">{c.notes}</p>
+      )}
+
+      {/* Expanded edit */}
+      {expanded && (
+        <div className="flex flex-col gap-2 mt-1">
+          <div className="flex gap-1.5 flex-wrap">
+            {(["open", "in_progress", "resolved"] as const).map(s => (
+              <button key={s} onClick={() => setEditStatus(s)}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-full border-2 transition-all ${
+                  editStatus === s ? "border-gray-700 bg-gray-700 text-white" : "border-gray-400 text-gray-700 hover:border-gray-600"
+                }`}>
+                {STATUS_LABELS[s]}
+              </button>
+            ))}
           </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground block mb-1">Subject *</label>
-            <input
-              value={form.subject}
-              onChange={e => setForm(p => ({ ...p, subject: e.target.value }))}
-              placeholder="e.g. Card damaged in transit"
-              required
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground block mb-1">Initial notes (included in customer email)</label>
-            <textarea
-              value={form.notes}
-              onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
-              placeholder="Describe the issue or what we're doing about it…"
-              rows={3}
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-            />
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <p className="text-xs text-muted-foreground">Opening this case will send an email to the customer with the case reference and notes.</p>
+          <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={3} placeholder="Notes for customer…"
+            className="w-full bg-white/60 border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400/40 resize-none" />
           <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              {saving ? "Opening case…" : "Open Case & Email Customer"}
+            <button onClick={save} disabled={saving}
+              className="flex-1 py-1.5 bg-gray-800 text-white text-xs font-bold rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors">
+              {saving ? "Saving…" : "Save & Email"}
             </button>
-            <button type="button" onClick={() => setCreating(false)} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={() => setExpanded(false)}
+              className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg transition-colors">
               Cancel
             </button>
           </div>
-        </form>
+        </div>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {active.length === 0 && !creating && (
-            <div className="text-center py-12 text-muted-foreground text-sm">No active support cases.</div>
-          )}
-
-          {active.map(c => (
-            <div key={c.id} className="bg-white border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center gap-4 px-5 py-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs text-muted-foreground">CASE-{shortId(c.id)}</span>
-                    <StatusBadge status={c.status} />
-                  </div>
-                  <p className="font-semibold text-sm text-foreground mt-1 leading-tight">{c.subject}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{c.customer_name} · {c.customer_email}</p>
-                </div>
-                <span className="text-xs text-muted-foreground flex-shrink-0">{fmtDate(c.created_at)}</span>
-                <button
-                  onClick={() => { setExpanded(expanded === c.id ? null : c.id); initEdit(c); }}
-                  className="text-xs text-primary font-semibold hover:underline flex-shrink-0"
-                >
-                  {expanded === c.id ? "Close" : "Manage"}
-                </button>
-              </div>
-
-              {expanded === c.id && (
-                <div className="border-t border-border px-5 py-4 bg-secondary/30 flex flex-col gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Status</label>
-                    <div className="flex gap-2">
-                      {(["open", "in_progress", "resolved"] as const).map(s => (
-                        <button
-                          key={s}
-                          onClick={() => setEditState(prev => ({ ...prev, [c.id]: { ...prev[c.id], status: s } }))}
-                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 transition-all ${
-                            (editState[c.id]?.status ?? c.status) === s
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border text-muted-foreground hover:border-primary/40"
-                          }`}
-                        >
-                          {STATUS_LABELS[s]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Notes for customer (sent in update email)</label>
-                    <textarea
-                      value={editState[c.id]?.notes ?? (c.notes ?? "")}
-                      onChange={e => setEditState(prev => ({ ...prev, [c.id]: { ...prev[c.id], notes: e.target.value } }))}
-                      rows={4}
-                      placeholder="Update notes sent to the customer…"
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none bg-white"
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => handleUpdate(c)}
-                      disabled={updating === c.id}
-                      className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                    >
-                      {updating === c.id ? "Saving…" : "Save & Email Customer"}
-                    </button>
-                    <p className="text-xs text-muted-foreground">Customer will receive an update email.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {resolved.length > 0 && (
-            <details className="mt-4">
-              <summary className="text-sm text-muted-foreground font-medium cursor-pointer hover:text-foreground">
-                {resolved.length} resolved case{resolved.length !== 1 ? "s" : ""}
-              </summary>
-              <div className="flex flex-col gap-2 mt-3">
-                {resolved.map(c => (
-                  <div key={c.id} className="bg-white border border-border rounded-xl px-5 py-3 flex items-center gap-3 opacity-70">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">CASE-{shortId(c.id)}</span>
-                        <StatusBadge status={c.status} />
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-0.5">{c.subject} · {c.customer_name}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{fmtDate(c.created_at)}</span>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
+      {/* Footer */}
+      {!expanded && (
+        <div className="flex items-center justify-between mt-auto pt-2">
+          <span className="text-xs text-blue-900/40">{fmtDate(c.created_at)}</span>
+          <button onClick={() => setExpanded(true)}
+            className="text-xs font-bold text-gray-600 hover:text-gray-900 underline transition-colors">
+            Update
+          </button>
         </div>
       )}
     </div>
@@ -510,30 +301,114 @@ function SupportTab() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CasesPage() {
-  const [tab, setTab] = useState<"internal" | "support">("support");
+  const [internal, setInternal] = useState<InternalCase[]>([]);
+  const [support, setSupport] = useState<SupportCase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [showResolved, setShowResolved] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [ir, sr] = await Promise.all([
+      fetch("/api/admin/cases/internal").then(r => r.json()),
+      fetch("/api/admin/cases/support").then(r => r.json()),
+    ]);
+    setInternal(ir.cases ?? []);
+    setSupport(sr.cases ?? []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openInternal = internal.filter(c => c.status === "open");
+  const resolvedInternal = internal.filter(c => c.status === "resolved");
+  const openSupport = support.filter(c => c.status !== "resolved");
+  const resolvedSupport = support.filter(c => c.status === "resolved");
+
+  const totalOpen = openInternal.length + openSupport.length;
 
   return (
-    <div className="max-w-4xl mx-auto px-6 md:px-10 py-10">
-      <h1 className="font-heading font-black text-3xl text-foreground mb-6">Cases</h1>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-secondary rounded-xl p-1 mb-8 w-fit">
-        {(["support", "internal"] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
-              tab === t
-                ? "bg-white text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t === "support" ? "Support Cases" : "Internal Reminders"}
-          </button>
-        ))}
+    <div className="min-h-screen bg-[#f5f0e8] px-6 md:px-10 py-10">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="font-heading font-black text-4xl text-gray-800">Cases</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {loading ? "Loading…" : `${totalOpen} open · ${resolvedInternal.length + resolvedSupport.length} resolved`}
+          </p>
+        </div>
+        <button onClick={() => setShowModal(true)}
+          className="px-5 py-3 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-700 transition-colors shadow-md text-sm">
+          + New Case
+        </button>
       </div>
 
-      {tab === "support" ? <SupportTab /> : <InternalTab />}
+      {loading ? (
+        <div className="flex justify-center py-24"><div className="w-8 h-8 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /></div>
+      ) : (
+        <>
+          {/* Open board */}
+          {totalOpen === 0 ? (
+            <div className="text-center py-24">
+              <p className="text-5xl mb-4">✅</p>
+              <p className="font-heading font-black text-2xl text-gray-700">All clear!</p>
+              <p className="text-gray-500 text-sm mt-2">No open cases or reminders.</p>
+            </div>
+          ) : (
+            <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-5 space-y-5">
+              {/* Internal first */}
+              {openInternal.map(c => (
+                <div key={c.id} className="break-inside-avoid">
+                  <InternalPostIt c={c} onResolve={load} onDelete={load} />
+                </div>
+              ))}
+              {/* Support cases */}
+              {openSupport.map(c => (
+                <div key={c.id} className="break-inside-avoid">
+                  <SupportPostIt c={c} onUpdate={load} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Resolved section */}
+          {(resolvedInternal.length > 0 || resolvedSupport.length > 0) && (
+            <div className="mt-12">
+              <button onClick={() => setShowResolved(!showResolved)}
+                className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors mb-4">
+                <span>{showResolved ? "▾" : "▸"}</span>
+                {resolvedInternal.length + resolvedSupport.length} resolved cases
+              </button>
+
+              {showResolved && (
+                <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-5 space-y-5 opacity-50">
+                  {resolvedInternal.map(c => (
+                    <div key={c.id} className="break-inside-avoid">
+                      <div className="bg-gray-200 rounded-sm shadow p-5 min-h-[120px] relative">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-2">Reminder · Done</span>
+                        <p className="font-heading font-black text-gray-600 text-lg line-through">{c.title}</p>
+                        <p className="text-xs text-gray-400 mt-2">{fmtDate(c.created_at)}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {resolvedSupport.map(c => (
+                    <div key={c.id} className="break-inside-avoid">
+                      <div className="bg-gray-200 rounded-sm shadow p-5 min-h-[120px]">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-2">Support · Resolved</span>
+                        <p className="font-heading font-black text-gray-600 text-base line-through">{c.subject}</p>
+                        <p className="text-xs text-gray-500 mt-1">{c.customer_name}</p>
+                        <p className="text-xs text-gray-400 mt-2">{fmtDate(c.created_at)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {showModal && <NewCaseModal onClose={() => setShowModal(false)} onCreated={load} />}
     </div>
   );
 }
