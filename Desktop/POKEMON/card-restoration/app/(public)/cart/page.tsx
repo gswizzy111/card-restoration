@@ -41,6 +41,9 @@ export default function CartPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-heading font-bold text-foreground text-sm">{item.name}</p>
+                {item.size && (
+                  <p className="text-xs text-muted-foreground mt-0.5">Size: {item.size}</p>
+                )}
                 <p className="text-primary font-semibold text-sm mt-0.5">{formatCurrency(item.price_cents)}</p>
               </div>
               <div className="flex items-center gap-2">
