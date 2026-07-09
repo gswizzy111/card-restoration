@@ -57,11 +57,12 @@ const TIER_TURNAROUND_DAYS: Record<string, number> = {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tab?: string; tier?: string }>;
+  searchParams: Promise<{ q?: string; tab?: string; tier?: string; period?: string }>;
 }) {
-  const { q, tab, tier: tierFilter } = await searchParams;
+  const { q, tab, tier: tierFilter, period: shippedPeriod } = await searchParams;
   const query = q?.trim() ?? "";
   const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : "orders";
+  const activePeriod = shippedPeriod === "week" ? "week" : shippedPeriod === "month" ? "month" : shippedPeriod === "all" ? "all" : "today";
 
   const admin = createAdminClient();
 
@@ -192,9 +193,9 @@ export default async function AdminPage({
       .order("created_at", { ascending: true }),
     admin
       .from("orders")
-      .select("id, order_number, customer_name, customer_email, created_at, tracking_number, return_label_url")
+      .select("id, order_number, customer_name, customer_email, created_at, updated_at, tracking_number, return_label_url, admin_notes")
       .eq("status", "shipped_back")
-      .order("created_at", { ascending: true }),
+      .order("updated_at", { ascending: false }),
     admin
       .from("orders")
       .select("id, order_number, customer_name, customer_email, created_at, total_cents, restoration_tier, inbound_method")
@@ -222,6 +223,22 @@ export default async function AdminPage({
       .filter((r): r is PromiseFulfilledResult<ShippedWithTracking> => r.status === "fulfilled")
       .map((r) => r.value);
   }
+
+  // Date-filter shipped orders by when they were updated (shipped out)
+  function filterByPeriod<T extends { updated_at: string }>(list: T[], period: string): T[] {
+    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const todayStart = new Date(nowET.getFullYear(), nowET.getMonth(), nowET.getDate());
+    const weekStart = new Date(todayStart.getTime() - 6 * 86400000);
+    const monthStart = new Date(nowET.getFullYear(), nowET.getMonth(), 1);
+    return list.filter((o) => {
+      const d = new Date(o.updated_at);
+      if (period === "today") return d >= todayStart;
+      if (period === "week") return d >= weekStart;
+      if (period === "month") return d >= monthStart;
+      return true;
+    });
+  }
+  const filteredShippedOrders = filterByPeriod(shippedOrders, activePeriod);
 
   const orderIds = orders?.map((o) => o.id) ?? [];
   const { data: allCards } = orderIds.length > 0
@@ -730,6 +747,12 @@ export default async function AdminPage({
             RETURNED:    { label: "Being Returned",             cls: "bg-orange-100 text-orange-700" },
             FAILURE:     { label: "Delivery Issue",             cls: "bg-red-100 text-red-700" },
           };
+          const PERIOD_FILTERS = [
+            { value: "today", label: "Today" },
+            { value: "week",  label: "This Week" },
+            { value: "month", label: "This Month" },
+            { value: "all",   label: "All Time" },
+          ];
           return (
             <>
               {/* Sync delivered — always shown on shipped tab */}
@@ -758,11 +781,38 @@ export default async function AdminPage({
                 </div>
               )}
 
+              {/* Period filter pills */}
+              <div className="flex gap-2 flex-wrap mb-4 items-center">
+                {PERIOD_FILTERS.map(({ value, label }) => (
+                  <Link
+                    key={value}
+                    href={`/admin?tab=shipped&period=${value}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                      activePeriod === value
+                        ? "bg-foreground text-background border-foreground"
+                        : "bg-white text-muted-foreground border-border hover:border-foreground"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                ))}
+                <span className="text-xs text-muted-foreground ml-1">
+                  {filteredShippedOrders.length} order{filteredShippedOrders.length !== 1 ? "s" : ""}
+                </span>
+                <span className="text-xs text-red-500 font-semibold ml-1 flex items-center gap-1">
+                  <span className="text-red-500 font-black">*</span> = grader notes missing
+                </span>
+              </div>
+
               {shippedCount === 0 ? (
                 <div className="bg-white rounded-xl border border-border p-16 text-center">
                   <p className="text-2xl mb-2">📦</p>
                   <p className="font-heading font-black text-lg text-foreground">No packages out</p>
                   <p className="text-sm text-muted-foreground mt-1">No orders have been shipped yet.</p>
+                </div>
+              ) : filteredShippedOrders.length === 0 ? (
+                <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground text-sm">
+                  No shipped orders for this time period.
                 </div>
               ) : (
                 <div className="bg-white rounded-xl border border-border overflow-hidden">
@@ -771,6 +821,7 @@ export default async function AdminPage({
                       <tr className="border-b border-border bg-secondary/40">
                         <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Order</th>
                         <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Shipped</th>
                         <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tracking #</th>
                         <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
                         <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Details</th>
@@ -778,8 +829,9 @@ export default async function AdminPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {shippedOrders.map((order) => {
+                      {filteredShippedOrders.map((order) => {
                         const hasTracking = !!order.tracking_number;
+                        const missingNotes = !order.admin_notes || (order.admin_notes as string).trim() === "";
                         const trackStatus = order.track?.trackingStatus?.status ?? "UNKNOWN";
                         const statusDetails = order.track?.trackingStatus?.statusDetails ?? null;
                         const eta = order.track?.eta ?? null;
@@ -790,13 +842,21 @@ export default async function AdminPage({
                         return (
                           <tr key={order.id} className={`border-b border-border last:border-0 hover:bg-secondary/20 transition-colors ${!hasTracking ? "bg-red-50/30" : ""}`}>
                             <td className="px-4 py-3">
-                              <Link href={`/admin/orders/${order.id}`} className="font-mono font-bold text-primary hover:underline">
-                                #{order.order_number}
-                              </Link>
+                              <div className="flex items-center gap-1.5">
+                                <Link href={`/admin/orders/${order.id}`} className="font-mono font-bold text-primary hover:underline">
+                                  #{order.order_number}
+                                </Link>
+                                {missingNotes && (
+                                  <span className="text-red-500 font-black text-base leading-none" title="Grader notes missing">*</span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <p className="font-medium text-foreground">{order.customer_name}</p>
                               <p className="text-xs text-muted-foreground">{order.customer_email}</p>
+                            </td>
+                            <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                              {new Date(order.updated_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                             </td>
                             <td className="px-4 py-3">
                               {hasTracking
