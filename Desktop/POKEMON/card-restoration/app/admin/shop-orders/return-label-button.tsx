@@ -72,14 +72,22 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, existingTrackingN
   if (labelUrl) {
     return (
       <div className="flex flex-col gap-2">
-        <a
-          href={labelUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block text-xs font-bold px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity w-fit"
-        >
-          Print {labelName} Label
-        </a>
+        <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href={labelUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-xs font-bold px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+          >
+            Print {labelName} Label
+          </a>
+          <button
+            onClick={() => { setLabelUrl(null); setTrackingNumber(null); setState("idle"); }}
+            className="text-xs font-bold px-3 py-1.5 bg-secondary text-foreground border border-border rounded-lg hover:border-primary/40 transition-colors"
+          >
+            + New Label
+          </button>
+        </div>
         {trackingNumber && (
           <div className="flex items-center gap-2 px-3 py-2 bg-cyan-50 border border-cyan-200 rounded-lg w-fit">
             <span className="text-[10px] font-bold uppercase tracking-widest text-cyan-700">Tracking</span>
