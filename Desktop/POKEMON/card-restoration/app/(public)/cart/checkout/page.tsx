@@ -193,7 +193,7 @@ function CheckoutInner() {
   const intlShippingTotal = chosenRate ? chosenRate.amountCents + 1000 : 0;
   const discountCents = discountPercent > 0 ? Math.round(totalCents * discountPercent / 100) : 0;
   const discountedTotal = totalCents - discountCents;
-  const taxCents = Math.round(discountedTotal * 0.06);
+  const taxCents = Math.round(discountedTotal * 0.06625);
 
   if (items.length === 0) {
     return (
@@ -378,7 +378,7 @@ function CheckoutInner() {
                 </div>
               )}
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Sales Tax (6%)</span>
+                <span className="text-muted-foreground">Sales Tax (6.625%)</span>
                 <span className="font-medium">{formatCurrency(taxCents)}</span>
               </div>
               {isInternational && chosenRate ? (

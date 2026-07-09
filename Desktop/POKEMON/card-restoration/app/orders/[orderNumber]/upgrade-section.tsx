@@ -6,7 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 const TIER_ORDER: RestorationTierId[] = ["regular", "expedited", "premium", "ultra_premium"];
-const TAX_RATE = 0.065;
+const TAX_RATE = 0.06625;
 
 interface Props {
   orderNumber: string;

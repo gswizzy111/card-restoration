@@ -163,8 +163,8 @@ export async function POST(request: Request) {
     ? (data.shipping_method === "buy_label" || isInternational ? data.shipping_rate.amount_cents : 0)
     : 0;
 
-  // Sales tax — 6.5% on subtotal after discount
-  const TAX_RATE = 0.065;
+  // Sales tax — 6.625% on subtotal after discount
+  const TAX_RATE = 0.06625;
   const taxCents = Math.round((subtotalCents - discountCents) * TAX_RATE);
 
   // Slab cracking — $7/slab, server-side, capped at card count
@@ -290,7 +290,7 @@ export async function POST(request: Request) {
     });
   }
   lineItems.push({
-    price_data: { currency: "usd", product_data: { name: "Sales Tax (6.5%)" }, unit_amount: taxCents },
+    price_data: { currency: "usd", product_data: { name: "Sales Tax (6.625%)" }, unit_amount: taxCents },
     quantity: 1,
   });
 

@@ -132,7 +132,7 @@ export function StepReview({
     }
   }
 
-  const TAX_RATE = 0.065;
+  const TAX_RATE = 0.06625;
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
