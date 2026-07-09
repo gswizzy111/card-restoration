@@ -127,7 +127,7 @@ export default async function TierSelectionPage() {
                     <div className="text-sm">
                       <p className="font-semibold text-foreground mb-1">Turnaround</p>
                       <p className="text-muted-foreground">
-                        {tier.turnaround_min_days}–{tier.turnaround_max_days} business days
+                        ~{tier.turnaround_min_days}–{tier.turnaround_max_days} business days <span className="text-xs">(est.)</span>
                       </p>
                     </div>
 
@@ -150,8 +150,30 @@ export default async function TierSelectionPage() {
           })}
         </div>
 
+        {/* Turnaround disclaimer */}
+        <details className="mt-8 border border-amber-200 bg-amber-50 rounded-lg group">
+          <summary className="flex items-center justify-between px-5 py-4 cursor-pointer list-none select-none">
+            <div className="flex items-center gap-2.5">
+              <span className="text-amber-600 text-base">⚠️</span>
+              <span className="text-sm font-semibold text-amber-800">About our turnaround time estimates</span>
+            </div>
+            <span className="text-amber-600 text-sm font-bold group-open:rotate-180 transition-transform duration-150 inline-block">▾</span>
+          </summary>
+          <div className="px-5 pb-5 text-sm text-amber-900 space-y-2 leading-relaxed border-t border-amber-200 pt-4">
+            <p>
+              All turnaround times shown are <strong>rough estimates only</strong> and are not a guarantee or promise of completion within any specific timeframe.
+            </p>
+            <p>
+              Actual processing times may be affected by order volume, card condition, shipping delays, holidays, or other circumstances outside our control. We will always do our best to meet or beat the estimated range, but <strong>The Card Doc cannot be held liable</strong> for services completed outside the estimated window.
+            </p>
+            <p className="text-xs text-amber-700">
+              By placing an order you acknowledge that turnaround times are estimates and agree that delays do not entitle you to a refund or cancellation. See our <Link href="/terms" className="underline hover:text-amber-900">Terms of Service</Link> for full details.
+            </p>
+          </div>
+        </details>
+
         {/* Info Footer */}
-        <div className="mt-16 bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
+        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
           <p className="text-muted-foreground">
             All tiers include professional restoration and{" "}
             <span className="font-semibold text-foreground">grader notes</span>. Questions about which tier is right
