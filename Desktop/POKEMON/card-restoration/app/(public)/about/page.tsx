@@ -71,38 +71,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* About section */}
-      <section className="py-16 md:py-24 bg-white">
-        <div className="max-w-4xl mx-auto px-6 md:px-10">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <h2 className="font-heading text-3xl font-bold text-foreground mb-5">Who we are</h2>
-              <p className="text-muted-foreground leading-relaxed mb-4">
-                We started The Card Doc because we know exactly what it feels like to pull a card you love out of a pack — and then watch it pick up a scratch on the way to your binder. We built the restoration service we always wished existed.
-              </p>
-              <p className="text-muted-foreground leading-relaxed mb-4">
-                Every card that comes through our door gets handled with care. We document condition before and after, communicate every step of the way, and never start work on a card we don&apos;t think we can improve.
-              </p>
-              <p className="text-muted-foreground leading-relaxed">
-                Based out of New Jersey, we ship nationwide and handle everything from budget modern cards to vintage grails.
-              </p>
-            </div>
-            <div className="flex flex-col gap-5">
-              {[
-                { stat: "100+", label: "Cards restored" },
-                { stat: "4", label: "Service tiers" },
-                { stat: "1 day", label: "Response time" },
-                { stat: "100%", label: "Insured shipping" },
-              ].map(({ stat, label }) => (
-                <div key={label} className="flex items-center gap-5 p-5 rounded-xl border border-border">
-                  <p className="font-heading text-3xl font-bold text-[#1a8fe0] w-28 shrink-0">{stat}</p>
-                  <p className="text-muted-foreground font-medium">{label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Can / Cannot fix */}
       <section className="py-16 md:py-24 bg-secondary/30">
