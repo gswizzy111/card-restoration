@@ -172,6 +172,20 @@ export async function POST(request: Request) {
           .eq("id", item.id);
       }
 
+      // Consume gift card balance if one was applied
+      const shopGcId = session.metadata?.gift_card_id;
+      const shopGcDiscount = parseInt(session.metadata?.gift_card_discount_cents ?? "0", 10);
+      if (shopGcId && shopGcDiscount > 0) {
+        const { data: shopGc } = await admin.from("gift_cards").select("remaining_cents").eq("id", shopGcId).single();
+        if (shopGc) {
+          const newRemaining = Math.max(0, shopGc.remaining_cents - shopGcDiscount);
+          await admin.from("gift_cards").update({
+            remaining_cents: newRemaining,
+            status: newRemaining === 0 ? "depleted" : "active",
+          }).eq("id", shopGcId);
+        }
+      }
+
       const addrLine = shippingAddress
         ? `${shippingAddress.street1}${shippingAddress.street2 ? `, ${shippingAddress.street2}` : ""}, ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.zip}`
         : "";

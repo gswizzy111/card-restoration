@@ -16,6 +16,7 @@ const BodySchema = z.object({
     country: z.string().default("US"),
   }),
   affiliate_code: z.string().optional(),
+  gift_card_code: z.string().optional(),
   international_shipping_cents: z.number().int().positive().optional(),
   international_shipping_label: z.string().optional(),
 });
@@ -89,6 +90,35 @@ export async function POST(request: Request) {
     });
   }
 
+  // Gift card
+  let giftCardDiscountCents = 0;
+  let giftCardId: string | null = null;
+  if (data.gift_card_code) {
+    const gcCode = data.gift_card_code.trim().toUpperCase();
+    const { data: gc } = await admin
+      .from("gift_cards")
+      .select("id, remaining_cents, status")
+      .eq("code", gcCode)
+      .maybeSingle();
+    if (gc && gc.status === "active" && gc.remaining_cents > 0) {
+      giftCardId = gc.id;
+      const preTaxTotal = productSubtotalCents + taxCents + (data.international_shipping_cents ?? 0);
+      giftCardDiscountCents = Math.min(gc.remaining_cents, preTaxTotal);
+    }
+  }
+
+  // Gift card as negative line item
+  if (giftCardDiscountCents > 0) {
+    lineItems.push({
+      price_data: {
+        currency: "usd",
+        product_data: { name: `Gift Card (${data.gift_card_code?.toUpperCase()})` },
+        unit_amount: -giftCardDiscountCents,
+      },
+      quantity: 1,
+    });
+  }
+
   // Validate affiliate/coupon code and get discount
   let validatedAffiliateCode: string | null = null;
   let discountPercent = 0;
@@ -124,6 +154,8 @@ export async function POST(request: Request) {
     customer_phone: data.customer.phone,
     items: JSON.stringify(data.items.map((i) => ({ id: i.id, qty: i.quantity }))),
     affiliate_code: validatedAffiliateCode ?? "",
+    gift_card_id: giftCardId ?? "",
+    gift_card_discount_cents: giftCardDiscountCents > 0 ? String(giftCardDiscountCents) : "",
   };
 
   if (isInternational) {
