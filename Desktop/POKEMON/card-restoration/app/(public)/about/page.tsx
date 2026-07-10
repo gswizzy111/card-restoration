@@ -66,7 +66,7 @@ export default function AboutPage() {
             We treat every card like it&apos;s worth a fortune.
           </h1>
           <p className="text-white/80 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
-            The Card Doc is a professional card restoration and PSA prep service built for collectors who care about how their cards look. We don&apos;t cut corners.
+            The Card Doc is a professional card restoration service built for collectors who care about how their cards look. We don&apos;t cut corners.
           </p>
         </div>
       </section>
