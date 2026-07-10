@@ -43,8 +43,50 @@ const FULFILLMENT_STATUS_STYLES: Record<string, { label: string; cls: string }> 
   in_progress: { label: "In Progress",    cls: "bg-purple-100 text-purple-700" },
 };
 
-function daysAgo(date: string) {
-  return Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24));
+function businessDaysSince(dateStr: string): number {
+  const start = new Date(dateStr);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  let count = 0;
+  const d = new Date(start);
+  while (d < end) {
+    d.setDate(d.getDate() + 1);
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) count++;
+  }
+  return count;
+}
+
+function addBusinessDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  let remaining = Math.abs(days);
+  const dir = days >= 0 ? 1 : -1;
+  while (remaining > 0) {
+    result.setDate(result.getDate() + dir);
+    const day = result.getDay();
+    if (day !== 0 && day !== 6) remaining--;
+  }
+  return result;
+}
+
+function businessDaysUntil(target: Date): number {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const t = new Date(target);
+  t.setHours(0, 0, 0, 0);
+  if (now.getTime() === t.getTime()) return 0;
+  const overdue = t < now;
+  const from = overdue ? new Date(t) : new Date(now);
+  const to = overdue ? new Date(now) : new Date(t);
+  let count = 0;
+  const d = new Date(from);
+  while (d < to) {
+    d.setDate(d.getDate() + 1);
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) count++;
+  }
+  return overdue ? -count : count;
 }
 
 const TIER_TURNAROUND_DAYS: Record<string, number> = {
@@ -297,14 +339,14 @@ export default async function AdminPage({
     if (!receivedAtByOrder[ev.order_id]) receivedAtByOrder[ev.order_id] = ev.created_at;
   }
 
-  // Sort fulfillment orders by due date (most urgent first)
+  // Sort fulfillment orders by business-day due date (most urgent first)
   const sortedFulfillmentOrders = [...(fulfillmentOrders ?? [])].sort((a, b) => {
     const recA = receivedAtByOrder[a.id] ?? a.created_at;
     const recB = receivedAtByOrder[b.id] ?? b.created_at;
     const daysA = TIER_TURNAROUND_DAYS[(a.restoration_tier as string) ?? "regular"] ?? 20;
     const daysB = TIER_TURNAROUND_DAYS[(b.restoration_tier as string) ?? "regular"] ?? 20;
-    const dueA = new Date(recA).getTime() + daysA * 86400000;
-    const dueB = new Date(recB).getTime() + daysB * 86400000;
+    const dueA = addBusinessDays(new Date(recA), daysA).getTime();
+    const dueB = addBusinessDays(new Date(recB), daysB).getTime();
     return dueA - dueB;
   }).filter((o) => !tierFilter || tierFilter === "all" || o.restoration_tier === tierFilter);
 
@@ -660,8 +702,8 @@ export default async function AdminPage({
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tier</th>
                       <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Cards</th>
-                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Since Rcvd</th>
-                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Due In</th>
+                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Biz Days In</th>
+                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Biz Days Left</th>
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
                       <th className="px-4 py-3" />
                     </tr>
@@ -671,13 +713,13 @@ export default async function AdminPage({
                       const tier = (order.restoration_tier as RestorationTierId | null) ?? "regular";
                       const tierStyle = TIER_STYLES[tier] ?? null;
                       const statusStyle = FULFILLMENT_STATUS_STYLES[order.status];
-                      const receivedAt = receivedAtByOrder[order.id] ?? order.created_at;
-                      const daysSinceReceived = daysAgo(receivedAt);
+                      const receivedAt = receivedAtByOrder[order.id] ?? null;
+                      const bizDaysIn = receivedAt ? businessDaysSince(receivedAt) : null;
                       const turnaround = TIER_TURNAROUND_DAYS[tier] ?? 20;
-                      const dueDate = new Date(new Date(receivedAt).getTime() + turnaround * 86400000);
-                      const daysUntilDue = Math.ceil((dueDate.getTime() - Date.now()) / 86400000);
-                      const isOverdue = daysUntilDue < 0;
-                      const isDueSoon = daysUntilDue >= 0 && daysUntilDue <= 2;
+                      const dueDate = receivedAt ? addBusinessDays(new Date(receivedAt), turnaround) : null;
+                      const daysUntilDue = dueDate ? businessDaysUntil(dueDate) : null;
+                      const isOverdue = daysUntilDue !== null && daysUntilDue < 0;
+                      const isDueSoon = daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 2;
                       const cards = cardCountByOrder[order.id] ?? 0;
 
                       return (
@@ -707,12 +749,18 @@ export default async function AdminPage({
                           </td>
                           <td className="px-4 py-3 text-center font-bold text-foreground">{cards}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className="font-bold text-sm text-foreground">{daysSinceReceived}d</span>
+                            {bizDaysIn !== null
+                              ? <span className="font-bold text-sm text-foreground">{bizDaysIn}d</span>
+                              : <span className="text-xs text-muted-foreground">—</span>
+                            }
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`font-black text-sm ${isOverdue ? "text-red-600" : isDueSoon ? "text-yellow-600" : "text-green-600"}`}>
-                              {isOverdue ? `${Math.abs(daysUntilDue)}d overdue` : `${daysUntilDue}d`}
-                            </span>
+                            {daysUntilDue !== null
+                              ? <span className={`font-black text-sm ${isOverdue ? "text-red-600" : isDueSoon ? "text-yellow-600" : "text-green-600"}`}>
+                                  {isOverdue ? `${Math.abs(daysUntilDue)}d over` : `${daysUntilDue}d`}
+                                </span>
+                              : <span className="text-xs text-muted-foreground">—</span>
+                            }
                           </td>
                           <td className="px-4 py-3">
                             {statusStyle && (
