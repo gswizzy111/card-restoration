@@ -61,6 +61,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [customerNotes, setCustomerNotes] = useState("");
   const [affiliateCode, setAffiliateCode] = useState("");
   const [discountPercent, setDiscountPercent] = useState(0);
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const [giftCardAmountCents, setGiftCardAmountCents] = useState(0);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [insurance, setInsurance] = useState<InsuranceSelection>({ declaredValueCents: 0, type: "none", chargeCents: 0 });
@@ -133,6 +135,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           customer_notes: customerNotes || undefined,
           affiliate_code: affiliateCode.trim().toUpperCase() || undefined,
           discount_percent: discountPercent > 0 ? discountPercent : undefined,
+          gift_card_code: giftCardCode.trim().toUpperCase() || undefined,
           insurance_declared_value_cents: insurance.declaredValueCents > 0 ? insurance.declaredValueCents : undefined,
           insurance_type: insurance.type !== "none" ? insurance.type : undefined,
           slab_crack_count: cards.filter((c) => c.needs_slab_crack).length || undefined,
@@ -200,6 +203,10 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               onTermsChange={setTermsAccepted}
               insurance={insurance}
               onInsuranceChange={setInsurance}
+              giftCardCode={giftCardCode}
+              onGiftCardCodeChange={setGiftCardCode}
+              giftCardAmountCents={giftCardAmountCents}
+              onGiftCardAmountChange={setGiftCardAmountCents}
               onEditStep={(s) => {
                 // remap review edit targets to new step numbers
                 if (s === 2) setStep(1); // cards

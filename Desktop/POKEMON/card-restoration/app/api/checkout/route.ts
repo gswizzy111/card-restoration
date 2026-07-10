@@ -49,6 +49,7 @@ const BodySchema = z.object({
     .optional(),
   customer_notes: z.string().optional(),
   affiliate_code: z.string().optional(),
+  gift_card_code: z.string().optional(),
   insurance_declared_value_cents: z.number().int().min(100).max(1_000_000).optional(),
   insurance_type: z.enum(["inbound", "round_trip"]).optional(),
   slab_crack_count: z.number().int().min(0).max(100).optional(),
@@ -182,7 +183,24 @@ export async function POST(request: Request) {
     insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;
   }
 
-  const totalCents = subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents;
+  // Gift card — look up and apply up to order total
+  let giftCardDiscountCents = 0;
+  let giftCardId: string | null = null;
+  if (data.gift_card_code) {
+    const gcCode = data.gift_card_code.trim().toUpperCase();
+    const { data: gc } = await admin
+      .from("gift_cards")
+      .select("id, remaining_cents, status")
+      .eq("code", gcCode)
+      .maybeSingle();
+    if (gc && gc.status === "active" && gc.remaining_cents > 0) {
+      giftCardId = gc.id;
+      const preTaxTotal = subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents;
+      giftCardDiscountCents = Math.min(gc.remaining_cents, preTaxTotal);
+    }
+  }
+
+  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents - giftCardDiscountCents);
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -322,8 +340,19 @@ export async function POST(request: Request) {
       quantity: slabCrackCount,
     });
   }
+  // Gift card as a negative line item
+  if (giftCardDiscountCents > 0) {
+    lineItems.push({
+      price_data: {
+        currency: "usd",
+        product_data: { name: `Gift Card (${data.gift_card_code?.toUpperCase()})` },
+        unit_amount: -giftCardDiscountCents,
+      },
+      quantity: 1,
+    });
+  }
 
-  // Create a one-time Stripe coupon if there's a discount
+  // Create a one-time Stripe coupon if there's an affiliate discount
   let stripeDiscounts: Stripe.Checkout.SessionCreateParams["discounts"] = undefined;
   if (discountPercent > 0) {
     try {
@@ -356,6 +385,8 @@ export async function POST(request: Request) {
           ? (data.shipping_rate?.object_id ?? "")
           : "",
         is_international: isInternational ? "true" : "",
+        gift_card_id: giftCardId ?? "",
+        gift_card_discount_cents: giftCardDiscountCents > 0 ? String(giftCardDiscountCents) : "",
       },
     });
   } catch (err) {
