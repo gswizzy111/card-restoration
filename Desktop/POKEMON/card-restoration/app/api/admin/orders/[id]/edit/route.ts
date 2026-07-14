@@ -29,14 +29,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const admin = createAdminClient();
   const totalCents = d.price_per_card_cents * d.cards.length;
 
-  // Update order totals, due date, notes
+  // Update order totals and notes
   const { error: orderErr } = await admin
     .from("orders")
     .update({
       subtotal_cents: totalCents,
       total_cents: totalCents,
       customer_notes: d.notes ?? null,
-      due_date: d.due_date ?? null,
     })
     .eq("id", orderId);
 
@@ -44,6 +43,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     console.error("Failed to update order:", orderErr);
     return Response.json({ error: "Failed to update order" }, { status: 500 });
   }
+
+  // Update due_date separately — silently skipped if the column doesn't exist yet
+  // Run: alter table orders add column if not exists due_date date;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (admin as any).from("orders").update({ due_date: d.due_date ?? null }).eq("id", orderId);
 
   // Replace order_services with updated pricing
   await admin.from("order_services").delete().eq("order_id", orderId);

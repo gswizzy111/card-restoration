@@ -49,7 +49,6 @@ export async function POST(request: Request) {
       shipping_cents: 0,
       total_cents: totalCents,
       customer_notes: d.notes ?? null,
-      due_date: d.due_date ?? null,
       status: "awaiting_cards",
       payment_status: "paid",
     })
@@ -59,6 +58,13 @@ export async function POST(request: Request) {
   if (orderErr || !order) {
     console.error("Failed to create manual order:", orderErr);
     return Response.json({ error: "Failed to create order" }, { status: 500 });
+  }
+
+  // Set due_date separately — silently skipped if the column doesn't exist yet
+  // Run: alter table orders add column if not exists due_date date;
+  if (d.due_date) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (admin as any).from("orders").update({ due_date: d.due_date }).eq("id", order.id);
   }
 
   await admin.from("order_services").insert({
