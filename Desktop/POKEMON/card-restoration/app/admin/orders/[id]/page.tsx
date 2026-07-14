@@ -99,6 +99,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   }
 
   const address = order.ship_from_address as Record<string, string> | null;
+  const orderDueDate = (order as Record<string, unknown>).due_date as string | null ?? null;
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -229,7 +230,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 <OrderEditor
                   orderId={order.id}
                   totalCents={order.total_cents}
-                  dueDate={(order as Record<string, unknown>).due_date as string | null ?? null}
+                  dueDate={orderDueDate}
                   customerNotes={order.customer_notes as string | null}
                   cards={(cards ?? []).map((c) => ({ id: c.id, card_name: c.card_name }))}
                   services={(services ?? []).map((s) => ({ id: s.id, service_name: s.service_name, price_cents: s.price_cents, quantity: s.quantity }))}
@@ -242,10 +243,10 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                     <span className="font-bold text-foreground">{formatCurrency(s.price_cents * s.quantity)}</span>
                   </div>
                 ))}
-                {(order as Record<string, unknown>).due_date && (
+                {orderDueDate && (
                   <div className="flex justify-between text-sm text-muted-foreground pt-1">
                     <span>Due date</span>
-                    <span>{new Date(((order as Record<string, unknown>).due_date as string) + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                    <span>{new Date(orderDueDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
                   </div>
                 )}
                 <div className="border-t border-border mt-2 pt-2 flex justify-between font-bold">
