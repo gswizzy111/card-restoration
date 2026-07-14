@@ -50,6 +50,7 @@ const BodySchema = z.object({
   customer_notes: z.string().optional(),
   affiliate_code: z.string().optional(),
   gift_card_code: z.string().optional(),
+  instagram_feature: z.boolean().optional(),
   insurance_declared_value_cents: z.number().int().min(100).max(1_000_000).optional(),
   insurance_type: z.enum(["inbound", "round_trip"]).optional(),
   slab_crack_count: z.number().int().min(0).max(100).optional(),
@@ -183,6 +184,9 @@ export async function POST(request: Request) {
     insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;
   }
 
+  // Instagram feature add-on — $100 flat
+  const instagramFeeCents = data.instagram_feature ? 10000 : 0;
+
   // Gift card — look up and apply up to order total
   let giftCardDiscountCents = 0;
   let giftCardId: string | null = null;
@@ -200,7 +204,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents - giftCardDiscountCents);
+  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents + instagramFeeCents - giftCardDiscountCents);
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -251,13 +255,23 @@ export async function POST(request: Request) {
   }
 
   // Insert order_services
-  await admin.from("order_services").insert([{
+  const orderServices: { order_id: string; service_id: string; service_name: string; price_cents: number; quantity: number }[] = [{
     order_id: order.id,
     service_id: serviceId ?? "",
     service_name: serviceName,
     price_cents: subtotalCents,
     quantity: data.cards.length,
-  }]);
+  }];
+  if (instagramFeeCents > 0) {
+    orderServices.push({
+      order_id: order.id,
+      service_id: "instagram_feature",
+      service_name: "Instagram Feature — Card in a Video",
+      price_cents: 10000,
+      quantity: 1,
+    });
+  }
+  await admin.from("order_services").insert(orderServices);
 
   // Insert cards
   const cardRows = data.cards.map((c) => ({
@@ -340,6 +354,13 @@ export async function POST(request: Request) {
       quantity: slabCrackCount,
     });
   }
+  if (instagramFeeCents > 0) {
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: "Instagram Feature — Card in a Video" }, unit_amount: 10000 },
+      quantity: 1,
+    });
+  }
+
   // Gift card as a negative line item
   if (giftCardDiscountCents > 0) {
     lineItems.push({

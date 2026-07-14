@@ -27,6 +27,8 @@ interface StepReviewProps {
   onGiftCardCodeChange: (v: string) => void;
   giftCardAmountCents: number;
   onGiftCardAmountChange: (cents: number) => void;
+  instagramFeature: boolean;
+  onInstagramFeatureChange: (v: boolean) => void;
   termsAccepted: boolean;
   onTermsChange: (v: boolean) => void;
   onEditStep: (step: number) => void;
@@ -51,6 +53,8 @@ export function StepReview({
   onGiftCardCodeChange,
   giftCardAmountCents,
   onGiftCardAmountChange,
+  instagramFeature,
+  onInstagramFeatureChange,
   termsAccepted,
   onTermsChange,
   onEditStep,
@@ -159,7 +163,8 @@ export function StepReview({
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const preTaxTotal = subtotal - discountCents + taxCents + shipping + (INSURANCE_ENABLED ? insurance.chargeCents : 0);
+  const instagramFeeCents = instagramFeature ? 10000 : 0;
+  const preTaxTotal = subtotal - discountCents + taxCents + shipping + (INSURANCE_ENABLED ? insurance.chargeCents : 0) + instagramFeeCents;
   const gcApplied = Math.min(giftCardAmountCents, preTaxTotal);
   const total = Math.max(0, preTaxTotal - gcApplied);
 
@@ -297,6 +302,29 @@ export function StepReview({
         )}
       </div>}
 
+      {/* Instagram Feature Add-on */}
+      <div className={`border-2 rounded-xl p-5 transition-colors ${instagramFeature ? "border-[#1a8fe0] bg-blue-50" : "border-border"}`}>
+        <label className="flex items-start gap-4 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={instagramFeature}
+            onChange={(e) => onInstagramFeatureChange(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+          />
+          <div>
+            <p className="font-medium text-foreground">
+              Feature my card in an Instagram video{" "}
+              <span className="text-[#1a8fe0] font-semibold">+$100</span>
+            </p>
+            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+              We&apos;ll film your card being restored and post it to{" "}
+              <a href="https://www.instagram.com/the_card_doc" target="_blank" rel="noopener noreferrer" className="text-[#1a8fe0] hover:underline">@the_card_doc</a>.
+              Perfect for rare or high-value cards.
+            </p>
+          </div>
+        </label>
+      </div>
+
       {/* Customer info */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -347,6 +375,12 @@ export function StepReview({
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>Insurance ({insurance.type === "round_trip" ? "round trip" : "inbound"})</span>
             <span>{formatCurrency(insurance.chargeCents)}</span>
+          </div>
+        )}
+        {instagramFeature && (
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>Instagram Feature</span>
+            <span>{formatCurrency(10000)}</span>
           </div>
         )}
         {gcApplied > 0 && (
