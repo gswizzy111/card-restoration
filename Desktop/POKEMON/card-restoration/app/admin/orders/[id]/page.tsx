@@ -10,6 +10,7 @@ import { CompletionNotesEditor } from "./completion-notes-editor";
 import { ReturnLabelButton } from "./return-label-button";
 import { CheckpointAdder } from "./checkpoint-adder";
 import { InboundTrackingEditor } from "./inbound-tracking-editor";
+import { OrderEditor } from "./order-editor";
 import type { Track } from "shippo/models/components";
 
 export const dynamic = "force-dynamic";
@@ -221,9 +222,19 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               </div>
             </div>
 
-            {/* Services */}
+            {/* Services + editor */}
             <div className="bg-white rounded-xl border border-border p-6">
-              <h2 className="font-heading font-black text-lg text-foreground mb-4">Services</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-heading font-black text-lg text-foreground">Services</h2>
+                <OrderEditor
+                  orderId={order.id}
+                  totalCents={order.total_cents}
+                  dueDate={(order as Record<string, unknown>).due_date as string | null ?? null}
+                  customerNotes={order.customer_notes as string | null}
+                  cards={(cards ?? []).map((c) => ({ id: c.id, card_name: c.card_name }))}
+                  services={(services ?? []).map((s) => ({ id: s.id, service_name: s.service_name, price_cents: s.price_cents, quantity: s.quantity }))}
+                />
+              </div>
               <div className="flex flex-col gap-2">
                 {services?.map((s) => (
                   <div key={s.id} className="flex justify-between text-sm">
@@ -231,6 +242,12 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                     <span className="font-bold text-foreground">{formatCurrency(s.price_cents * s.quantity)}</span>
                   </div>
                 ))}
+                {(order as Record<string, unknown>).due_date && (
+                  <div className="flex justify-between text-sm text-muted-foreground pt-1">
+                    <span>Due date</span>
+                    <span>{new Date(((order as Record<string, unknown>).due_date as string) + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                  </div>
+                )}
                 <div className="border-t border-border mt-2 pt-2 flex justify-between font-bold">
                   <span>Total</span>
                   <span className="text-primary">{formatCurrency(order.total_cents)}</span>
