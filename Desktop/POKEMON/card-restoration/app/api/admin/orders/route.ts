@@ -1,24 +1,15 @@
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getPriceCents } from "@/lib/pricing";
 import { z } from "zod";
 
 const BodySchema = z.object({
   customer_name: z.string().min(1),
   customer_email: z.string().email(),
   customer_phone: z.string().min(1),
-  street1: z.string().min(1),
-  street2: z.string().optional(),
-  city: z.string().min(1),
-  state: z.string().min(1),
-  zip: z.string().min(1),
-  inbound_method: z.enum(["self_ship", "buy_label"]),
+  price_per_card_cents: z.number().int().positive(),
+  due_date: z.string().optional(),
   notes: z.string().optional(),
-  cards: z.array(z.object({
-    card_name: z.string().min(1),
-    card_set: z.string().optional(),
-    card_year: z.string().optional(),
-  })).min(1),
+  cards: z.array(z.object({ card_name: z.string().min(1) })).min(1),
 });
 
 export async function POST(request: Request) {
@@ -36,26 +27,7 @@ export async function POST(request: Request) {
   const d = parsed.data;
   const admin = createAdminClient();
 
-  const subtotalCents = getPriceCents(d.cards.length);
-
-  const shipFromAddress = {
-    name: d.customer_name,
-    street1: d.street1,
-    street2: d.street2 ?? null,
-    city: d.city,
-    state: d.state,
-    zip: d.zip,
-    country: "US",
-  };
-
-  const shipToAddress = {
-    name: process.env.BUSINESS_SHIPPING_NAME ?? "The Card Doc",
-    street1: process.env.BUSINESS_SHIPPING_STREET1 ?? "",
-    city: process.env.BUSINESS_SHIPPING_CITY ?? "",
-    state: process.env.BUSINESS_SHIPPING_STATE ?? "",
-    zip: process.env.BUSINESS_SHIPPING_ZIP ?? "",
-    country: "US",
-  };
+  const totalCents = d.price_per_card_cents * d.cards.length;
 
   const { data: order, error: orderErr } = await admin
     .from("orders")
@@ -63,13 +35,21 @@ export async function POST(request: Request) {
       customer_name: d.customer_name,
       customer_email: d.customer_email,
       customer_phone: d.customer_phone,
-      ship_from_address: shipFromAddress,
-      ship_to_address: shipToAddress,
-      inbound_method: d.inbound_method,
-      subtotal_cents: subtotalCents,
+      ship_from_address: { name: d.customer_name, street1: "", city: "", state: "", zip: "", country: "US" },
+      ship_to_address: {
+        name: process.env.BUSINESS_SHIPPING_NAME ?? "The Card Doc",
+        street1: process.env.BUSINESS_SHIPPING_STREET1 ?? "",
+        city: process.env.BUSINESS_SHIPPING_CITY ?? "",
+        state: process.env.BUSINESS_SHIPPING_STATE ?? "",
+        zip: process.env.BUSINESS_SHIPPING_ZIP ?? "",
+        country: "US",
+      },
+      inbound_method: "self_ship",
+      subtotal_cents: totalCents,
       shipping_cents: 0,
-      total_cents: subtotalCents,
+      total_cents: totalCents,
       customer_notes: d.notes ?? null,
+      due_date: d.due_date ?? null,
       status: "awaiting_cards",
       payment_status: "paid",
     })
@@ -83,8 +63,8 @@ export async function POST(request: Request) {
 
   await admin.from("order_services").insert({
     order_id: order.id,
-    service_name: "Full Restoration & PSA Prep",
-    price_cents: subtotalCents,
+    service_name: "Manual Restoration Order",
+    price_cents: d.price_per_card_cents,
     quantity: d.cards.length,
   });
 
@@ -92,8 +72,6 @@ export async function POST(request: Request) {
     d.cards.map((c) => ({
       order_id: order.id,
       card_name: c.card_name,
-      card_set: c.card_set ?? null,
-      card_year: c.card_year ?? null,
       photo_urls: [],
       service_ids: [],
     }))
@@ -102,7 +80,7 @@ export async function POST(request: Request) {
   await admin.from("order_events").insert({
     order_id: order.id,
     event_type: "manual_order_created",
-    description: "Order created manually by admin",
+    description: `Manual order created — ${d.cards.length} card${d.cards.length !== 1 ? "s" : ""} @ $${(d.price_per_card_cents / 100).toFixed(2)}/card${d.due_date ? ` — due ${d.due_date}` : ""}`,
     is_customer_visible: false,
   });
 
