@@ -1,15 +1,38 @@
-import { Suspense, ReactNode } from "react";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrderBuilder } from "@/components/order-builder/builder";
 import { isSoldOut, TIER_SELECTION_ENABLED } from "@/lib/site-config";
+import { getRestorationsOpen } from "@/lib/store-config";
+import { RestorationWaitlistForm } from "./restoration-waitlist-form";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function RestorationPage({ searchParams }: PageProps) {
+  // Master toggle — if restorations are closed, show waitlist
+  const restorationsOpen = await getRestorationsOpen();
+  if (!restorationsOpen) {
+    return (
+      <div className="min-h-screen bg-secondary/30 flex items-center justify-center px-6 py-20">
+        <div className="max-w-lg w-full text-center">
+          <p className="text-xs font-bold uppercase tracking-widest text-primary mb-4">Restoration Services</p>
+          <h1 className="font-heading font-black text-3xl md:text-4xl text-foreground mb-3">
+            Not Accepting Restorations Right Now
+          </h1>
+          <p className="text-muted-foreground mb-8">
+            We&apos;re taking a short break from new restoration orders. Sign up below and we&apos;ll contact you as soon as we open back up.
+          </p>
+          <RestorationWaitlistForm />
+        </div>
+      </div>
+    );
+  }
+
   // Get tier from query params
   const params = await searchParams;
   const tierParam = params.tier as string | undefined;
