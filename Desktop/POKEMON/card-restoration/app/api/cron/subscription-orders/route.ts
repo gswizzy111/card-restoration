@@ -48,16 +48,17 @@ export async function GET(request: Request) {
         .maybeSingle();
       if (!sub) continue;
 
+      const cronPriceCents = typeof invoice.amount_paid === "number" ? invoice.amount_paid : 6299;
       await admin.from("shop_orders").insert({
         stripe_session_id: invoice.id,
         customer_name: sub.customer_name,
         customer_email: sub.customer_email,
         customer_phone: sub.customer_phone ?? "",
         shipping_address: sub.shipping_address,
-        items: [{ product_id: "subscription", product_name: "Monthly Kit Club", quantity: 1, price_cents: 6299 }],
-        subtotal_cents: 6299,
+        items: [{ product_id: "subscription", product_name: "Monthly Kit Club", quantity: 1, price_cents: cronPriceCents }],
+        subtotal_cents: cronPriceCents,
         shipping_cents: 0,
-        total_cents: 6299,
+        total_cents: cronPriceCents,
         status: "paid",
       });
 

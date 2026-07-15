@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSubscriptionPriceCents } from "@/lib/store-config";
 
 export async function POST(request: Request) {
   const jar = await cookies();
@@ -20,16 +21,17 @@ export async function POST(request: Request) {
 
   if (!sub) return Response.json({ error: "Subscription not found" }, { status: 404 });
 
+  const priceCents = await getSubscriptionPriceCents();
   const { data: inserted, error } = await admin.from("shop_orders").insert({
     stripe_session_id: `manual_sub_${sub.id}_${Date.now()}`,
     customer_name: sub.customer_name,
     customer_email: sub.customer_email,
     customer_phone: sub.customer_phone ?? "",
     shipping_address: sub.shipping_address,
-    items: [{ product_id: "subscription", product_name: "Monthly Kit Club", quantity: 1, price_cents: 6299 }],
-    subtotal_cents: 6299,
+    items: [{ product_id: "subscription", product_name: "Monthly Kit Club", quantity: 1, price_cents: priceCents }],
+    subtotal_cents: priceCents,
     shipping_cents: 0,
-    total_cents: 6299,
+    total_cents: priceCents,
     status: "paid",
   }).select("id").single();
 

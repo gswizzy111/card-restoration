@@ -269,16 +269,17 @@ export async function POST(request: Request) {
       });
 
       // Create the first kit order immediately — don't rely on invoice.paid which can race
+      const subFirstPriceCents = session.amount_total ?? 6299;
       await admin2.from("shop_orders").insert({
         stripe_session_id: session.id,
         customer_name: session.metadata.customer_name ?? "",
         customer_email: session.customer_email ?? "",
         customer_phone: session.metadata.customer_phone ?? "",
         shipping_address: shippingAddress,
-        items: [{ product_id: "subscription", product_name: "Monthly Kit Club", quantity: 1, price_cents: 6299 }],
-        subtotal_cents: 6299,
+        items: [{ product_id: "subscription", product_name: "Monthly Kit Club", quantity: 1, price_cents: subFirstPriceCents }],
+        subtotal_cents: subFirstPriceCents,
         shipping_cents: 0,
-        total_cents: 6299,
+        total_cents: subFirstPriceCents,
         status: "paid",
       });
 
@@ -294,7 +295,7 @@ export async function POST(request: Request) {
               <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
                 <h1 style="font-size:22px;font-weight:900">Welcome to Monthly Kit Club!</h1>
                 <p>Hi ${subCustomerName.split(" ")[0] || "there"}, you&rsquo;re officially subscribed.</p>
-                <p>Your first kit will ship within 1-2 business days. After that, you&rsquo;ll be billed $62.99 on the same day each month and a new kit will be on its way.</p>
+                <p>Your first kit will ship within 1-2 business days. After that, you&rsquo;ll be billed $${(subFirstPriceCents / 100).toFixed(2)} on the same day each month and a new kit will be on its way.</p>
                 <p>You can cancel anytime by emailing us at <a href="mailto:${fromEmail}">${fromEmail}</a>.</p>
                 <p style="font-size:13px;color:#666">Questions? DM us on Instagram <strong>@thecarddoc</strong></p>
                 <p style="font-size:13px;color:#999">${businessName}</p>
@@ -534,6 +535,7 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (subRecord) {
+        const invPriceCents = typeof invoice.amount_paid === "number" ? invoice.amount_paid : 6299;
         await adminInv.from("shop_orders").upsert(
           {
             stripe_session_id: invoice.id,
@@ -546,12 +548,12 @@ export async function POST(request: Request) {
                 product_id: "subscription",
                 product_name: "Monthly Kit Club",
                 quantity: 1,
-                price_cents: 6299,
+                price_cents: invPriceCents,
               },
             ],
-            subtotal_cents: 6299,
+            subtotal_cents: invPriceCents,
             shipping_cents: 0,
-            total_cents: 6299,
+            total_cents: invPriceCents,
             status: "paid",
           },
           { onConflict: "stripe_session_id" }

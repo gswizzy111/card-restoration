@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { stripe } from "@/lib/stripe";
+import { getSubscriptionPriceCents } from "@/lib/store-config";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
   const { name, email, phone, street1, street2, city, state, zip } = parsed.data;
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
+  const priceCents = await getSubscriptionPriceCents();
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
           price_data: {
             currency: "usd",
             product_data: { name: "Monthly Kit Club — The Card Doc" },
-            unit_amount: 6299,
+            unit_amount: priceCents,
             recurring: { interval: "month" },
           },
           quantity: 1,
