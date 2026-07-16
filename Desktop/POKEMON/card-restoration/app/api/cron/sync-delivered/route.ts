@@ -1,8 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
 
-// Runs every 2 hours via Vercel Cron.
-// Checks Shippo transaction tracking and marks any shipped orders as delivered.
+// Runs every 2 hours.
+// Checks Shippo transaction tracking and updates restoration + kit order statuses.
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -11,13 +11,21 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
-  const { data: orders } = await admin
-    .from("orders")
-    .select("id, order_number, tracking_number")
-    .not("tracking_number", "is", null)
-    .not("status", "in", '("delivered","cancelled")');
+  const [{ data: restorationOrders }, { data: kitOrders }] = await Promise.all([
+    admin
+      .from("orders")
+      .select("id, order_number, tracking_number")
+      .not("tracking_number", "is", null)
+      .not("status", "in", '("delivered","cancelled")'),
+    admin
+      .from("shop_orders")
+      .select("id, order_number, tracking_number, status")
+      .not("tracking_number", "is", null)
+      .not("status", "in", '("delivered","cancelled","paid")'),
+  ]);
 
-  if (!orders || orders.length === 0) {
+  const allOrders = [...(restorationOrders ?? []), ...(kitOrders ?? [])];
+  if (allOrders.length === 0) {
     console.log("[cron/sync-delivered] No orders to check.");
     return Response.json({ updated: 0, checked: 0 });
   }
@@ -39,9 +47,11 @@ export async function GET(request: Request) {
   }
 
   let updated = 0;
-  for (const order of orders) {
-    const status = trackingToStatus.get(order.tracking_number!);
-    if (status !== "DELIVERED") continue;
+
+  // Restoration orders — only DELIVERED transition
+  for (const order of restorationOrders ?? []) {
+    const shippoStatus = trackingToStatus.get(order.tracking_number!);
+    if (shippoStatus !== "DELIVERED") continue;
 
     await Promise.all([
       admin.from("orders").update({ status: "delivered" }).eq("id", order.id),
@@ -53,9 +63,29 @@ export async function GET(request: Request) {
       }),
     ]);
     updated++;
-    console.log(`[cron/sync-delivered] #${order.order_number} → delivered`);
+    console.log(`[cron/sync-delivered] R${order.order_number} → delivered`);
   }
 
-  console.log(`[cron/sync-delivered] checked ${orders.length}, updated ${updated}`);
-  return Response.json({ updated, checked: orders.length });
+  // Kit orders — TRANSIT → shipped, DELIVERED → delivered
+  for (const order of kitOrders ?? []) {
+    const shippoStatus = trackingToStatus.get(order.tracking_number!);
+    if (!shippoStatus) continue;
+
+    if (shippoStatus === "DELIVERED" && order.status !== "delivered") {
+      await admin.from("shop_orders").update({ status: "delivered" }).eq("id", order.id);
+      updated++;
+      console.log(`[cron/sync-delivered] K${order.order_number} → delivered`);
+    } else if (
+      (shippoStatus === "TRANSIT" || shippoStatus === "PRE_TRANSIT") &&
+      order.status === "processing"
+    ) {
+      await admin.from("shop_orders").update({ status: "shipped" }).eq("id", order.id);
+      updated++;
+      console.log(`[cron/sync-delivered] K${order.order_number} → shipped`);
+    }
+  }
+
+  const checked = (restorationOrders?.length ?? 0) + (kitOrders?.length ?? 0);
+  console.log(`[cron/sync-delivered] checked ${checked}, updated ${updated}`);
+  return Response.json({ updated, checked });
 }

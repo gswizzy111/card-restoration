@@ -117,6 +117,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .update({
       return_label_url: transaction.labelUrl,
       tracking_number: trackingNumber,
+      status: "processing",
     })
     .eq("id", id);
 

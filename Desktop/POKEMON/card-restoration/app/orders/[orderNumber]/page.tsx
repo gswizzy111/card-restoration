@@ -50,6 +50,29 @@ async function KitOrderView({ kitNumber }: { kitNumber: string }) {
 
   if (!order) notFound();
 
+  // Check Shippo for live tracking and opportunistically update DB status
+  let liveShippoStatus: string | null = null;
+  if (order.tracking_number && order.status !== "delivered") {
+    try {
+      const track = await shippo.trackingStatus.get(order.tracking_number, "usps");
+      liveShippoStatus = track.trackingStatus?.status ?? null;
+
+      // Update DB status if Shippo reports a further-along state
+      if (liveShippoStatus === "DELIVERED" && order.status !== "delivered") {
+        await admin.from("shop_orders").update({ status: "delivered" }).eq("id", order.id);
+        order.status = "delivered";
+      } else if (
+        (liveShippoStatus === "TRANSIT" || liveShippoStatus === "PRE_TRANSIT") &&
+        order.status === "processing"
+      ) {
+        await admin.from("shop_orders").update({ status: "shipped" }).eq("id", order.id);
+        order.status = "shipped";
+      }
+    } catch {
+      // fail silently
+    }
+  }
+
   const items = (order.items ?? []) as ShopOrderItem[];
   const currentIdx = KIT_STATUS_TIMELINE.indexOf(order.status);
 
