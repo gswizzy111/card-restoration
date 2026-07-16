@@ -134,8 +134,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
     return <KitOrderView kitNumber={orderNumber.slice(1)} />;
   }
 
-  // Support both "R1042" and bare "1042" for restoration orders (backward compat)
-  const restorationNumber = orderNumber.startsWith("R") ? orderNumber.slice(1) : orderNumber;
+  // Support R1042, CD-1042, CD1042, or bare 1042 (all legacy formats)
+  let restorationNumber = orderNumber;
+  if (orderNumber.startsWith("CD-")) restorationNumber = orderNumber.slice(3);
+  else if (orderNumber.startsWith("CD")) restorationNumber = orderNumber.slice(2);
+  else if (orderNumber.startsWith("R")) restorationNumber = orderNumber.slice(1);
 
   const admin = createAdminClient();
 
