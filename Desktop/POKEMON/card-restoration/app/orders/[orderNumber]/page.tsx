@@ -2,7 +2,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
-import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Track } from "shippo/models/components";
 import { UpgradeSection } from "./upgrade-section";
@@ -67,7 +66,7 @@ async function KitOrderView({ kitNumber, email }: { kitNumber: string; email: st
     .eq("order_number", kitNumber)
     .single();
 
-  if (!order) notFound();
+  if (!order) return <EmailMismatch />;
   if ((order.customer_email ?? "").trim().toLowerCase() !== email.trim().toLowerCase()) {
     return <EmailMismatch />;
   }
@@ -204,7 +203,7 @@ export default async function OrderDetailPage({
     .eq("order_number", restorationNumber)
     .single();
 
-  if (!order) notFound();
+  if (!order) return <EmailMismatch />;
 
   if ((order.customer_email ?? "").trim().toLowerCase() !== email) {
     return <EmailMismatch />;
