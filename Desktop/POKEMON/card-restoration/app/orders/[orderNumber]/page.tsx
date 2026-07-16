@@ -200,13 +200,21 @@ export default async function OrderDetailPage({
   else if (orderNumber.startsWith("R")) restorationNumber = orderNumber.slice(1);
 
   const admin = createAdminClient();
-  const restorationNum = parseInt(restorationNumber, 10);
 
-  const { data: order } = await admin
-    .from("orders")
-    .select("*")
-    .eq("order_number", isNaN(restorationNum) ? restorationNumber : restorationNum)
-    .single();
+  // Try candidates in order: exact raw input first (handles legacy "CD-1209" stored in DB),
+  // then stripped string, then stripped as integer (handles new serial-number format)
+  const restorationNum = parseInt(restorationNumber, 10);
+  const candidates: (string | number)[] = [
+    orderNumber,                                        // "CD-1209" — exact legacy match
+    restorationNumber,                                  // "1209" — stripped string
+    ...(isNaN(restorationNum) ? [] : [restorationNum]), // 1209  — stripped integer
+  ];
+
+  let order: Record<string, any> | null = null;
+  for (const candidate of [...new Set(candidates)]) {
+    const { data } = await admin.from("orders").select("*").eq("order_number", candidate).maybeSingle();
+    if (data) { order = data; break; }
+  }
 
   if (!order) return <EmailMismatch />;
   // Only block if the order has an email recorded and it doesn't match
@@ -242,7 +250,9 @@ export default async function OrderDetailPage({
       {/* Header */}
       <div className="mb-8">
         <p className="text-xs font-bold uppercase tracking-widest text-primary mb-2">Order Tracking</p>
-        <h1 className="font-heading font-black text-3xl text-foreground">Order R{order.order_number}</h1>
+        <h1 className="font-heading font-black text-3xl text-foreground">
+          Order {/^\d+$/.test(String(order.order_number)) ? `R${order.order_number}` : order.order_number}
+        </h1>
         <p className="text-muted-foreground text-sm mt-1">Placed {new Date(order.created_at).toLocaleDateString()}</p>
       </div>
 
