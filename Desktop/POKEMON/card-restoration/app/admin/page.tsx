@@ -179,7 +179,7 @@ export default async function AdminPage({
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1 flex-wrap">
-                      <span className="font-heading font-black text-foreground">#{order.order_number}</span>
+                      <span className="font-heading font-black text-foreground">R{order.order_number}</span>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
                         {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
                       </span>
@@ -505,7 +505,7 @@ export default async function AdminPage({
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <span className="font-heading font-black text-foreground">#{order.order_number}</span>
+                        <span className="font-heading font-black text-foreground">R{order.order_number}</span>
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
                           {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
                         </span>
@@ -560,7 +560,7 @@ export default async function AdminPage({
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
-                          <span className="font-heading font-black text-foreground">#{order.order_number}</span>
+                          <span className="font-heading font-black text-foreground">R{order.order_number}</span>
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
                             {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
                           </span>
@@ -631,7 +631,7 @@ export default async function AdminPage({
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <span className="font-heading font-black text-foreground">#{order.order_number}</span>
+                        <span className="font-heading font-black text-foreground">R{order.order_number}</span>
                         {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier as RestorationTierId].color}`}>
                             {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
@@ -731,7 +731,7 @@ export default async function AdminPage({
                         >
                           <td className="px-4 py-3">
                             <Link href={`/admin/orders/${order.id}`} className="font-mono font-bold text-primary hover:underline">
-                              #{order.order_number}
+                              R{order.order_number}
                             </Link>
                           </td>
                           <td className="px-4 py-3">
@@ -892,7 +892,7 @@ export default async function AdminPage({
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1.5">
                                 <Link href={`/admin/orders/${order.id}`} className="font-mono font-bold text-primary hover:underline">
-                                  #{order.order_number}
+                                  R{order.order_number}
                                 </Link>
                                 {missingNotes && (
                                   <span className="text-red-500 font-black text-base leading-none" title="Grader notes missing">*</span>

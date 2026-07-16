@@ -155,7 +155,7 @@ export default async function ShopOrdersPage() {
                   <div>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       {order.order_number && (
-                        <span className="font-heading font-black text-base text-muted-foreground">#{order.order_number}</span>
+                        <span className="font-heading font-black text-base text-muted-foreground">K{order.order_number}</span>
                       )}
                       <p className="font-heading font-black text-lg text-foreground">{order.customer_name}</p>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>

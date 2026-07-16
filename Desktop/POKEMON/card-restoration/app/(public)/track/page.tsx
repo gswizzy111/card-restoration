@@ -40,7 +40,7 @@ export default function TrackPage() {
             <Label htmlFor="orderNumber">Order Number</Label>
             <Input
               id="orderNumber"
-              placeholder="CD-1042"
+              placeholder="R1042 or K5"
               value={orderNumber}
               onChange={(e) => setOrderNumber(e.target.value)}
               autoComplete="off"
