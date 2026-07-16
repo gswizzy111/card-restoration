@@ -204,9 +204,16 @@ export default async function ShopOrdersPage() {
                       address={address}
                     />
                     {address && (
-                      <div className="mt-3">
-                        <ReturnLabelButton orderId={order.id} existingLabelUrl={order.return_label_url} existingTrackingNumber={order.tracking_number} />
-                      </div>
+                      <ReturnLabelButton
+                        orderId={order.id}
+                        existingLabels={
+                          Array.isArray((order as any).labels) && (order as any).labels.length > 0
+                            ? (order as any).labels
+                            : order.return_label_url
+                              ? [{ labelUrl: order.return_label_url, trackingNumber: order.tracking_number ?? null, createdAt: "" }]
+                              : []
+                        }
+                      />
                     )}
                   </div>
                 </div>
