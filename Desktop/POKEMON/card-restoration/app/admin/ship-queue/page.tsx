@@ -179,7 +179,13 @@ export default async function ShipQueuePage() {
                         <div className="mt-3">
                           <KitReturnLabelButton
                             orderId={order.id}
-                            existingLabelUrl={order.return_label_url ?? null}
+                            existingLabels={
+                              Array.isArray((order as any).labels) && (order as any).labels.length > 0
+                                ? (order as any).labels
+                                : order.return_label_url
+                                  ? [{ labelUrl: order.return_label_url, trackingNumber: order.tracking_number ?? null, createdAt: "" }]
+                                  : []
+                            }
                             labelName="Shipping"
                           />
                         </div>
@@ -222,7 +228,13 @@ export default async function ShipQueuePage() {
                         <div className="mt-2">
                           <KitReturnLabelButton
                             orderId={order.id}
-                            existingLabelUrl={order.return_label_url ?? null}
+                            existingLabels={
+                              Array.isArray((order as any).labels) && (order as any).labels.length > 0
+                                ? (order as any).labels
+                                : order.return_label_url
+                                  ? [{ labelUrl: order.return_label_url, trackingNumber: order.tracking_number ?? null, createdAt: "" }]
+                                  : []
+                            }
                             labelName="Shipping"
                           />
                         </div>
