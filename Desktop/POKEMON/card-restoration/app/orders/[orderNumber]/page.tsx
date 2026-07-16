@@ -3,9 +3,28 @@ import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import type { Track } from "shippo/models/components";
 import { UpgradeSection } from "./upgrade-section";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
+
+function EmailMismatch() {
+  return (
+    <div className="max-w-md mx-auto px-6 py-24 text-center">
+      <p className="text-xs font-bold uppercase tracking-widest text-primary mb-3">Order Tracking</p>
+      <h1 className="font-heading font-black text-2xl text-foreground mb-3">We couldn&apos;t find that order</h1>
+      <p className="text-muted-foreground text-sm mb-8">
+        The order number and email address didn&apos;t match. Double-check both and try again.
+      </p>
+      <Link
+        href="/track"
+        className="inline-block bg-primary text-primary-foreground text-sm font-bold px-5 py-2.5 rounded-lg hover:bg-primary/90 transition-colors"
+      >
+        Try Again
+      </Link>
+    </div>
+  );
+}
 
 function shippoCarrierToken(provider: string): string {
   const map: Record<string, string> = {
@@ -40,7 +59,7 @@ const KIT_STATUS_TIMELINE = ["paid", "processing", "shipped", "delivered"];
 
 type ShopOrderItem = { product_name: string; quantity: number; price_cents: number };
 
-async function KitOrderView({ kitNumber }: { kitNumber: string }) {
+async function KitOrderView({ kitNumber, email }: { kitNumber: string; email: string }) {
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("shop_orders")
@@ -49,6 +68,9 @@ async function KitOrderView({ kitNumber }: { kitNumber: string }) {
     .single();
 
   if (!order) notFound();
+  if ((order.customer_email ?? "").trim().toLowerCase() !== email.trim().toLowerCase()) {
+    return <EmailMismatch />;
+  }
 
   // Check Shippo for live tracking and opportunistically update DB status
   let liveShippoStatus: string | null = null;
@@ -149,12 +171,23 @@ async function KitOrderView({ kitNumber }: { kitNumber: string }) {
   );
 }
 
-export default async function OrderDetailPage({ params }: { params: Promise<{ orderNumber: string }> }) {
+export default async function OrderDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orderNumber: string }>;
+  searchParams: Promise<{ email?: string }>;
+}) {
   const { orderNumber } = await params;
+  const { email: rawEmail } = await searchParams;
+  const email = (rawEmail ?? "").trim().toLowerCase();
+
+  // Require email to be present
+  if (!email) return <EmailMismatch />;
 
   // Kit orders use K prefix → query shop_orders
   if (orderNumber.startsWith("K")) {
-    return <KitOrderView kitNumber={orderNumber.slice(1)} />;
+    return <KitOrderView kitNumber={orderNumber.slice(1)} email={email} />;
   }
 
   // Support R1042, CD-1042, CD1042, or bare 1042 (all legacy formats)
@@ -172,6 +205,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
     .single();
 
   if (!order) notFound();
+
+  if ((order.customer_email ?? "").trim().toLowerCase() !== email) {
+    return <EmailMismatch />;
+  }
 
   const { data: cards } = await admin.from("cards").select("*").eq("order_id", order.id);
   const { data: services } = await admin.from("order_services").select("*").eq("order_id", order.id);
