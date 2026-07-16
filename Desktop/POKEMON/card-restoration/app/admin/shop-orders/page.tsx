@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/utils";
 import Stripe from "stripe";
 import { ReturnLabelButton } from "./return-label-button";
 import { KitStatusUpdater } from "./status-updater";
+import { KitCustomerEditor } from "./kit-customer-editor";
 import { RevenueChart } from "../revenue-chart";
 import { SyncKitOrdersButton } from "./sync-kit-orders-button";
 
@@ -195,18 +196,17 @@ export default async function ShopOrdersPage() {
 
                   <div>
                     <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Ship To</p>
-                    {address ? (
-                      <div className="text-sm text-foreground leading-relaxed">
-                        <p className="font-medium">{order.customer_name}</p>
-                        <p className="text-muted-foreground">{address.street1}{address.street2 ? `, ${address.street2}` : ""}</p>
-                        <p className="text-muted-foreground">{address.city}, {address.state} {address.zip}</p>
-                        <p className="text-muted-foreground">{address.country}</p>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No address on file</p>
-                    )}
+                    <KitCustomerEditor
+                      orderId={order.id}
+                      name={order.customer_name ?? ""}
+                      email={order.customer_email ?? ""}
+                      phone={order.customer_phone ?? ""}
+                      address={address}
+                    />
                     {address && (
-                      <ReturnLabelButton orderId={order.id} existingLabelUrl={order.return_label_url} existingTrackingNumber={order.tracking_number} />
+                      <div className="mt-3">
+                        <ReturnLabelButton orderId={order.id} existingLabelUrl={order.return_label_url} existingTrackingNumber={order.tracking_number} />
+                      </div>
                     )}
                   </div>
                 </div>
