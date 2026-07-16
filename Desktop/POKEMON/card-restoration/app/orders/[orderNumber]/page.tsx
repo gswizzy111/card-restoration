@@ -61,14 +61,18 @@ type ShopOrderItem = { product_name: string; quantity: number; price_cents: numb
 
 async function KitOrderView({ kitNumber, email }: { kitNumber: string; email: string }) {
   const admin = createAdminClient();
+  const kitNum = parseInt(kitNumber, 10);
   const { data: order } = await admin
     .from("shop_orders")
     .select("*")
-    .eq("order_number", kitNumber)
-    .ilike("customer_email", email)
+    .eq("order_number", isNaN(kitNum) ? kitNumber : kitNum)
     .single();
 
   if (!order) return <EmailMismatch />;
+  // Only block if the order has an email recorded and it doesn't match
+  if (order.customer_email && order.customer_email.trim().toLowerCase() !== email) {
+    return <EmailMismatch />;
+  }
 
   // Check Shippo for live tracking and opportunistically update DB status
   let liveShippoStatus: string | null = null;
@@ -196,15 +200,19 @@ export default async function OrderDetailPage({
   else if (orderNumber.startsWith("R")) restorationNumber = orderNumber.slice(1);
 
   const admin = createAdminClient();
+  const restorationNum = parseInt(restorationNumber, 10);
 
   const { data: order } = await admin
     .from("orders")
     .select("*")
-    .eq("order_number", restorationNumber)
-    .ilike("customer_email", email)
+    .eq("order_number", isNaN(restorationNum) ? restorationNumber : restorationNum)
     .single();
 
   if (!order) return <EmailMismatch />;
+  // Only block if the order has an email recorded and it doesn't match
+  if (order.customer_email && order.customer_email.trim().toLowerCase() !== email) {
+    return <EmailMismatch />;
+  }
 
   const { data: cards } = await admin.from("cards").select("*").eq("order_id", order.id);
   const { data: services } = await admin.from("order_services").select("*").eq("order_id", order.id);
