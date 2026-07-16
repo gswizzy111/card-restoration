@@ -11,6 +11,7 @@ import { ReturnLabelButton } from "./return-label-button";
 import { CheckpointAdder } from "./checkpoint-adder";
 import { InboundTrackingEditor } from "./inbound-tracking-editor";
 import { OrderEditor } from "./order-editor";
+import { CustomerEditor } from "./customer-editor";
 import type { Track } from "shippo/models/components";
 
 export const dynamic = "force-dynamic";
@@ -263,18 +264,17 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             {/* Customer info */}
             <div className="bg-white rounded-xl border border-border p-6">
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Customer</h2>
-              <div className="flex flex-col gap-1 text-sm">
-                <p className="font-bold text-foreground">{order.customer_name}</p>
-                <p className="text-muted-foreground">{order.customer_email}</p>
-                <p className="text-muted-foreground">{order.customer_phone}</p>
-                {address && (
-                  <div className="mt-2 pt-2 border-t border-border text-muted-foreground">
-                    <p>{address.street1}</p>
-                    {address.street2 && <p>{address.street2}</p>}
-                    <p>{address.city}, {address.state} {address.zip}</p>
-                  </div>
-                )}
-              </div>
+              <CustomerEditor
+                orderId={order.id}
+                name={order.customer_name}
+                email={order.customer_email}
+                phone={order.customer_phone}
+                street1={address?.street1}
+                street2={address?.street2}
+                city={address?.city}
+                state={address?.state}
+                zip={address?.zip}
+              />
             </div>
 
             {/* Shipping */}
