@@ -188,26 +188,29 @@ export default async function OrderDetailPage({
   // Redirect to the track page with the order number pre-filled.
   if (!email) redirect(`/track?order=${encodeURIComponent(orderNumber)}`);
 
-  // Kit orders use K prefix → query shop_orders
-  if (orderNumber.startsWith("K")) {
-    return <KitOrderView kitNumber={orderNumber.slice(1)} email={email} />;
+  // Normalize: strip optional leading R, then detect K (kit) vs restoration
+  let cleaned = orderNumber;
+  if (cleaned.startsWith("R")) cleaned = cleaned.slice(1); // RCD-1209 → CD-1209, R1209 → 1209, RK5 → K5
+
+  // Kit orders
+  if (cleaned.startsWith("K")) {
+    return <KitOrderView kitNumber={cleaned.slice(1)} email={email} />;
   }
 
-  // Support R1042, CD-1042, CD1042, or bare 1042 (all legacy formats)
-  let restorationNumber = orderNumber;
-  if (orderNumber.startsWith("CD-")) restorationNumber = orderNumber.slice(3);
-  else if (orderNumber.startsWith("CD")) restorationNumber = orderNumber.slice(2);
-  else if (orderNumber.startsWith("R")) restorationNumber = orderNumber.slice(1);
+  // Strip CD- or CD prefix to isolate the numeric part
+  let numericPart = cleaned;
+  if (numericPart.startsWith("CD-")) numericPart = numericPart.slice(3);
+  else if (numericPart.startsWith("CD")) numericPart = numericPart.slice(2);
+  // numericPart is now just the number, e.g. "1209"
 
   const admin = createAdminClient();
+  const num = parseInt(numericPart, 10);
 
-  // Try candidates in order: exact raw input first (handles legacy "CD-1209" stored in DB),
-  // then stripped string, then stripped as integer (handles new serial-number format)
-  const restorationNum = parseInt(restorationNumber, 10);
+  // Search DB with every likely stored format
   const candidates: (string | number)[] = [
-    orderNumber,                                        // "CD-1209" — exact legacy match
-    restorationNumber,                                  // "1209" — stripped string
-    ...(isNaN(restorationNum) ? [] : [restorationNum]), // 1209  — stripped integer
+    `CD-${numericPart}`,                   // "CD-1209" — legacy string in DB
+    numericPart,                           // "1209"    — plain string
+    ...(isNaN(num) ? [] : [num]),          //  1209     — integer serial
   ];
 
   let order: Record<string, any> | null = null;
