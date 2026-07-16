@@ -3,6 +3,7 @@ import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { Track } from "shippo/models/components";
 import { UpgradeSection } from "./upgrade-section";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
@@ -179,8 +180,9 @@ export default async function OrderDetailPage({
   const { email: rawEmail } = await searchParams;
   const email = (rawEmail ?? "").trim().toLowerCase();
 
-  // Require email to be present
-  if (!email) return <EmailMismatch />;
+  // No email in URL — customer likely came from an old confirmation email link.
+  // Redirect to the track page with the order number pre-filled.
+  if (!email) redirect(`/track?order=${encodeURIComponent(orderNumber)}`);
 
   // Kit orders use K prefix → query shop_orders
   if (orderNumber.startsWith("K")) {
