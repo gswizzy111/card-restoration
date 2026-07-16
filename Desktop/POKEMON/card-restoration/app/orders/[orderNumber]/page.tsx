@@ -64,12 +64,10 @@ async function KitOrderView({ kitNumber, email }: { kitNumber: string; email: st
     .from("shop_orders")
     .select("*")
     .eq("order_number", kitNumber)
+    .ilike("customer_email", email)
     .single();
 
   if (!order) return <EmailMismatch />;
-  if ((order.customer_email ?? "").trim().toLowerCase() !== email.trim().toLowerCase()) {
-    return <EmailMismatch />;
-  }
 
   // Check Shippo for live tracking and opportunistically update DB status
   let liveShippoStatus: string | null = null;
@@ -201,13 +199,10 @@ export default async function OrderDetailPage({
     .from("orders")
     .select("*")
     .eq("order_number", restorationNumber)
+    .ilike("customer_email", email)
     .single();
 
   if (!order) return <EmailMismatch />;
-
-  if ((order.customer_email ?? "").trim().toLowerCase() !== email) {
-    return <EmailMismatch />;
-  }
 
   const { data: cards } = await admin.from("cards").select("*").eq("order_id", order.id);
   const { data: services } = await admin.from("order_services").select("*").eq("order_id", order.id);
