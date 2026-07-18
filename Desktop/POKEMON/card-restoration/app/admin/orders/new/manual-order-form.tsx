@@ -97,46 +97,49 @@ export function ManualOrderForm() {
     <form onSubmit={handleSubmit} className="flex flex-col gap-8">
       {/* Customer Info */}
       <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-4">
-        <h2 className="font-heading font-black text-lg text-foreground">Customer Info</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-heading font-black text-lg text-foreground">Customer Info</h2>
+          <span className="text-xs text-muted-foreground">All optional for internal records</span>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className={labelClass}>Full Name *</label>
-            <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required placeholder="John Smith" />
+            <label className={labelClass}>Full Name</label>
+            <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="John Smith" />
           </div>
           <div>
-            <label className={labelClass}>Email *</label>
-            <input className={inputClass} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="john@example.com" />
+            <label className={labelClass}>Email</label>
+            <input className={inputClass} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="john@example.com" />
           </div>
           <div>
-            <label className={labelClass}>Phone *</label>
-            <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="(555) 555-5555" />
+            <label className={labelClass}>Phone</label>
+            <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 555-5555" />
           </div>
         </div>
       </div>
 
       {/* Address */}
       <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-4">
-        <h2 className="font-heading font-black text-lg text-foreground">Address</h2>
+        <h2 className="font-heading font-black text-lg text-foreground">Address <span className="text-sm font-normal text-muted-foreground">(optional)</span></h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
-            <label className={labelClass}>Street Address *</label>
-            <input className={inputClass} value={street1} onChange={(e) => setStreet1(e.target.value)} required placeholder="123 Main St" />
+            <label className={labelClass}>Street Address</label>
+            <input className={inputClass} value={street1} onChange={(e) => setStreet1(e.target.value)} placeholder="123 Main St" />
           </div>
           <div className="sm:col-span-2">
-            <label className={labelClass}>Apt / Suite (optional)</label>
+            <label className={labelClass}>Apt / Suite</label>
             <input className={inputClass} value={street2} onChange={(e) => setStreet2(e.target.value)} placeholder="Apt 4B" />
           </div>
           <div>
-            <label className={labelClass}>City *</label>
-            <input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} required placeholder="New York" />
+            <label className={labelClass}>City</label>
+            <input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} placeholder="New York" />
           </div>
           <div>
-            <label className={labelClass}>State *</label>
-            <input className={inputClass} value={state} onChange={(e) => setState(e.target.value)} required placeholder="NY" maxLength={2} />
+            <label className={labelClass}>State</label>
+            <input className={inputClass} value={state} onChange={(e) => setState(e.target.value)} placeholder="NY" maxLength={2} />
           </div>
           <div>
-            <label className={labelClass}>ZIP *</label>
-            <input className={inputClass} value={zip} onChange={(e) => setZip(e.target.value)} required placeholder="10001" />
+            <label className={labelClass}>ZIP</label>
+            <input className={inputClass} value={zip} onChange={(e) => setZip(e.target.value)} placeholder="10001" />
           </div>
         </div>
       </div>

@@ -4,14 +4,14 @@ import { getPriceCents } from "@/lib/pricing";
 import { z } from "zod";
 
 const BodySchema = z.object({
-  customer_name: z.string().min(1),
-  customer_email: z.string().email(),
-  customer_phone: z.string().min(1),
-  street1: z.string().min(1),
+  customer_name: z.string().optional().default(""),
+  customer_email: z.string().optional().default(""),
+  customer_phone: z.string().optional().default(""),
+  street1: z.string().optional().default(""),
   street2: z.string().optional(),
-  city: z.string().min(1),
-  state: z.string().min(1),
-  zip: z.string().min(1),
+  city: z.string().optional().default(""),
+  state: z.string().optional().default(""),
+  zip: z.string().optional().default(""),
   inbound_method: z.enum(["self_ship", "buy_label"]),
   notes: z.string().optional(),
   cards: z.array(z.object({

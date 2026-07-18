@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { formatCurrency } from "@/lib/utils";
 import Stripe from "stripe";
+import Link from "next/link";
 import { ReturnLabelButton } from "./return-label-button";
 import { KitStatusUpdater } from "./status-updater";
 import { RevenueChart } from "../revenue-chart";
@@ -127,7 +128,12 @@ export default async function ShopOrdersPage() {
             <h1 className="font-heading font-black text-3xl text-foreground">Kit Orders</h1>
             <p className="text-muted-foreground text-sm mt-1">{orders?.length ?? 0} total</p>
           </div>
-          <SyncKitOrdersButton />
+          <div className="flex items-center gap-3">
+            <SyncKitOrdersButton />
+            <Link href="/admin/shop-orders/new" className="text-sm font-bold px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors whitespace-nowrap">
+              + New Order
+            </Link>
+          </div>
         </div>
 
         <div className="mb-8">

@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/admin/subscriptions",  label: "Subscriptions", icon: "🔁" },
   { href: "/admin/customers",      label: "Customers",     icon: "👥" },
   { href: "/admin/profit-loss",    label: "P&L",           icon: "💰" },
+  { href: "/admin/cases",          label: "Cases",         icon: "🗂️" },
 ];
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
