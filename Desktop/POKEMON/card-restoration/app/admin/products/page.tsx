@@ -1,15 +1,20 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSubscriptionPriceCents } from "@/lib/store-config";
 import Link from "next/link";
 import { ProductReorderList } from "./product-reorder-list";
+import { SubscriptionPriceEditor } from "./subscription-price-editor";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminProductsPage() {
   const admin = createAdminClient();
-  const { data: products } = await admin
-    .from("products")
-    .select("id, name, price_cents, category, inventory_count, active, slug")
-    .order("display_order", { ascending: true });
+  const [{ data: products }, subscriptionPriceCents] = await Promise.all([
+    admin
+      .from("products")
+      .select("id, name, price_cents, category, inventory_count, active, slug")
+      .order("display_order", { ascending: true }),
+    getSubscriptionPriceCents(),
+  ]);
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -37,6 +42,13 @@ export default async function AdminProductsPage() {
             No products yet. <Link href="/admin/products/new" className="text-primary font-medium">Add your first product →</Link>
           </div>
         )}
+
+        {/* Monthly subscription pricing */}
+        <div className="bg-white rounded-xl border border-border p-6 mt-6">
+          <h2 className="font-heading font-black text-lg text-foreground mb-1">Monthly Kit Club</h2>
+          <p className="text-xs text-muted-foreground mb-4">Price charged at checkout for new subscriptions.</p>
+          <SubscriptionPriceEditor initialPriceCents={subscriptionPriceCents} />
+        </div>
       </div>
     </div>
   );

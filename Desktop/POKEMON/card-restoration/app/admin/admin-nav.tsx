@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/admin/customers",      label: "Customers",     icon: "👥" },
   { href: "/admin/profit-loss",    label: "P&L",           icon: "💰" },
   { href: "/admin/cases",          label: "Cases",         icon: "🗂️" },
+  { href: "/admin/gift-cards",     label: "Gift Cards",    icon: "🎁" },
 ];
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {

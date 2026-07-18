@@ -10,6 +10,8 @@ import { CompletionNotesEditor } from "./completion-notes-editor";
 import { ReturnLabelButton } from "./return-label-button";
 import { CheckpointAdder } from "./checkpoint-adder";
 import { InboundTrackingEditor } from "./inbound-tracking-editor";
+import { OrderEditor } from "./order-editor";
+import { CustomerEditor } from "./customer-editor";
 import type { Track } from "shippo/models/components";
 
 export const dynamic = "force-dynamic";
@@ -98,6 +100,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   }
 
   const address = order.ship_from_address as Record<string, string> | null;
+  const orderDueDate = (order as Record<string, unknown>).due_date as string | null ?? null;
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -221,9 +224,19 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               </div>
             </div>
 
-            {/* Services */}
+            {/* Services + editor */}
             <div className="bg-white rounded-xl border border-border p-6">
-              <h2 className="font-heading font-black text-lg text-foreground mb-4">Services</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-heading font-black text-lg text-foreground">Services</h2>
+                <OrderEditor
+                  orderId={order.id}
+                  totalCents={order.total_cents}
+                  dueDate={orderDueDate}
+                  customerNotes={order.customer_notes as string | null}
+                  cards={(cards ?? []).map((c) => ({ id: c.id, card_name: c.card_name }))}
+                  services={(services ?? []).map((s) => ({ id: s.id, service_name: s.service_name, price_cents: s.price_cents, quantity: s.quantity }))}
+                />
+              </div>
               <div className="flex flex-col gap-2">
                 {services?.map((s) => (
                   <div key={s.id} className="flex justify-between text-sm">
@@ -231,6 +244,12 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                     <span className="font-bold text-foreground">{formatCurrency(s.price_cents * s.quantity)}</span>
                   </div>
                 ))}
+                {orderDueDate && (
+                  <div className="flex justify-between text-sm text-muted-foreground pt-1">
+                    <span>Due date</span>
+                    <span>{new Date(orderDueDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                  </div>
+                )}
                 <div className="border-t border-border mt-2 pt-2 flex justify-between font-bold">
                   <span>Total</span>
                   <span className="text-primary">{formatCurrency(order.total_cents)}</span>
@@ -245,18 +264,17 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             {/* Customer info */}
             <div className="bg-white rounded-xl border border-border p-6">
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Customer</h2>
-              <div className="flex flex-col gap-1 text-sm">
-                <p className="font-bold text-foreground">{order.customer_name}</p>
-                <p className="text-muted-foreground">{order.customer_email}</p>
-                <p className="text-muted-foreground">{order.customer_phone}</p>
-                {address && (
-                  <div className="mt-2 pt-2 border-t border-border text-muted-foreground">
-                    <p>{address.street1}</p>
-                    {address.street2 && <p>{address.street2}</p>}
-                    <p>{address.city}, {address.state} {address.zip}</p>
-                  </div>
-                )}
-              </div>
+              <CustomerEditor
+                orderId={order.id}
+                name={order.customer_name}
+                email={order.customer_email}
+                phone={order.customer_phone}
+                street1={address?.street1}
+                street2={address?.street2}
+                city={address?.city}
+                state={address?.state}
+                zip={address?.zip}
+              />
             </div>
 
             {/* Shipping */}

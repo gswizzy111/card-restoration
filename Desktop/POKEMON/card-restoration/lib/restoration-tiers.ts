@@ -51,12 +51,12 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
     id: "ultra_premium",
     name: "Ultra Premium",
     price_cents: 15000, // $150
-    description: "VIP treatment with guaranteed video showcase",
+    description: "VIP treatment with priority handling",
     turnaround_min_days: 3,
     turnaround_max_days: 5,
     max_card_value_cents: null, // No max value
     includes_notes: true,
-    includes_video: true,
+    includes_video: false,
     badge: "Front of Queue",
   },
 };

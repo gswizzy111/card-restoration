@@ -5,6 +5,8 @@ import { useCart } from "@/lib/cart-context";
 import { formatCurrency } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 
+const SIZES = ["Small", "Medium", "Large", "XL"] as const;
+
 type UpsellProduct = {
   id: string;
   name: string;
@@ -25,6 +27,7 @@ function UpsellInner() {
   const [products, setProducts] = useState<UpsellProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [added, setAdded] = useState<Record<string, boolean>>({});
+  const [sizes, setSizes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch("/api/shop/upsell-products")
@@ -32,7 +35,6 @@ function UpsellInner() {
       .then((d) => {
         setProducts(d.products ?? []);
         setLoading(false);
-        // If no upsell products configured, skip straight to checkout
         if (!d.products?.length) router.replace(destination);
       })
       .catch(() => {
@@ -43,12 +45,16 @@ function UpsellInner() {
   }, []);
 
   function handleAdd(product: UpsellProduct) {
+    const isGlove = product.name.toLowerCase().includes("glove");
+    const size = sizes[product.id];
+    if (isGlove && !size) return;
     addItem({
-      id: product.id,
+      id: isGlove && size ? `${product.id}-${size}` : product.id,
       name: product.name,
       slug: product.slug,
       price_cents: product.price_cents,
       image: product.images?.[0] ?? undefined,
+      size: isGlove && size ? size : undefined,
     });
     setAdded((prev) => ({ ...prev, [product.id]: true }));
   }
@@ -61,7 +67,6 @@ function UpsellInner() {
     );
   }
 
-  // Filter out items already in cart
   const cartIds = new Set(items.map((i) => i.id));
 
   return (
@@ -80,11 +85,13 @@ function UpsellInner() {
           {/* Left — upsell products */}
           <div className="flex-1 flex flex-col gap-4">
             {products.map((product) => {
+              const isGlove = product.name.toLowerCase().includes("glove");
+              const selectedSize = sizes[product.id];
               const inCart = cartIds.has(product.id) || added[product.id];
               return (
                 <div
                   key={product.id}
-                  className={`bg-white rounded-xl border p-5 flex gap-4 items-center transition-colors ${
+                  className={`bg-white rounded-xl border p-5 flex gap-4 items-start transition-colors ${
                     inCart ? "border-green-300 bg-green-50/40" : "border-border"
                   }`}
                 >
@@ -98,17 +105,41 @@ function UpsellInner() {
                     )}
                   </div>
 
-                  {/* Info */}
+                  {/* Info + size */}
                   <div className="flex-1 min-w-0">
                     <p className="font-heading font-black text-foreground">{product.name}</p>
                     {product.description && (
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{product.description}</p>
                     )}
                     <p className="text-primary font-bold text-sm mt-1">{formatCurrency(product.price_cents)}</p>
+
+                    {isGlove && !inCart && (
+                      <div className="mt-3">
+                        <p className="text-xs font-semibold text-foreground mb-1.5">Select Size</p>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {SIZES.map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => setSizes((prev) => ({ ...prev, [product.id]: s }))}
+                              className={`px-3 py-1 text-xs font-semibold border-2 rounded-md transition-all duration-150 ${
+                                selectedSize === s
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border text-foreground hover:border-primary/60"
+                              }`}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                        {!selectedSize && (
+                          <p className="text-xs text-muted-foreground mt-1">Select a size to add.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Add button */}
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 pt-1">
                     {inCart ? (
                       <span className="text-sm font-bold text-green-700 flex items-center gap-1.5">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,7 +150,8 @@ function UpsellInner() {
                     ) : (
                       <button
                         onClick={() => handleAdd(product)}
-                        className="text-sm font-bold px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors whitespace-nowrap"
+                        disabled={isGlove && !selectedSize}
+                        className="text-sm font-bold px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         + Add
                       </button>
@@ -142,8 +174,8 @@ function UpsellInner() {
                   </div>
                 ))}
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Sales Tax (6%)</span>
-                  <span className="font-medium">{formatCurrency(Math.round(totalCents * 0.06))}</span>
+                  <span className="text-muted-foreground">Sales Tax (6.625%)</span>
+                  <span className="font-medium">{formatCurrency(Math.round(totalCents * 0.06625))}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Shipping</span>
@@ -151,7 +183,7 @@ function UpsellInner() {
                 </div>
                 <div className="border-t border-border pt-2 flex justify-between font-bold">
                   <span>Total</span>
-                  <span className="text-primary">{formatCurrency(totalCents + Math.round(totalCents * 0.06))}</span>
+                  <span className="text-primary">{formatCurrency(totalCents + Math.round(totalCents * 0.06625))}</span>
                 </div>
               </div>
 

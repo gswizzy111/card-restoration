@@ -130,6 +130,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   slug: product.slug,
                   image: product.images?.[0],
                 }}
+                requiresSize={product.name.toLowerCase().includes("glove")}
               />
             )}
 

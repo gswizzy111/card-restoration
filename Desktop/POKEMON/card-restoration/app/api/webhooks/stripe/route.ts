@@ -23,6 +23,94 @@ export async function POST(request: Request) {
     const session = event.data.object as Stripe.Checkout.Session;
     const admin = createAdminClient();
 
+    // ── Gift card purchase ────────────────────────────────────────────────
+    if (session.metadata?.type === "gift_card") {
+      const amountCents = parseInt(session.metadata.amount_cents ?? "0", 10);
+      const purchaserName = session.metadata.purchaser_name ?? "";
+      const purchaserEmail = session.metadata.purchaser_email ?? session.customer_email ?? "";
+      const recipientName = session.metadata.recipient_name ?? purchaserName;
+      const recipientEmail = session.metadata.recipient_email ?? purchaserEmail;
+      const personalMessage = session.metadata.personal_message ?? "";
+      const isSelfPurchase = recipientEmail.toLowerCase() === purchaserEmail.toLowerCase();
+
+      // Generate unique code: GIFT-XXXX-XXXX (A-Z 0-9, no ambiguous chars)
+      const CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      function randomSegment(len: number) {
+        return Array.from({ length: len }, () => CHARS[Math.floor(Math.random() * CHARS.length)]).join("");
+      }
+      const code = `GIFT-${randomSegment(4)}-${randomSegment(4)}`;
+
+      await admin.from("gift_cards").insert({
+        code,
+        value_cents: amountCents,
+        remaining_cents: amountCents,
+        purchaser_email: purchaserEmail,
+        purchaser_name: purchaserName,
+        recipient_email: recipientEmail,
+        recipient_name: recipientName,
+        personal_message: personalMessage || null,
+        stripe_session_id: session.id,
+        status: "active",
+      });
+
+      const amountStr = `$${(amountCents / 100).toFixed(2)}`;
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
+
+      // Email to recipient (or purchaser if same)
+      const recipientFirstName = recipientName.split(" ")[0] || "there";
+      try {
+        await resend.emails.send({
+          from: fromEmail,
+          to: recipientEmail,
+          subject: `You received a ${amountStr} Gift Card — ${businessName}`,
+          html: `
+            <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
+              <h1 style="font-size:24px;font-weight:900;margin-bottom:4px">You got a gift card! 🎁</h1>
+              <p>Hi ${recipientFirstName},${isSelfPurchase ? " your gift card is ready to use." : ` ${purchaserName} sent you a gift card for ${businessName}.`}</p>
+              ${personalMessage ? `<div style="background:#f8f9fa;border-left:4px solid #1a8fe0;padding:12px 16px;margin:16px 0;border-radius:4px;font-style:italic;color:#444">"${personalMessage}"</div>` : ""}
+              <div style="background:#eff6ff;border:2px solid #1a8fe0;border-radius:16px;padding:24px;margin:24px 0;text-align:center">
+                <p style="margin:0 0 4px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#1a8fe0">Your Gift Card Code</p>
+                <p style="margin:0 0 8px;font-family:monospace;font-size:32px;font-weight:900;color:#0d47a1;letter-spacing:0.1em">${code}</p>
+                <p style="margin:0;font-size:20px;font-weight:700;color:#1a8fe0">${amountStr} Value</p>
+              </div>
+              <p style="font-size:14px;color:#444">To redeem, enter this code in the <strong>"Gift Card"</strong> field at checkout when placing a restoration order.</p>
+              <a href="${appUrl}/restoration" style="display:inline-block;background:#1a8fe0;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin:8px 0 24px">Start a Restoration Order →</a>
+              <p style="font-size:12px;color:#999">Gift cards never expire and can be used on any restoration order. ${businessName}</p>
+            </div>
+          `,
+        });
+      } catch (err) {
+        console.error("Failed to send gift card email to recipient:", err);
+      }
+
+      // Separate receipt email to purchaser if they're different from recipient
+      if (!isSelfPurchase) {
+        try {
+          await resend.emails.send({
+            from: fromEmail,
+            to: purchaserEmail,
+            subject: `Gift Card Sent — ${businessName}`,
+            html: `
+              <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
+                <h1 style="font-size:22px;font-weight:900;margin-bottom:4px">Gift Card Sent!</h1>
+                <p>Hi ${purchaserName.split(" ")[0] || "there"}, your ${amountStr} gift card has been sent to <strong>${recipientEmail}</strong>.</p>
+                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:16px;margin:16px 0">
+                  <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.05em">Gift Card Code</p>
+                  <p style="margin:0;font-family:monospace;font-size:20px;font-weight:700;color:#15803d">${code}</p>
+                  <p style="margin:4px 0 0;font-size:13px;color:#166534">Value: ${amountStr}</p>
+                </div>
+                <p style="font-size:13px;color:#666">${businessName}</p>
+              </div>
+            `,
+          });
+        } catch (err) {
+          console.error("Failed to send gift card receipt to purchaser:", err);
+        }
+      }
+
+      return Response.json({ received: true });
+    }
+
     // ── Shop / kit order ──────────────────────────────────────────────────
     if (session.metadata?.type === "shop") {
       const items: { id: string; qty: number }[] = JSON.parse(session.metadata.items ?? "[]");
@@ -82,6 +170,20 @@ export async function POST(request: Request) {
           .from("products")
           .update({ inventory_count: Math.max(0, current - item.qty) })
           .eq("id", item.id);
+      }
+
+      // Consume gift card balance if one was applied
+      const shopGcId = session.metadata?.gift_card_id;
+      const shopGcDiscount = parseInt(session.metadata?.gift_card_discount_cents ?? "0", 10);
+      if (shopGcId && shopGcDiscount > 0) {
+        const { data: shopGc } = await admin.from("gift_cards").select("remaining_cents").eq("id", shopGcId).single();
+        if (shopGc) {
+          const newRemaining = Math.max(0, shopGc.remaining_cents - shopGcDiscount);
+          await admin.from("gift_cards").update({
+            remaining_cents: newRemaining,
+            status: newRemaining === 0 ? "depleted" : "active",
+          }).eq("id", shopGcId);
+        }
       }
 
       const addrLine = shippingAddress
@@ -167,16 +269,17 @@ export async function POST(request: Request) {
       });
 
       // Create the first kit order immediately — don't rely on invoice.paid which can race
+      const subFirstPriceCents = session.amount_total ?? 6299;
       await admin2.from("shop_orders").insert({
         stripe_session_id: session.id,
         customer_name: session.metadata.customer_name ?? "",
         customer_email: session.customer_email ?? "",
         customer_phone: session.metadata.customer_phone ?? "",
         shipping_address: shippingAddress,
-        items: [{ product_id: "subscription", product_name: "Monthly Kit Club", quantity: 1, price_cents: 6299 }],
-        subtotal_cents: 6299,
+        items: [{ product_id: "subscription", product_name: "Monthly Kit Club", quantity: 1, price_cents: subFirstPriceCents }],
+        subtotal_cents: subFirstPriceCents,
         shipping_cents: 0,
-        total_cents: 6299,
+        total_cents: subFirstPriceCents,
         status: "paid",
       });
 
@@ -192,7 +295,7 @@ export async function POST(request: Request) {
               <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
                 <h1 style="font-size:22px;font-weight:900">Welcome to Monthly Kit Club!</h1>
                 <p>Hi ${subCustomerName.split(" ")[0] || "there"}, you&rsquo;re officially subscribed.</p>
-                <p>Your first kit will ship within 1-2 business days. After that, you&rsquo;ll be billed $62.99 on the same day each month and a new kit will be on its way.</p>
+                <p>Your first kit will ship within 1-2 business days. After that, you&rsquo;ll be billed $${(subFirstPriceCents / 100).toFixed(2)} on the same day each month and a new kit will be on its way.</p>
                 <p>You can cancel anytime by emailing us at <a href="mailto:${fromEmail}">${fromEmail}</a>.</p>
                 <p style="font-size:13px;color:#666">Questions? DM us on Instagram <strong>@thecarddoc</strong></p>
                 <p style="font-size:13px;color:#999">${businessName}</p>
@@ -294,6 +397,20 @@ export async function POST(request: Request) {
       .update(updatePayload)
       .eq("id", orderId)
       .select();
+
+    // Consume gift card balance if one was applied
+    const gcId = session.metadata?.gift_card_id;
+    const gcDiscount = parseInt(session.metadata?.gift_card_discount_cents ?? "0", 10);
+    if (gcId && gcDiscount > 0) {
+      const { data: gc } = await admin.from("gift_cards").select("remaining_cents").eq("id", gcId).single();
+      if (gc) {
+        const newRemaining = Math.max(0, gc.remaining_cents - gcDiscount);
+        await admin.from("gift_cards").update({
+          remaining_cents: newRemaining,
+          status: newRemaining === 0 ? "depleted" : "active",
+        }).eq("id", gcId);
+      }
+    }
 
     if (error) {
       console.error("Supabase update error:", JSON.stringify(error));
@@ -418,6 +535,7 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (subRecord) {
+        const invPriceCents = typeof invoice.amount_paid === "number" ? invoice.amount_paid : 6299;
         await adminInv.from("shop_orders").upsert(
           {
             stripe_session_id: invoice.id,
@@ -430,12 +548,12 @@ export async function POST(request: Request) {
                 product_id: "subscription",
                 product_name: "Monthly Kit Club",
                 quantity: 1,
-                price_cents: 6299,
+                price_cents: invPriceCents,
               },
             ],
-            subtotal_cents: 6299,
+            subtotal_cents: invPriceCents,
             shipping_cents: 0,
-            total_cents: 6299,
+            total_cents: invPriceCents,
             status: "paid",
           },
           { onConflict: "stripe_session_id" }

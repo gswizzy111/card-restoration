@@ -69,6 +69,12 @@ function CheckoutInner() {
   const [codeStatus, setCodeStatus] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
   const [discountPercent, setDiscountPercent] = useState(0);
 
+  // Gift card
+  const [gcInput, setGcInput] = useState("");
+  const [gcStatus, setGcStatus] = useState<"idle" | "valid" | "invalid">("idle");
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const [giftCardAmountCents, setGiftCardAmountCents] = useState(0);
+
   // International shipping
   const [rateStatus, setRateStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [chosenRate, setChosenRate] = useState<ShippingRate | null>(null);
@@ -103,6 +109,22 @@ function CheckoutInner() {
       setCreatorCode("");
       setCodeStatus("invalid");
       setDiscountPercent(0);
+    }
+  }
+
+  async function validateGiftCard() {
+    const trimmed = gcInput.trim().toUpperCase();
+    if (!trimmed) return;
+    const res = await fetch(`/api/gift-cards/validate?code=${encodeURIComponent(trimmed)}`);
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      setGiftCardCode(trimmed);
+      setGcStatus("valid");
+      setGiftCardAmountCents(data.remaining_cents);
+    } else {
+      setGiftCardCode("");
+      setGcStatus("invalid");
+      setGiftCardAmountCents(0);
     }
   }
 
@@ -166,6 +188,7 @@ function CheckoutInner() {
         },
       };
       if (codeStatus === "valid" && creatorCode) body.affiliate_code = creatorCode;
+      if (gcStatus === "valid" && giftCardCode) body.gift_card_code = giftCardCode;
       if (isInternational && chosenRate) {
         body.international_shipping_cents = chosenRate.amountCents + 1000;
         body.international_shipping_label = `${chosenRate.provider} ${chosenRate.service}`;
@@ -193,7 +216,10 @@ function CheckoutInner() {
   const intlShippingTotal = chosenRate ? chosenRate.amountCents + 1000 : 0;
   const discountCents = discountPercent > 0 ? Math.round(totalCents * discountPercent / 100) : 0;
   const discountedTotal = totalCents - discountCents;
-  const taxCents = Math.round(discountedTotal * 0.06);
+  const taxCents = Math.round(discountedTotal * 0.06625);
+  const preTaxTotal = discountedTotal + taxCents + (isInternational && chosenRate ? intlShippingTotal : 0);
+  const gcApplied = Math.min(giftCardAmountCents, preTaxTotal);
+  const finalTotal = preTaxTotal - gcApplied;
 
   if (items.length === 0) {
     return (
@@ -358,6 +384,26 @@ function CheckoutInner() {
             {codeStatus === "valid" && discountPercent === 0 && <p className="text-xs text-green-600 font-semibold mt-2">✓ Code applied</p>}
             {codeStatus === "invalid" && <p className="text-xs text-red-600 mt-2">Invalid code. Please try again.</p>}
           </div>
+
+          {/* Gift Card */}
+          <div className="bg-white border border-border rounded-xl p-6">
+            <h2 className="font-heading font-black text-lg text-foreground mb-1">Gift Card</h2>
+            <p className="text-xs text-muted-foreground mb-3">Have a gift card code? Enter it here.</p>
+            <div className="flex gap-2">
+              <Input
+                value={gcInput}
+                onChange={(e) => { setGcInput(e.target.value.toUpperCase()); setGcStatus("idle"); setGiftCardCode(""); setGiftCardAmountCents(0); }}
+                placeholder="GIFT-XXXX-XXXX"
+                className="flex-1 font-mono uppercase"
+              />
+              <button type="button" onClick={validateGiftCard}
+                className="px-4 h-9 bg-secondary text-foreground text-sm font-bold rounded-lg hover:bg-secondary/70 transition-colors whitespace-nowrap">
+                Apply
+              </button>
+            </div>
+            {gcStatus === "valid" && gcApplied > 0 && <p className="text-xs text-green-600 font-semibold mt-2">✓ {formatCurrency(gcApplied)} off applied</p>}
+            {gcStatus === "invalid" && <p className="text-xs text-red-600 mt-2">Invalid or already used gift card.</p>}
+          </div>
         </div>
 
         {/* Order summary */}
@@ -378,7 +424,7 @@ function CheckoutInner() {
                 </div>
               )}
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Sales Tax (6%)</span>
+                <span className="text-muted-foreground">Sales Tax (6.625%)</span>
                 <span className="font-medium">{formatCurrency(taxCents)}</span>
               </div>
               {isInternational && chosenRate ? (
@@ -392,11 +438,15 @@ function CheckoutInner() {
                   <span className="text-muted-foreground text-xs">Calculated at Stripe</span>
                 </div>
               ) : null}
+              {gcApplied > 0 && (
+                <div className="flex justify-between text-sm text-green-600 font-semibold">
+                  <span>Gift Card</span>
+                  <span>−{formatCurrency(gcApplied)}</span>
+                </div>
+              )}
               <div className="border-t border-border pt-2 flex justify-between font-bold">
                 <span>Total</span>
-                <span className="text-primary">
-                  {formatCurrency(discountedTotal + taxCents + (isInternational && chosenRate ? intlShippingTotal : 0))}
-                </span>
+                <span className="text-primary">{formatCurrency(finalTotal)}</span>
               </div>
             </div>
             {isInternational && !chosenRate && (

@@ -46,7 +46,7 @@ export default function TermsPage() {
               <li><strong>Regular:</strong> $75 per card, 12-15 business days, includes grader notes</li>
               <li><strong>Expedited:</strong> $89.99 per card, 7-10 business days, includes grader notes</li>
               <li><strong>Premium:</strong> $99.99 per card, 5-7 business days, includes grader notes</li>
-              <li><strong>Ultra Premium:</strong> $150 per card, 3-5 business days, includes grader notes and video showcase</li>
+              <li><strong>Ultra Premium:</strong> $150 per card, 3-5 business days, includes grader notes</li>
             </ul>
             <p>
               <strong>IMPORTANT:</strong> All turnaround times are estimates only and are NOT guaranteed. Turnaround times may be affected

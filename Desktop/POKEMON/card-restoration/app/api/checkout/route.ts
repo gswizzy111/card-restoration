@@ -49,6 +49,8 @@ const BodySchema = z.object({
     .optional(),
   customer_notes: z.string().optional(),
   affiliate_code: z.string().optional(),
+  gift_card_code: z.string().optional(),
+  instagram_feature: z.boolean().optional(),
   insurance_declared_value_cents: z.number().int().min(100).max(1_000_000).optional(),
   insurance_type: z.enum(["inbound", "round_trip"]).optional(),
   slab_crack_count: z.number().int().min(0).max(100).optional(),
@@ -163,8 +165,8 @@ export async function POST(request: Request) {
     ? (data.shipping_method === "buy_label" || isInternational ? data.shipping_rate.amount_cents : 0)
     : 0;
 
-  // Sales tax — 6.5% on subtotal after discount
-  const TAX_RATE = 0.065;
+  // Sales tax — 6.625% on subtotal after discount
+  const TAX_RATE = 0.06625;
   const taxCents = Math.round((subtotalCents - discountCents) * TAX_RATE);
 
   // Slab cracking — $7/slab, server-side, capped at card count
@@ -182,7 +184,27 @@ export async function POST(request: Request) {
     insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;
   }
 
-  const totalCents = subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents;
+  // Instagram feature add-on — $100 flat
+  const instagramFeeCents = data.instagram_feature ? 10000 : 0;
+
+  // Gift card — look up and apply up to order total
+  let giftCardDiscountCents = 0;
+  let giftCardId: string | null = null;
+  if (data.gift_card_code) {
+    const gcCode = data.gift_card_code.trim().toUpperCase();
+    const { data: gc } = await admin
+      .from("gift_cards")
+      .select("id, remaining_cents, status")
+      .eq("code", gcCode)
+      .maybeSingle();
+    if (gc && gc.status === "active" && gc.remaining_cents > 0) {
+      giftCardId = gc.id;
+      const preTaxTotal = subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents;
+      giftCardDiscountCents = Math.min(gc.remaining_cents, preTaxTotal);
+    }
+  }
+
+  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents + instagramFeeCents - giftCardDiscountCents);
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -233,13 +255,23 @@ export async function POST(request: Request) {
   }
 
   // Insert order_services
-  await admin.from("order_services").insert([{
+  const orderServices: { order_id: string; service_id: string; service_name: string; price_cents: number; quantity: number }[] = [{
     order_id: order.id,
     service_id: serviceId ?? "",
     service_name: serviceName,
     price_cents: subtotalCents,
     quantity: data.cards.length,
-  }]);
+  }];
+  if (instagramFeeCents > 0) {
+    orderServices.push({
+      order_id: order.id,
+      service_id: "instagram_feature",
+      service_name: "Instagram Feature — Card in a Video",
+      price_cents: 10000,
+      quantity: 1,
+    });
+  }
+  await admin.from("order_services").insert(orderServices);
 
   // Insert cards
   const cardRows = data.cards.map((c) => ({
@@ -290,7 +322,7 @@ export async function POST(request: Request) {
     });
   }
   lineItems.push({
-    price_data: { currency: "usd", product_data: { name: "Sales Tax (6.5%)" }, unit_amount: taxCents },
+    price_data: { currency: "usd", product_data: { name: "Sales Tax (6.625%)" }, unit_amount: taxCents },
     quantity: 1,
   });
 
@@ -322,8 +354,26 @@ export async function POST(request: Request) {
       quantity: slabCrackCount,
     });
   }
+  if (instagramFeeCents > 0) {
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: "Instagram Feature — Card in a Video" }, unit_amount: 10000 },
+      quantity: 1,
+    });
+  }
 
-  // Create a one-time Stripe coupon if there's a discount
+  // Gift card as a negative line item
+  if (giftCardDiscountCents > 0) {
+    lineItems.push({
+      price_data: {
+        currency: "usd",
+        product_data: { name: `Gift Card (${data.gift_card_code?.toUpperCase()})` },
+        unit_amount: -giftCardDiscountCents,
+      },
+      quantity: 1,
+    });
+  }
+
+  // Create a one-time Stripe coupon if there's an affiliate discount
   let stripeDiscounts: Stripe.Checkout.SessionCreateParams["discounts"] = undefined;
   if (discountPercent > 0) {
     try {
@@ -356,6 +406,8 @@ export async function POST(request: Request) {
           ? (data.shipping_rate?.object_id ?? "")
           : "",
         is_international: isInternational ? "true" : "",
+        gift_card_id: giftCardId ?? "",
+        gift_card_discount_cents: giftCardDiscountCents > 0 ? String(giftCardDiscountCents) : "",
       },
     });
   } catch (err) {

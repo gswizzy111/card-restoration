@@ -23,10 +23,25 @@ type ShippingAddress = {
   country: string;
 };
 
+export type SavedLabel = {
+  labelUrl: string;
+  trackingNumber: string | null;
+  createdAt: string;
+};
+
 async function getOrder(id: string) {
   const admin = createAdminClient();
   const { data } = await admin.from("shop_orders").select("*").eq("id", id).single();
   return data;
+}
+
+function getExistingLabels(order: Record<string, unknown>): SavedLabel[] {
+  // Try the new `labels` jsonb column first, fall back to the old single fields
+  if (Array.isArray(order.labels) && order.labels.length > 0) return order.labels as SavedLabel[];
+  if (order.return_label_url) {
+    return [{ labelUrl: order.return_label_url as string, trackingNumber: (order.tracking_number as string | null) ?? null, createdAt: "" }];
+  }
+  return [];
 }
 
 async function authed() {
@@ -34,7 +49,7 @@ async function authed() {
   return jar.get("admin_auth")?.value === process.env.ADMIN_PASSWORD;
 }
 
-// GET — return rates without purchasing
+// GET — return rates (always, so a new label can always be created)
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!await authed()) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -42,9 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const order = await getOrder(id);
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
 
-  if (order.return_label_url) {
-    return Response.json({ labelUrl: order.return_label_url, trackingNumber: order.tracking_number ?? null });
-  }
+  const existingLabels = getExistingLabels(order as Record<string, unknown>);
 
   const addr = order.shipping_address as ShippingAddress | null;
   if (!addr?.street1) return Response.json({ error: "No shipping address on file" }, { status: 400 });
@@ -80,20 +93,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   if (rates.length === 0) return Response.json({ error: "No rates available" }, { status: 500 });
 
-  return Response.json({ rates });
+  return Response.json({ rates, existingLabels });
 }
 
-// POST — purchase the chosen rate
+// POST — purchase the chosen rate and append to the labels list
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!await authed()) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const order = await getOrder(id);
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
-
-  if (order.return_label_url) {
-    return Response.json({ labelUrl: order.return_label_url, trackingNumber: order.tracking_number ?? null });
-  }
 
   const { rateObjectId } = await req.json();
   if (!rateObjectId) return Response.json({ error: "Missing rateObjectId" }, { status: 400 });
@@ -111,24 +120,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const trackingNumber = transaction.trackingNumber ?? null;
   const trackingUrl = transaction.trackingUrlProvider ?? null;
 
+  const newLabel: SavedLabel = {
+    labelUrl: transaction.labelUrl,
+    trackingNumber,
+    createdAt: new Date().toISOString(),
+  };
+
+  const existingLabels = getExistingLabels(order as Record<string, unknown>);
+  const allLabels = [...existingLabels, newLabel];
+
   const admin = createAdminClient();
-  const { error: dbError } = await admin
+
+  // Try to save to the new `labels` column; always also update the legacy fields
+  await (admin as any)
     .from("shop_orders")
     .update({
+      labels: allLabels,
       return_label_url: transaction.labelUrl,
       tracking_number: trackingNumber,
+      status: "processing",
     })
     .eq("id", id);
 
-  if (dbError) {
-    console.error("Failed to save label data:", dbError);
-    return Response.json({ error: `Label purchased but could not be saved: ${dbError.message}` }, { status: 500 });
-  }
-
-  // Send shipping email to customer
-  if (order.customer_email && trackingNumber) {
+  // Send shipping notification email on first label only
+  if (existingLabels.length === 0 && order.customer_email && trackingNumber) {
     const firstName = (order.customer_name as string)?.split(" ")[0] ?? "there";
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
 
     try {
       await resend.emails.send({
@@ -159,5 +175,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  return Response.json({ labelUrl: transaction.labelUrl, trackingNumber });
+  return Response.json({ newLabel, allLabels });
 }

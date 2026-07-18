@@ -4,7 +4,7 @@ import { stripe } from "@/lib/stripe";
 import { getTierById, RESTORATION_TIERS } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
-const TAX_RATE = 0.065;
+const TAX_RATE = 0.06625;
 
 const TIER_ORDER: RestorationTierId[] = ["regular", "expedited", "premium", "ultra_premium"];
 

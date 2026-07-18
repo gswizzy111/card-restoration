@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Trash2, Plus, Minus } from "lucide-react";
 
-const TAX_RATE = 0.06;
+const TAX_RATE = 0.06625;
 
 export default function CartPage() {
   const { items, totalCents, removeItem, updateQty } = useCart();
@@ -41,6 +41,9 @@ export default function CartPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-heading font-bold text-foreground text-sm">{item.name}</p>
+                {item.size && (
+                  <p className="text-xs text-muted-foreground mt-0.5">Size: {item.size}</p>
+                )}
                 <p className="text-primary font-semibold text-sm mt-0.5">{formatCurrency(item.price_cents)}</p>
               </div>
               <div className="flex items-center gap-2">
@@ -83,7 +86,7 @@ export default function CartPage() {
                 <span>{formatCurrency(totalCents)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
-                <span>Sales Tax (6%)</span>
+                <span>Sales Tax (6.625%)</span>
                 <span>{formatCurrency(taxCents)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">

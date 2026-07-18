@@ -23,6 +23,12 @@ interface StepReviewProps {
   onAffiliateCodeChange: (v: string) => void;
   discountPercent: number;
   onDiscountChange: (pct: number) => void;
+  giftCardCode: string;
+  onGiftCardCodeChange: (v: string) => void;
+  giftCardAmountCents: number;
+  onGiftCardAmountChange: (cents: number) => void;
+  instagramFeature: boolean;
+  onInstagramFeatureChange: (v: boolean) => void;
   termsAccepted: boolean;
   onTermsChange: (v: boolean) => void;
   onEditStep: (step: number) => void;
@@ -43,6 +49,12 @@ export function StepReview({
   onAffiliateCodeChange,
   discountPercent,
   onDiscountChange,
+  giftCardCode,
+  onGiftCardCodeChange,
+  giftCardAmountCents,
+  onGiftCardAmountChange,
+  instagramFeature,
+  onInstagramFeatureChange,
   termsAccepted,
   onTermsChange,
   onEditStep,
@@ -52,6 +64,7 @@ export function StepReview({
 }: StepReviewProps) {
   const [codeStatus, setCodeStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [codeName, setCodeName] = useState("");
+  const [gcStatus, setGcStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [insuranceQuote, setInsuranceQuote] = useState<{ customerChargeCents: number; roundTripChargeCents: number } | null>(null);
   const [quotingInsurance, setQuotingInsurance] = useState(false);
   const [insuranceDollars, setInsuranceDollars] = useState(
@@ -118,6 +131,20 @@ export function StepReview({
     }
   }
 
+  async function validateGiftCard() {
+    const trimmed = giftCardCode.trim().toUpperCase();
+    if (!trimmed) return;
+    const res = await fetch(`/api/gift-cards/validate?code=${encodeURIComponent(trimmed)}`);
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      setGcStatus("valid");
+      onGiftCardAmountChange(data.remaining_cents);
+    } else {
+      setGcStatus("invalid");
+      onGiftCardAmountChange(0);
+    }
+  }
+
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
 
   // Sum per-card tier prices (supports mixed tiers)
@@ -132,11 +159,14 @@ export function StepReview({
     }
   }
 
-  const TAX_RATE = 0.065;
+  const TAX_RATE = 0.06625;
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const total = subtotal - discountCents + taxCents + shipping + (INSURANCE_ENABLED ? insurance.chargeCents : 0);
+  const instagramFeeCents = instagramFeature ? 10000 : 0;
+  const preTaxTotal = subtotal - discountCents + taxCents + shipping + (INSURANCE_ENABLED ? insurance.chargeCents : 0) + instagramFeeCents;
+  const gcApplied = Math.min(giftCardAmountCents, preTaxTotal);
+  const total = Math.max(0, preTaxTotal - gcApplied);
 
   return (
     <div className="flex flex-col gap-8">
@@ -272,6 +302,29 @@ export function StepReview({
         )}
       </div>}
 
+      {/* Instagram Feature Add-on */}
+      <div className={`border-2 rounded-xl p-5 transition-colors ${instagramFeature ? "border-[#1a8fe0] bg-blue-50" : "border-border"}`}>
+        <label className="flex items-start gap-4 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={instagramFeature}
+            onChange={(e) => onInstagramFeatureChange(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+          />
+          <div>
+            <p className="font-medium text-foreground">
+              Feature my card in an Instagram video{" "}
+              <span className="text-[#1a8fe0] font-semibold">+$100</span>
+            </p>
+            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+              We&apos;ll film your card being restored and post it to{" "}
+              <a href="https://www.instagram.com/the_card_doc" target="_blank" rel="noopener noreferrer" className="text-[#1a8fe0] hover:underline">@the_card_doc</a>.
+              Perfect for rare or high-value cards.
+            </p>
+          </div>
+        </label>
+      </div>
+
       {/* Customer info */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -322,6 +375,18 @@ export function StepReview({
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>Insurance ({insurance.type === "round_trip" ? "round trip" : "inbound"})</span>
             <span>{formatCurrency(insurance.chargeCents)}</span>
+          </div>
+        )}
+        {instagramFeature && (
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>Instagram Feature</span>
+            <span>{formatCurrency(10000)}</span>
+          </div>
+        )}
+        {gcApplied > 0 && (
+          <div className="flex justify-between text-sm text-green-600 font-medium">
+            <span>Gift Card</span>
+            <span>−{formatCurrency(gcApplied)}</span>
           </div>
         )}
         <div className="flex justify-between font-medium text-foreground pt-2 border-t border-border">
@@ -375,6 +440,37 @@ export function StepReview({
           <p className="text-sm text-green-600 font-medium">✓ Code applied — {codeName}</p>
         )}
         {codeStatus === "invalid" && <p className="text-sm text-red-500">Invalid code.</p>}
+      </div>
+
+      {/* Gift card */}
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="gift-card-code">Gift card code <span className="text-muted-foreground font-normal">(optional)</span></Label>
+        <div className="flex gap-2">
+          <input
+            id="gift-card-code"
+            type="text"
+            value={giftCardCode}
+            onChange={(e) => {
+              onGiftCardCodeChange(e.target.value.toUpperCase());
+              setGcStatus("idle");
+              onGiftCardAmountChange(0);
+            }}
+            placeholder="GIFT-XXXX-XXXX"
+            className="flex-1 h-9 border border-border rounded-lg px-3 text-sm font-mono uppercase focus:outline-none focus:border-primary transition-colors"
+          />
+          <button
+            type="button"
+            onClick={validateGiftCard}
+            disabled={!giftCardCode.trim()}
+            className="h-9 px-4 bg-secondary text-foreground text-sm font-semibold rounded-lg hover:bg-border transition-colors disabled:opacity-40"
+          >
+            Apply
+          </button>
+        </div>
+        {gcStatus === "valid" && gcApplied > 0 && (
+          <p className="text-sm text-green-600 font-medium">✓ Gift card applied — {formatCurrency(gcApplied)} off</p>
+        )}
+        {gcStatus === "invalid" && <p className="text-sm text-red-500">Invalid or already used gift card.</p>}
       </div>
 
       {/* Terms */}
