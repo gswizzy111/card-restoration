@@ -6,34 +6,30 @@ export default function TermsPage() {
           Terms and Conditions
         </h1>
         <p className="text-sm text-muted-foreground mb-8">
-          Last Updated: June 14, 2026
+          Last Updated: July 19, 2026
         </p>
 
         <div className="prose prose-sm max-w-none space-y-6 text-foreground">
           <section>
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">Overview</h2>
             <p>
-              These Terms and Conditions ("Terms" or "Agreement") govern the restoration and grading services provided by The Card Doc
-              ("We," "Us," "Our," or "The Card Doc") for collectible cards and related items submitted for restoration, PSA prep, grading
-              verification, and related services (the "Services").
+              These Terms and Conditions (&ldquo;Terms&rdquo; or &ldquo;Agreement&rdquo;) govern the restoration and grading services provided by The Card Doc LLC doing business as &ldquo;The Card Doc&rdquo; for collectible cards and related items submitted for restoration, PSA prep, grading verification, and related services (the &ldquo;Services&rdquo;).
             </p>
             <p>
-              PRIOR TO SUBMITTING ANY CARDS OR ITEMS TO THE CARD DOC, YOU MUST READ AND AGREE TO THESE TERMS. By submitting an order
-              and paying for our Services, you affirmatively agree to these Terms and agree to be bound by them. If you do not agree to
-              these Terms, do not submit any items to The Card Doc.
+              PRIOR TO SUBMITTING ANY CARDS OR ITEMS TO THE CARD DOC LLC, YOU MUST READ AND AGREE TO THESE TERMS. By submitting an order and paying for our Services, you affirmatively agree to these Terms and agree to be bound by them. If you do not agree to these Terms, do not submit any items to The Card Doc.
             </p>
           </section>
 
           <section>
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">1. Eligibility and Submission</h2>
             <p>
-              To use The Card Doc Services, you must (a) complete the online submission process, (b) provide accurate information regarding
-              your cards, and (c) select your desired service tier (Regular, Expedited, Premium, or Ultra Premium) and shipping method.
+              To use The Card Doc LLC Services, you must (a) complete the online submission process, (b) provide accurate information regarding your cards, and (c) select your desired service tier (Regular, Expedited, Premium, or Ultra Premium) and shipping method.
             </p>
             <p>
-              Each person may only have one account. Duplicate accounts or attempts to circumvent account restrictions will result in
-              cancellation of services. The Card Doc reserves the right to refuse services to any person or reject any submission at its
-              sole discretion.
+              Each person may only have one account. Duplicate accounts or attempts to circumvent account restrictions will result in cancellation of services. The Card Doc reserves the right to refuse services to any person or reject any submission at its sole discretion.
+            </p>
+            <p>
+              Customers must provide an accurate declared value for each submitted item. The Card Doc reserves the right to refuse any submission or require additional documentation for items exceeding our maximum accepted declared value or that we determine present an unreasonable risk.
             </p>
           </section>
 
@@ -49,11 +45,7 @@ export default function TermsPage() {
               <li><strong>Ultra Premium:</strong> $150 per card, 3-5 business days, includes grader notes</li>
             </ul>
             <p>
-              <strong>IMPORTANT:</strong> All turnaround times are estimates only and are NOT guaranteed. Turnaround times may be affected
-              by submission volume, capacity, payment issues, shipping delays, or any other circumstance beyond our control. We make no
-              warranty, representation, or guarantee regarding completion within any stated timeframe. TO THE MAXIMUM EXTENT PERMITTED BY
-              LAW, THE CARD DOC SHALL HAVE NO LIABILITY WHATSOEVER FOR ANY DELAY IN PROVIDING SERVICES OR FAILURE TO COMPLETE SERVICES
-              WITHIN ANY ESTIMATED TIMEFRAME.
+              <strong>IMPORTANT:</strong> All turnaround times are estimates only and are NOT guaranteed. Turnaround times may be affected by submission volume, capacity, payment issues, shipping delays, or any other circumstance beyond our control. We make no warranty, representation, or guarantee regarding completion within any stated timeframe. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE CARD DOC SHALL HAVE NO LIABILITY WHATSOEVER FOR ANY DELAY IN PROVIDING SERVICES OR FAILURE TO COMPLETE SERVICES WITHIN ANY ESTIMATED TIMEFRAME.
             </p>
           </section>
 
@@ -63,8 +55,7 @@ export default function TermsPage() {
               <strong>YOU ASSUME ALL RISK OF LOSS, DAMAGE, THEFT, OR DESTRUCTION DURING SHIPMENT TO AND FROM THE CARD DOC.</strong>
             </p>
             <p>
-              You are responsible for selecting your own shipping method and carrier. You must pack your items in accordance with strict
-              shipping requirements. The Card Doc is not responsible for:
+              You are responsible for selecting your own shipping method and carrier. You must pack your items in accordance with strict shipping requirements. The Card Doc is not responsible for:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-sm">
               <li>Any damage occurring during transit to The Card Doc</li>
@@ -75,15 +66,13 @@ export default function TermsPage() {
               <li>Any carrier-related issues or carrier negligence</li>
             </ul>
             <p>
-              <strong>The carrier you select does not represent The Card Doc and is not our agent.</strong> The Card Doc assumes no
-              responsibility or liability for any shipment until the item has been physically received, unpacked, and confirmed in our
-              system. The completion of delivery by a carrier does not create any obligation for The Card Doc, and you remain at risk
-              until we confirm receipt.
+              <strong>The carrier you select does not represent The Card Doc and is not our agent.</strong> The Card Doc assumes no responsibility or liability for any shipment until the item has been physically received, unpacked, and confirmed in our system. The completion of delivery by a carrier does not create any obligation for The Card Doc, and you remain at risk until we confirm receipt.
             </p>
             <p>
-              For return shipments, you may obtain your own insurance, arrange your own return shipping, or select insured return shipping
-              (additional fees apply). If you do not select return insurance, The Card Doc is not responsible for loss or damage during
-              return shipment.
+              For return shipments, you may obtain your own insurance, arrange your own return shipping, or select insured return shipping (additional fees apply). If you do not select return insurance, The Card Doc is not responsible for loss or damage during return shipment.
+            </p>
+            <p>
+              Customers are responsible for selecting any desired shipping insurance. The Card Doc does not insure customer property unless expressly stated in writing. Any insurance obtained through The Card Doc applies only to the shipment selected and does not constitute insurance while items are in our possession.
             </p>
           </section>
 
@@ -93,9 +82,7 @@ export default function TermsPage() {
               <strong>THE CARD DOC IS NOT RESPONSIBLE FOR ANY DAMAGE TO YOUR CARDS WHILE IN OUR POSSESSION OR CONTROL.</strong>
             </p>
             <p>
-              While The Card Doc will exercise reasonable care in handling your items, we make no warranty or guarantee regarding the
-              condition of your cards before, during, or after the restoration process. Restoration involves subjective judgments and
-              professional opinions. Results may vary, and your cards may be altered, damaged, or changed in any way.
+              While The Card Doc will exercise reasonable care in handling your items, we make no warranty or guarantee regarding the condition of your cards before, during, or after the restoration process. Restoration involves subjective judgments and professional opinions. Results may vary, and your cards may be altered, damaged, or changed in any way.
             </p>
             <p>
               You expressly assume all risk that your cards may:
@@ -109,9 +96,7 @@ export default function TermsPage() {
               <li>Suffer unpredictable or irreversible changes</li>
             </ul>
             <p>
-              If your card is damaged or altered in any way during restoration, The Card Doc's liability is limited solely to the
-              service fee you paid, not the card's value. You may not make claims for the card's fair market value, estimated value,
-              or any other damages.
+              If your card is damaged or altered in any way during restoration, The Card Doc&apos;s liability is limited solely to the service fee you paid, not the card&apos;s value. You may not make claims for the card&apos;s fair market value, estimated value, or any other damages.
             </p>
           </section>
 
@@ -132,7 +117,7 @@ export default function TermsPage() {
               <li>Loss or theft of cards while in our possession</li>
               <li>Alteration of cards during the restoration process</li>
               <li>Any consequential, incidental, indirect, or special damages</li>
-              <li>Loss of the card's fair market value or estimated value</li>
+              <li>Loss of the card&apos;s fair market value or estimated value</li>
               <li>Loss of sentimental or intrinsic value</li>
               <li>Loss of profits or business interruption</li>
               <li>Any damage to items during return shipment</li>
@@ -146,10 +131,9 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">6. Grading and Authenticity Services</h2>
             <p>
-              The Card Doc may provide grading verification, PSA prep, and related authentication services. These services involve subjective
-              professional judgments that can vary and may change over time. The Card Doc makes no warranty, representation, or guarantee
-              regarding:
+              The Card Doc may provide restoration, inspection, grading preparation, grading consultation, and related services. These services involve subjective professional judgment and are intended solely as opinions and restoration services. The Card Doc does not guarantee that any grading company will assign any particular grade, authenticate an item, or agree with our opinions.
             </p>
+            <p>We make no warranty or guarantee regarding:</p>
             <ul className="list-disc pl-6 space-y-2 text-sm">
               <li>The accuracy of any grade or assessment provided</li>
               <li>The authenticity of any item</li>
@@ -165,14 +149,13 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">7. Doctored, Altered, or Inauthentic Items</h2>
             <p>
-              You represent and warrant that any item submitted is genuine and has not been doctored, altered, recolored, trimmed, cleaned,
-              waxed, re-backed, or otherwise altered to enhance appearance or condition. You agree not to knowingly submit any doctored,
-              altered, counterfeit, or inauthentic items.
+              You represent and warrant that, to the best of your knowledge, each submitted item is genuine and that all information you provide regarding the item&apos;s ownership, authenticity, condition, and any known prior restoration, alteration, trimming, recoloring, cleaning, re-backing, or similar work is accurate and complete.
             </p>
             <p>
-              If The Card Doc determines that an item is doctored, altered, inauthentic, or otherwise impaired, the service fee is
-              non-refundable. The Card Doc may decline to provide services and may return the item unprocessed, and you will still be
-              charged the full service fee for the determination review.
+              The Card Doc reserves the right to decline any submission if we reasonably believe an item is counterfeit, stolen, unlawfully possessed, materially misrepresented, or otherwise unsuitable for our Services.
+            </p>
+            <p>
+              Any fees incurred for inspection or evaluation prior to refusal of service remain non-refundable.
             </p>
           </section>
 
@@ -187,8 +170,7 @@ export default function TermsPage() {
               processing and handling fee for return of your items.
             </p>
             <p>
-              If payment is rescinded or charged back after items have been processed and returned, The Card Doc reserves the right to
-              deactivate any certifications, refuse future services, and pursue all available legal remedies.
+              If payment is rescinded or charged back after items have been processed and returned, The Card Doc reserves the right to refuse future services, recover any unpaid amounts, pursue collection efforts, and exercise any other rights or remedies available.
             </p>
           </section>
 
@@ -204,12 +186,16 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">10. Inspection and Claims</h2>
             <p>
-              You must promptly inspect your returned items upon receipt. You have five (5) calendar days to report any damage,
-              discrepancies, or errors. Any claims not reported within this timeframe are waived. You agree to waive all claims against
-              The Card Doc for any issues not timely reported.
+              You must inspect your returned items promptly upon delivery.
             </p>
             <p>
-              The Card Doc's determination regarding any damage or discrepancy is final and binding.
+              Any claim involving damage, missing items, or service errors must be submitted in writing within fourteen (14) calendar days after confirmed delivery.
+            </p>
+            <p>
+              Failure to report a claim within this period may affect our ability to investigate the matter.
+            </p>
+            <p>
+              The Card Doc will review all timely submitted claims in good faith and communicate its findings to the customer.
             </p>
           </section>
 
@@ -249,7 +235,7 @@ export default function TermsPage() {
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">13. Indemnification</h2>
             <p>
               You agree to indemnify and hold harmless The Card Doc, its owners, employees, and agents from any claims, damages, losses,
-              or expenses (including attorney's fees) arising from:
+              or expenses (including attorney&apos;s fees) arising from:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-sm">
               <li>Your breach of these Terms</li>
@@ -263,17 +249,23 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">14. Modifications to Terms</h2>
             <p>
-              The Card Doc reserves the right to update these Terms at any time by posting updated Terms on our website. Your continued
-              use of our Services indicates your acceptance of any modifications. It is your responsibility to review these Terms periodically.
+              The Card Doc may revise these Terms from time to time.
+            </p>
+            <p>
+              The version of the Terms in effect on the date an order is submitted shall govern that order.
+            </p>
+            <p>
+              Updated Terms apply only to future orders submitted after the revised Terms become effective.
             </p>
           </section>
 
           <section>
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">15. Governing Law</h2>
             <p>
-              These Terms shall be governed by and construed in accordance with the laws of the State of California, without regard to
-              conflicts of law principles. Any legal action or proceeding shall be brought exclusively in the state or federal courts
-              located in California.
+              These Terms shall be governed by the laws of the State of New Jersey, without regard to conflict-of-law principles.
+            </p>
+            <p>
+              Subject to the arbitration provisions contained herein, any action permitted to proceed in court shall be brought exclusively in the state or federal courts located within Ridgewood, NJ.
             </p>
           </section>
 
@@ -288,8 +280,41 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold font-heading mt-8 mb-4">17. Contact Us</h2>
             <p>
-              If you have any questions about these Terms or our Services, please contact us via DM on Instagram @the_card_doc or email thecarddoc1@gmail.com. We reply
-              within 1 business day.
+              If you have any questions about these Terms or our Services, please contact us via DM on Instagram{" "}
+              <a href="https://www.instagram.com/the_card_doc" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">
+                @the_card_doc
+              </a>{" "}
+              or email thecarddoc1@gmail.com. We reply within 1 business day.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-bold font-heading mt-8 mb-4">18. Abandoned Property</h2>
+            <p>
+              If completed items remain unpaid or unclaimed for more than ninety (90) days after notice that Services have been completed, The Card Doc may charge reasonable storage fees.
+            </p>
+            <p>
+              If items remain unclaimed for one hundred eighty (180) days, The Card Doc may treat the items as abandoned property to the extent permitted by applicable law and may dispose of, sell, or otherwise handle such items after providing any notice required by law.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-bold font-heading mt-8 mb-4">19. Arbitration</h2>
+            <p>
+              Except where prohibited by applicable law, any dispute, claim, or controversy arising out of or relating to these Terms or the Services shall be resolved exclusively through binding arbitration administered by a nationally recognized arbitration provider in accordance with its applicable commercial or consumer arbitration rules.
+            </p>
+            <p>
+              The parties waive the right to trial by jury except where such waiver is prohibited by law.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-bold font-heading mt-8 mb-4">20. Class Action Waiver</h2>
+            <p>
+              To the fullest extent permitted by law, all disputes shall be brought solely on an individual basis.
+            </p>
+            <p>
+              Neither party may participate as a plaintiff or class member in any purported class action, representative action, consolidated proceeding, or private attorney general action arising from these Terms or the Services.
             </p>
           </section>
 
@@ -298,14 +323,15 @@ export default function TermsPage() {
               ACKNOWLEDGMENT
             </p>
             <p className="text-sm text-foreground">
-              By submitting items to The Card Doc and paying for Services, you acknowledge that you have read these Terms, understand
-              the limitations on The Card Doc's liability, accept all risks associated with submitting items, and agree to be bound by
-              all terms and conditions contained herein.
+              By submitting an order, checking the acceptance box during checkout, and paying for Services, you acknowledge that you have read these Terms, understand them, voluntarily accept the risks inherent in restoration services, and agree to be legally bound by them.
+            </p>
+            <p className="text-sm text-foreground mt-2">
+              You further acknowledge that the version of these Terms presented during checkout governs your specific order.
             </p>
           </div>
 
           <p className="text-xs text-muted-foreground text-center mt-12">
-            © 2026 The Card Doc. All rights reserved.
+            © 2026 The Card Doc LLC. All rights reserved.
           </p>
         </div>
       </div>
