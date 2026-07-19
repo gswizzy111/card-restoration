@@ -12,6 +12,7 @@ import { CheckpointAdder } from "./checkpoint-adder";
 import { InboundTrackingEditor } from "./inbound-tracking-editor";
 import { OrderEditor } from "./order-editor";
 import { CustomerEditor } from "./customer-editor";
+import { DeleteOrderButton } from "./delete-order-button";
 import type { Track } from "shippo/models/components";
 
 export const dynamic = "force-dynamic";
@@ -105,10 +106,11 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   return (
     <div className="min-h-screen bg-secondary/30">
       <div className="max-w-5xl mx-auto px-6 py-10">
-        <div className="flex items-center gap-3 mb-8">
+        <div className="flex items-center justify-between gap-3 mb-8">
           <Link href="/admin" className="text-sm text-muted-foreground hover:text-primary transition-colors">
             ← All Orders
           </Link>
+          <DeleteOrderButton orderId={order.id} orderNumber={order.order_number} />
         </div>
 
         <div className="flex flex-col lg:flex-row gap-6">
