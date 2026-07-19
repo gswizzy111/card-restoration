@@ -9,6 +9,7 @@ import { getTierById, formatCents } from "@/lib/restoration-tiers";
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import { INSURANCE_ENABLED } from "@/lib/site-config";
+import { SignaturePad } from "./signature-pad";
 
 interface StepReviewProps {
   services: Service[];
@@ -29,8 +30,8 @@ interface StepReviewProps {
   onGiftCardAmountChange: (cents: number) => void;
   instagramFeature: boolean;
   onInstagramFeatureChange: (v: boolean) => void;
-  termsAccepted: boolean;
-  onTermsChange: (v: boolean) => void;
+  signatureDataUrl: string;
+  onSignatureChange: (v: string) => void;
   onEditStep: (step: number) => void;
   selectedTier?: RestorationTierId;
   insurance: InsuranceSelection;
@@ -55,8 +56,8 @@ export function StepReview({
   onGiftCardAmountChange,
   instagramFeature,
   onInstagramFeatureChange,
-  termsAccepted,
-  onTermsChange,
+  signatureDataUrl,
+  onSignatureChange,
   onEditStep,
   selectedTier,
   insurance,
@@ -473,27 +474,31 @@ export function StepReview({
         {gcStatus === "invalid" && <p className="text-sm text-red-500">Invalid or already used gift card.</p>}
       </div>
 
-      {/* Terms */}
-      <label className="flex items-start gap-3 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={termsAccepted}
-          onChange={(e) => onTermsChange(e.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+      {/* Signature */}
+      <div className="flex flex-col gap-3">
+        <div>
+          <h3 className="font-medium text-foreground">Sign to confirm your order</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            By signing below you confirm you have read and agree to the{" "}
+            <a
+              href="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline underline-offset-2 hover:opacity-80"
+            >
+              Terms &amp; Conditions
+            </a>
+            , including The Card Doc&apos;s limitations of liability regarding restoration outcomes and card condition.
+          </p>
+        </div>
+        <SignaturePad
+          onSign={onSignatureChange}
+          onClear={() => onSignatureChange("")}
         />
-        <span className="text-sm text-muted-foreground">
-          I have read and agree to the{" "}
-          <a
-            href="/terms"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline underline-offset-2 hover:opacity-80"
-          >
-            Terms &amp; Conditions
-          </a>
-          , including The Card Doc&apos;s limitations of liability regarding grading outcomes and card condition.
-        </span>
-      </label>
+        {!signatureDataUrl && (
+          <p className="text-xs text-red-500">A signature is required to place your order.</p>
+        )}
+      </div>
     </div>
   );
 }

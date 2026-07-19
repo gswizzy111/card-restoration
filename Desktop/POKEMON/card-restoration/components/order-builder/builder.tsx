@@ -64,7 +64,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [giftCardCode, setGiftCardCode] = useState("");
   const [giftCardAmountCents, setGiftCardAmountCents] = useState(0);
   const [instagramFeature, setInstagramFeature] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [signatureDataUrl, setSignatureDataUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [insurance, setInsurance] = useState<InsuranceSelection>({ declaredValueCents: 0, type: "none", chargeCents: 0 });
 
@@ -88,6 +88,21 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   async function handleSubmit() {
     setSubmitting(true);
     try {
+      // Upload signature before going to Stripe
+      let signaturePath: string | undefined;
+      if (signatureDataUrl) {
+        const sigRes = await fetch("/api/orders/signature", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl: signatureDataUrl }),
+        });
+        if (sigRes.ok) {
+          const sigData = await sigRes.json();
+          signaturePath = sigData.path;
+        }
+        // If upload fails, we still proceed — the act of signing is enforced on the client
+      }
+
       // Determine if all cards share one tier or have mixed tiers
       const tiers = cards.map((c) => c.tier ?? selectedTier);
       const uniqueTiers = [...new Set(tiers.filter(Boolean))];
@@ -141,6 +156,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           insurance_declared_value_cents: insurance.declaredValueCents > 0 ? insurance.declaredValueCents : undefined,
           insurance_type: insurance.type !== "none" ? insurance.type : undefined,
           slab_crack_count: cards.filter((c) => c.needs_slab_crack).length || undefined,
+          signature_path: signaturePath,
         }),
       });
 
@@ -201,8 +217,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               onAffiliateCodeChange={setAffiliateCode}
               discountPercent={discountPercent}
               onDiscountChange={setDiscountPercent}
-              termsAccepted={termsAccepted}
-              onTermsChange={setTermsAccepted}
+              signatureDataUrl={signatureDataUrl}
+              onSignatureChange={setSignatureDataUrl}
               insurance={insurance}
               onInsuranceChange={setInsurance}
               giftCardCode={giftCardCode}
@@ -234,7 +250,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
                 Continue
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={submitting || !termsAccepted} className="px-8">
+              <Button onClick={handleSubmit} disabled={submitting || !signatureDataUrl} className="px-8">
                 {submitting ? "Redirecting..." : "Pay Securely with Stripe"}
               </Button>
             )}

@@ -54,6 +54,7 @@ const BodySchema = z.object({
   insurance_declared_value_cents: z.number().int().min(100).max(1_000_000).optional(),
   insurance_type: z.enum(["inbound", "round_trip"]).optional(),
   slab_crack_count: z.number().int().min(0).max(100).optional(),
+  signature_path: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -298,6 +299,17 @@ export async function POST(request: Request) {
       : "Checkout session created",
     is_customer_visible: false,
   });
+
+  // Record signature if provided
+  if (data.signature_path) {
+    const { data: { publicUrl } } = admin.storage.from("card-photos").getPublicUrl(data.signature_path);
+    await admin.from("order_events").insert({
+      order_id: order.id,
+      event_type: "customer_signed",
+      description: `Customer signed the Terms & Conditions at checkout. Signature on file: ${publicUrl}`,
+      is_customer_visible: false,
+    });
+  }
 
   // Build Stripe line items — one per tier (or one flat line for legacy/volume pricing)
   const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [];
