@@ -2,8 +2,8 @@ import Link from "next/link";
 import { getAllTiers, formatCents, formatMaxValue } from "@/lib/restoration-tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRestorationsOpen } from "@/lib/store-config";
-import { CheckCircle, Zap, Crown, Star } from "lucide-react";
-import { RestorationWaitlistForm } from "@/app/(public)/restoration/restoration-waitlist-form";
+import { CheckCircle, Zap, Crown, Star, Gem } from "lucide-react";
+import { WaitlistModal } from "./waitlist-modal";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,7 @@ const iconMap = {
   expedited: Zap,
   premium: Crown,
   ultra_premium: Star,
+  elite: Gem,
 };
 
 export default async function TierSelectionPage() {
@@ -63,6 +64,7 @@ export default async function TierSelectionPage() {
           {tiers.map((tier) => {
             const IconComponent = iconMap[tier.id as keyof typeof iconMap];
             const isUltraPremium = tier.id === "ultra_premium";
+            const isElite = tier.id === "elite";
 
             const s = settingsMap[tier.id];
             const maxSlots = s?.max_slots ?? null;
@@ -76,6 +78,8 @@ export default async function TierSelectionPage() {
                 className={`relative rounded-lg overflow-hidden transition-all duration-200 ${
                   isSoldOut
                     ? "border border-gray-200 bg-gray-50 opacity-60"
+                    : isElite
+                    ? "border-2 border-yellow-400 bg-gradient-to-br from-yellow-50 to-amber-50 hover:shadow-xl"
                     : isUltraPremium
                     ? "border-2 border-[#1a8fe0] bg-gradient-to-br from-blue-50 to-blue-100/50 md:col-span-2 lg:col-span-1 hover:shadow-lg"
                     : "border border-blue-200 bg-white hover:shadow-lg"
@@ -108,7 +112,7 @@ export default async function TierSelectionPage() {
                 <div className={`p-6 md:p-8 flex flex-col h-full ${isSoldOut || slotsLeft !== null ? "pt-8" : ""}`}>
                   {/* Icon & Title */}
                   <div className="flex items-start gap-3 mb-4">
-                    <IconComponent className={`w-6 h-6 flex-shrink-0 mt-1 ${isSoldOut ? "text-gray-400" : "text-[#1a8fe0]"}`} />
+                    <IconComponent className={`w-6 h-6 flex-shrink-0 mt-1 ${isSoldOut ? "text-gray-400" : isElite ? "text-yellow-600" : "text-[#1a8fe0]"}`} />
                     <div>
                       <h3 className="font-heading text-xl md:text-2xl font-bold text-foreground">
                         {tier.name}
@@ -119,10 +123,16 @@ export default async function TierSelectionPage() {
 
                   {/* Pricing */}
                   <div className="mb-6">
-                    <div className={`text-3xl md:text-4xl font-bold mb-1 ${isSoldOut ? "text-gray-400" : "text-[#1a8fe0]"}`}>
-                      {formatCents(tier.price_cents)}
+                    <div className={`text-3xl md:text-4xl font-bold mb-1 ${isSoldOut ? "text-gray-400" : isElite ? "text-yellow-600" : "text-[#1a8fe0]"}`}>
+                      {tier.pricing_type === "percentage"
+                        ? `${((tier.pricing_rate ?? 0) * 100).toFixed(0)}%`
+                        : formatCents(tier.price_cents)}
                     </div>
-                    <p className="text-sm text-muted-foreground">per card</p>
+                    <p className="text-sm text-muted-foreground">
+                      {tier.pricing_type === "percentage"
+                        ? `of declared card value · cards $${((tier.min_card_value_cents ?? 0) / 100).toFixed(0)}+`
+                        : "per card"}
+                    </p>
                   </div>
 
                   {/* Select Button */}
@@ -137,7 +147,11 @@ export default async function TierSelectionPage() {
                   ) : (
                     <Link
                       href={`/restoration?tier=${tier.id}`}
-                      className="w-full py-3 px-4 rounded-3xl font-semibold text-center transition-colors duration-150 bg-[#1a8fe0] text-white hover:bg-[#1570c9] mb-6"
+                      className={`w-full py-3 px-4 rounded-3xl font-semibold text-center transition-colors duration-150 mb-6 ${
+                        isElite
+                          ? "bg-yellow-400 text-yellow-900 hover:bg-yellow-500"
+                          : "bg-[#1a8fe0] text-white hover:bg-[#1570c9]"
+                      }`}
                     >
                       Select {tier.name}
                     </Link>
@@ -193,18 +207,8 @@ export default async function TierSelectionPage() {
           </div>
         </details>
 
-        {/* Waitlist — only shown when closed */}
-        {!restorationsOpen && (
-          <div className="mt-8 bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
-            <h2 className="font-heading font-black text-xl text-foreground mb-2">Get Notified When We Reopen</h2>
-            <p className="text-sm text-muted-foreground mb-6">
-              We&apos;re taking a short break from new restoration orders. Sign up and we&apos;ll contact you as soon as we open back up.
-            </p>
-            <div className="max-w-sm mx-auto">
-              <RestorationWaitlistForm />
-            </div>
-          </div>
-        )}
+        {/* Waitlist modal — pops up automatically when closed */}
+        {!restorationsOpen && <WaitlistModal />}
 
         {/* Info Footer */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">

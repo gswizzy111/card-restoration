@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
-import { getTierById, formatCents } from "@/lib/restoration-tiers";
+import { getTierById, getCardPriceCents, formatCents } from "@/lib/restoration-tiers";
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import { INSURANCE_ENABLED } from "@/lib/site-config";
@@ -148,12 +148,16 @@ export function StepReview({
 
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
 
-  // Sum per-card tier prices (supports mixed tiers)
+  // Sum per-card tier prices (supports mixed tiers and percentage-based elite tier)
   let subtotal = 0;
   for (const card of cards) {
     const tierId = card.tier ?? selectedTier;
     if (tierId) {
-      subtotal += getTierById(tierId).price_cents;
+      const tier = getTierById(tierId);
+      const valueCents = card.estimated_value
+        ? Math.round(parseFloat(card.estimated_value.replace(/[$,]/g, "")) * 100)
+        : 0;
+      subtotal += getCardPriceCents(tier, valueCents);
     } else {
       subtotal = getPriceCents(cards.length);
       break;
@@ -206,7 +210,14 @@ export function StepReview({
             <div className="flex flex-wrap gap-1">
               {(card.tier ?? selectedTier) ? (
                 <span className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground">
-                  {getTierById(card.tier ?? selectedTier!).name} Restoration — {formatCents(getTierById(card.tier ?? selectedTier!).price_cents)}
+                  {(() => {
+                    const t = getTierById(card.tier ?? selectedTier!);
+                    const valCents = card.estimated_value
+                      ? Math.round(parseFloat(card.estimated_value.replace(/[$,]/g, "")) * 100)
+                      : 0;
+                    const price = getCardPriceCents(t, valCents);
+                    return `${t.name} Restoration${price > 0 ? ` — ${formatCents(price)}` : t.pricing_type === "percentage" ? ` — ${((t.pricing_rate ?? 0) * 100).toFixed(0)}% of value` : ""}`;
+                  })()}
                 </span>
               ) : (
                 card.service_ids.map((sid) => {

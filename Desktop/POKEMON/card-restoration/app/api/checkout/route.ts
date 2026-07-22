@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
-import { getTierById } from "@/lib/restoration-tiers";
+import { getTierById, getCardPriceCents } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
 import { isSoldOut, INSURANCE_ENABLED } from "@/lib/site-config";
@@ -112,9 +112,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Calculate subtotal as sum of per-card tier prices
-    subtotalCents = cardTiers.reduce((sum, tierId) => {
-      return sum + (tierId ? getTierById(tierId).price_cents : 0);
+    // Calculate subtotal as sum of per-card tier prices (handles fixed and percentage tiers)
+    subtotalCents = data.cards.reduce((sum, card, i) => {
+      const tierId = cardTiers[i];
+      if (!tierId) return sum;
+      const tier = getTierById(tierId);
+      return sum + getCardPriceCents(tier, card.estimated_value_cents);
     }, 0);
 
     if (isMixed) {
@@ -315,17 +318,34 @@ export async function POST(request: Request) {
   const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [];
 
   if (uniqueTiers.length > 0) {
-    // Group cards by tier for line items
-    const tierCardCounts: Partial<Record<RestorationTierId, number>> = {};
-    for (const tierId of cardTiers) {
-      if (tierId) tierCardCounts[tierId] = (tierCardCounts[tierId] ?? 0) + 1;
-    }
-    for (const [tierId, count] of Object.entries(tierCardCounts) as [RestorationTierId, number][]) {
-      const tier = getTierById(tierId);
-      lineItems.push({
-        price_data: { currency: "usd", product_data: { name: `${tier.name} - Full Restoration & PSA Prep` }, unit_amount: tier.price_cents },
-        quantity: count,
+    // For percentage-based tiers (Elite), each card may have a different price — one line item per card.
+    // For fixed tiers, group by tier so Stripe shows a cleaner receipt.
+    const hasPercentageTier = uniqueTiers.some((t) => getTierById(t).pricing_type === "percentage");
+    if (hasPercentageTier) {
+      data.cards.forEach((card, i) => {
+        const tierId = cardTiers[i];
+        if (!tierId) return;
+        const tier = getTierById(tierId);
+        const price = getCardPriceCents(tier, card.estimated_value_cents);
+        if (price > 0) {
+          lineItems.push({
+            price_data: { currency: "usd", product_data: { name: `${tier.name} - ${card.card_name}` }, unit_amount: price },
+            quantity: 1,
+          });
+        }
       });
+    } else {
+      const tierCardCounts: Partial<Record<RestorationTierId, number>> = {};
+      for (const tierId of cardTiers) {
+        if (tierId) tierCardCounts[tierId] = (tierCardCounts[tierId] ?? 0) + 1;
+      }
+      for (const [tierId, count] of Object.entries(tierCardCounts) as [RestorationTierId, number][]) {
+        const tier = getTierById(tierId);
+        lineItems.push({
+          price_data: { currency: "usd", product_data: { name: `${tier.name} - Full Restoration & PSA Prep` }, unit_amount: tier.price_cents },
+          quantity: count,
+        });
+      }
     }
   } else {
     lineItems.push({

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export function RestorationWaitlistForm() {
+export function RestorationWaitlistForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState("");
@@ -24,6 +24,7 @@ export function RestorationWaitlistForm() {
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Something went wrong."); setStatus("error"); return; }
       setStatus("success");
+      if (onSuccess) setTimeout(onSuccess, 1800);
     } catch {
       setError("Network error. Please try again.");
       setStatus("error");
