@@ -19,10 +19,10 @@ export interface RestorationTier {
 export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
   regular: {
     id: "regular",
-    name: "Regular",
+    name: "Bronze",
     price_cents: 7500, // $75
     pricing_type: "fixed",
-    description: "Standard restoration service",
+    description: "Standard restoration for everyday collectors",
     turnaround_min_days: 15,
     turnaround_max_days: 20,
     max_card_value_cents: 100000, // $1,000
@@ -31,10 +31,10 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
   },
   expedited: {
     id: "expedited",
-    name: "Expedited",
+    name: "Silver",
     price_cents: 9999, // $99.99
     pricing_type: "fixed",
-    description: "Faster processing for premium cards",
+    description: "Faster service for cards worth protecting",
     turnaround_min_days: 10,
     turnaround_max_days: 15,
     max_card_value_cents: 200000, // $2,000
@@ -43,10 +43,10 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
   },
   premium: {
     id: "premium",
-    name: "Premium",
+    name: "Gold",
     price_cents: 11999, // $119.99
     pricing_type: "fixed",
-    description: "Priority restoration service",
+    description: "Priority handling with rapid turnaround",
     turnaround_min_days: 5,
     turnaround_max_days: 8,
     max_card_value_cents: 350000, // $3,500
@@ -55,10 +55,10 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
   },
   ultra_premium: {
     id: "ultra_premium",
-    name: "Ultra Premium",
+    name: "Platinum",
     price_cents: 15000, // $150
     pricing_type: "fixed",
-    description: "VIP treatment with priority handling",
+    description: "VIP treatment with front-of-queue service",
     turnaround_min_days: 3,
     turnaround_max_days: 5,
     max_card_value_cents: null, // No max value
@@ -68,7 +68,7 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
   },
   elite: {
     id: "elite",
-    name: "Elite",
+    name: "Diamond",
     price_cents: 0, // Dynamic — 5% of declared card value
     pricing_type: "percentage",
     pricing_rate: 0.05,

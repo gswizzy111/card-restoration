@@ -1,27 +1,203 @@
 import Link from "next/link";
-import { getAllTiers, formatCents, formatMaxValue } from "@/lib/restoration-tiers";
+import { getAllTiers, formatCents, type RestorationTier } from "@/lib/restoration-tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRestorationsOpen } from "@/lib/store-config";
-import { CheckCircle, Zap, Crown, Star, Gem } from "lucide-react";
+import { CheckCircle, Zap, Star, Crown, Gem } from "lucide-react";
 import { WaitlistModal } from "./waitlist-modal";
 
 export const dynamic = "force-dynamic";
 
-const iconMap = {
-  regular: CheckCircle,
-  expedited: Zap,
-  premium: Crown,
-  ultra_premium: Star,
-  elite: Gem,
+const ICON_MAP = {
+  regular:       CheckCircle,
+  expedited:     Zap,
+  premium:       Star,
+  ultra_premium: Crown,
+  elite:         Gem,
+} as const;
+
+type TierStyle = {
+  card:      string;
+  icon:      string;
+  price:     string;
+  btn:       string;
+  closedBtn: string;
+  check:     string;
+  badge?:    { label: string; cls: string };
 };
+
+const STYLES: Record<string, TierStyle> = {
+  regular: {
+    card:      "border border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 hover:shadow-lg",
+    icon:      "text-amber-600",
+    price:     "text-amber-700",
+    btn:       "bg-amber-600 text-white hover:bg-amber-700",
+    closedBtn: "bg-amber-100 text-amber-700",
+    check:     "text-amber-500",
+  },
+  expedited: {
+    card:      "border border-slate-300 bg-gradient-to-br from-slate-50 to-gray-100 hover:shadow-lg",
+    icon:      "text-slate-500",
+    price:     "text-slate-600",
+    btn:       "bg-slate-600 text-white hover:bg-slate-700",
+    closedBtn: "bg-slate-100 text-slate-600",
+    check:     "text-slate-400",
+  },
+  premium: {
+    card:      "border-2 border-yellow-400 bg-gradient-to-br from-yellow-50 to-amber-100 hover:shadow-xl",
+    icon:      "text-yellow-600",
+    price:     "text-yellow-700",
+    btn:       "bg-yellow-500 text-white hover:bg-yellow-600",
+    closedBtn: "bg-yellow-100 text-yellow-700",
+    check:     "text-yellow-500",
+    badge:     { label: "Most Popular", cls: "bg-yellow-500 text-white" },
+  },
+  ultra_premium: {
+    card:      "border border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50 hover:shadow-lg",
+    icon:      "text-blue-500",
+    price:     "text-blue-600",
+    btn:       "bg-blue-600 text-white hover:bg-blue-700",
+    closedBtn: "bg-blue-100 text-blue-600",
+    check:     "text-blue-400",
+    badge:     { label: "Front of Queue", cls: "bg-blue-500 text-white" },
+  },
+  elite: {
+    card:      "border-2 border-cyan-400 bg-gradient-to-br from-cyan-50 to-blue-100 hover:shadow-xl",
+    icon:      "text-cyan-600",
+    price:     "text-cyan-700",
+    btn:       "bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:opacity-90",
+    closedBtn: "bg-cyan-100 text-cyan-700",
+    check:     "text-cyan-500",
+    badge:     { label: "White Glove", cls: "bg-gradient-to-r from-cyan-500 to-blue-600 text-white" },
+  },
+};
+
+function TierCard({
+  tier,
+  settingsMap,
+  slotCounts,
+  restorationsOpen,
+}: {
+  tier: RestorationTier;
+  settingsMap: Record<string, { is_open?: boolean; max_slots?: number | null }>;
+  slotCounts: Record<string, number>;
+  restorationsOpen: boolean;
+}) {
+  const style = STYLES[tier.id] ?? STYLES.regular;
+  const Icon = ICON_MAP[tier.id as keyof typeof ICON_MAP] ?? CheckCircle;
+
+  const s = settingsMap[tier.id];
+  const maxSlots = s?.max_slots ?? null;
+  const usedSlots = slotCounts[tier.id] ?? 0;
+  const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
+  const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
+
+  return (
+    <div
+      className={`relative rounded-xl overflow-hidden transition-all duration-200 flex flex-col ${
+        isSoldOut ? "border border-gray-200 bg-gray-50 opacity-60" : style.card
+      }`}
+    >
+      {/* Top banner — always present to keep cards vertically aligned */}
+      {isSoldOut ? (
+        <div className="bg-gray-400 text-white text-xs font-bold text-center py-1.5 tracking-wide">
+          SOLD OUT
+        </div>
+      ) : slotsLeft !== null ? (
+        <div className={`text-white text-xs font-bold text-center py-1.5 tracking-wide ${slotsLeft <= 3 ? "bg-red-500" : "bg-orange-500"}`}>
+          {slotsLeft} slot{slotsLeft !== 1 ? "s" : ""} remaining
+        </div>
+      ) : style.badge ? (
+        <div className={`text-xs font-bold text-center py-1.5 tracking-wide ${style.badge.cls}`}>
+          {style.badge.label}
+        </div>
+      ) : (
+        <div className="py-1.5" />
+      )}
+
+      <div className="p-6 flex flex-col flex-1">
+        {/* Icon & Name */}
+        <div className="flex items-start gap-3 mb-5">
+          <Icon className={`w-7 h-7 flex-shrink-0 mt-0.5 ${isSoldOut ? "text-gray-400" : style.icon}`} />
+          <div>
+            <h3 className="font-heading text-2xl font-bold text-foreground leading-tight">
+              {tier.name}
+            </h3>
+            <p className="text-sm text-muted-foreground mt-0.5">{tier.description}</p>
+          </div>
+        </div>
+
+        {/* Price */}
+        <div className="mb-6">
+          <div className={`text-4xl font-bold ${isSoldOut ? "text-gray-400" : style.price}`}>
+            {tier.pricing_type === "percentage"
+              ? `${((tier.pricing_rate ?? 0) * 100).toFixed(0)}%`
+              : formatCents(tier.price_cents)}
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {tier.pricing_type === "percentage"
+              ? `of declared card value · cards $${((tier.min_card_value_cents ?? 0) / 100).toFixed(0)}+`
+              : "per card"}
+          </p>
+        </div>
+
+        {/* CTA Button */}
+        {isSoldOut ? (
+          <div className="w-full py-2.5 px-4 rounded-full font-semibold text-center text-sm bg-gray-200 text-gray-500 cursor-not-allowed mb-6">
+            Sold Out
+          </div>
+        ) : !restorationsOpen ? (
+          <div className={`w-full py-2.5 px-4 rounded-full font-semibold text-center text-sm cursor-not-allowed mb-6 ${style.closedBtn}`}>
+            Currently Closed
+          </div>
+        ) : (
+          <Link
+            href={`/restoration?tier=${tier.id}`}
+            className={`w-full py-2.5 px-4 rounded-full font-semibold text-center text-sm block transition-all duration-150 mb-6 ${style.btn}`}
+          >
+            Select {tier.name}
+          </Link>
+        )}
+
+        {/* Features */}
+        <div className="border-t border-black/10 pt-4 space-y-2.5 flex-1">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Turnaround</span>
+            <span className="font-medium text-foreground">
+              {tier.turnaround_min_days}–{tier.turnaround_max_days} days{" "}
+              <span className="text-xs text-muted-foreground">(est.)</span>
+            </span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Card value</span>
+            <span className="font-medium text-foreground">
+              {tier.max_card_value_cents === null
+                ? "Unlimited"
+                : `Up to $${(tier.max_card_value_cents / 100).toLocaleString()}`}
+            </span>
+          </div>
+          {tier.includes_notes && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className={isSoldOut ? "text-gray-400" : style.check}>✓</span>
+              <span className="text-muted-foreground">Grader notes included</span>
+            </div>
+          )}
+          {tier.includes_video && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className={isSoldOut ? "text-gray-400" : style.check}>✓</span>
+              <span className="text-muted-foreground">Video showcase</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default async function TierSelectionPage() {
   const restorationsOpen = await getRestorationsOpen();
-
   const tiers = getAllTiers();
   const admin = createAdminClient();
 
-  // Load tier settings and slot usage from DB
   const [{ data: tierSettings }, { data: paidOrders }] = await Promise.all([
     admin.from("restoration_settings").select("tier, is_open, max_slots"),
     admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null),
@@ -33,156 +209,46 @@ export default async function TierSelectionPage() {
     if (row.restoration_tier) slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
   }
 
+  const topTiers    = tiers.filter((t) => ["regular", "expedited", "premium"].includes(t.id));
+  const bottomTiers = tiers.filter((t) => ["ultra_premium", "elite"].includes(t.id));
+
+  const sharedProps = { settingsMap, slotCounts, restorationsOpen };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       {/* Closed banner */}
       {!restorationsOpen && (
         <div className="bg-amber-50 border-b border-amber-200">
-          <div className="max-w-5xl mx-auto px-6 md:px-10 py-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-amber-800 text-center sm:text-left">
+          <div className="max-w-5xl mx-auto px-6 py-4 text-center">
+            <p className="text-sm font-semibold text-amber-800">
               ⏸ We&apos;re not accepting new restoration orders right now — but you can still browse our pricing below.
             </p>
           </div>
         </div>
       )}
 
-      {/* Hero Section */}
-      <div className="max-w-5xl mx-auto px-6 md:px-10 py-16 md:py-24">
-        <h1 className="font-heading text-4xl md:text-5xl text-foreground mb-4 text-center">
+      <div className="max-w-6xl mx-auto px-6 md:px-10 py-14 md:py-20">
+        <h1 className="font-heading text-4xl md:text-5xl text-foreground mb-3 text-center">
           Choose Your Restoration Level
         </h1>
-        <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto">
+        <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mb-12">
           {restorationsOpen
-            ? "Select the tier that best fits your cards’ needs. Each tier includes professional grading notes."
-            : "We’re temporarily closed. See our pricing below and get notified when we reopen."}
+            ? "Select the tier that best fits your cards' needs. Every tier includes professional grader notes."
+            : "We're temporarily closed. Browse our pricing below and join the waitlist to be notified when we reopen."}
         </p>
-      </div>
 
-      {/* Tier Cards Grid */}
-      <div className="max-w-6xl mx-auto px-6 md:px-10 pb-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {tiers.map((tier) => {
-            const IconComponent = iconMap[tier.id as keyof typeof iconMap];
-            const isUltraPremium = tier.id === "ultra_premium";
-            const isElite = tier.id === "elite";
+        {/* Top row: Bronze · Silver · Gold */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
+          {topTiers.map((tier) => (
+            <TierCard key={tier.id} tier={tier} {...sharedProps} />
+          ))}
+        </div>
 
-            const s = settingsMap[tier.id];
-            const maxSlots = s?.max_slots ?? null;
-            const usedSlots = slotCounts[tier.id] ?? 0;
-            const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
-            const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
-
-            return (
-              <div
-                key={tier.id}
-                className={`relative rounded-lg overflow-hidden transition-all duration-200 ${
-                  isSoldOut
-                    ? "border border-gray-200 bg-gray-50 opacity-60"
-                    : isElite
-                    ? "border-2 border-yellow-400 bg-gradient-to-br from-yellow-50 to-amber-50 hover:shadow-xl"
-                    : isUltraPremium
-                    ? "border-2 border-[#1a8fe0] bg-gradient-to-br from-blue-50 to-blue-100/50 md:col-span-2 lg:col-span-1 hover:shadow-lg"
-                    : "border border-blue-200 bg-white hover:shadow-lg"
-                }`}
-              >
-                {/* Sold Out Banner */}
-                {isSoldOut && (
-                  <div className="absolute top-0 left-0 right-0 bg-gray-500 text-white text-xs font-bold text-center py-1 z-10">
-                    SOLD OUT
-                  </div>
-                )}
-
-                {/* Slots remaining banner */}
-                {!isSoldOut && slotsLeft !== null && (
-                  <div className={`absolute top-0 left-0 right-0 text-white text-xs font-bold text-center py-1 z-10 ${
-                    slotsLeft <= 3 ? "bg-red-500" : "bg-orange-500"
-                  }`}>
-                    {slotsLeft} slot{slotsLeft !== 1 ? "s" : ""} remaining
-                  </div>
-                )}
-
-                {/* "Front of Queue" badge for Ultra Premium */}
-                {tier.badge && !isSoldOut && slotsLeft === null && (
-                  <div className="absolute top-0 right-0 bg-[#1a8fe0] text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-                    {tier.badge}
-                  </div>
-                )}
-
-                {/* Card Content */}
-                <div className={`p-6 md:p-8 flex flex-col h-full ${isSoldOut || slotsLeft !== null ? "pt-8" : ""}`}>
-                  {/* Icon & Title */}
-                  <div className="flex items-start gap-3 mb-4">
-                    <IconComponent className={`w-6 h-6 flex-shrink-0 mt-1 ${isSoldOut ? "text-gray-400" : isElite ? "text-yellow-600" : "text-[#1a8fe0]"}`} />
-                    <div>
-                      <h3 className="font-heading text-xl md:text-2xl font-bold text-foreground">
-                        {tier.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">{tier.description}</p>
-                    </div>
-                  </div>
-
-                  {/* Pricing */}
-                  <div className="mb-6">
-                    <div className={`text-3xl md:text-4xl font-bold mb-1 ${isSoldOut ? "text-gray-400" : isElite ? "text-yellow-600" : "text-[#1a8fe0]"}`}>
-                      {tier.pricing_type === "percentage"
-                        ? `${((tier.pricing_rate ?? 0) * 100).toFixed(0)}%`
-                        : formatCents(tier.price_cents)}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {tier.pricing_type === "percentage"
-                        ? `of declared card value · cards $${((tier.min_card_value_cents ?? 0) / 100).toFixed(0)}+`
-                        : "per card"}
-                    </p>
-                  </div>
-
-                  {/* Select Button */}
-                  {isSoldOut ? (
-                    <div className="w-full py-3 px-4 rounded-3xl font-semibold text-center bg-gray-200 text-gray-500 cursor-not-allowed mb-6">
-                      Sold Out
-                    </div>
-                  ) : !restorationsOpen ? (
-                    <div className="w-full py-3 px-4 rounded-3xl font-semibold text-center bg-amber-100 text-amber-700 cursor-not-allowed mb-6">
-                      Currently Closed
-                    </div>
-                  ) : (
-                    <Link
-                      href={`/restoration?tier=${tier.id}`}
-                      className={`w-full py-3 px-4 rounded-3xl font-semibold text-center transition-colors duration-150 mb-6 ${
-                        isElite
-                          ? "bg-yellow-400 text-yellow-900 hover:bg-yellow-500"
-                          : "bg-[#1a8fe0] text-white hover:bg-[#1570c9]"
-                      }`}
-                    >
-                      Select {tier.name}
-                    </Link>
-                  )}
-
-                  {/* Features */}
-                  <div className="space-y-3 flex-grow">
-                    <div className="text-sm">
-                      <p className="font-semibold text-foreground mb-1">Turnaround</p>
-                      <p className="text-muted-foreground">
-                        ~{tier.turnaround_min_days}–{tier.turnaround_max_days} business days <span className="text-xs">(est.)</span>
-                      </p>
-                    </div>
-
-                    <div className="text-sm">
-                      <p className="font-semibold text-foreground mb-1">Card Value</p>
-                      <p className="text-muted-foreground">{formatMaxValue(tier.max_card_value_cents)}</p>
-                    </div>
-
-                    <div className="text-sm">
-                      <p className="font-semibold text-foreground mb-1">Includes</p>
-                      <ul className="text-muted-foreground space-y-1">
-                        {tier.includes_notes && <li className="flex items-center gap-2"><span className="text-[#1a8fe0]">✓</span> Grader notes</li>}
-                        {tier.includes_video && <li className="flex items-center gap-2"><span className="text-[#1a8fe0]">✓</span> Video showcase</li>}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        {/* Bottom row: Platinum · Diamond */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {bottomTiers.map((tier) => (
+            <TierCard key={tier.id} tier={tier} {...sharedProps} />
+          ))}
         </div>
 
         {/* Turnaround disclaimer */}
@@ -199,23 +265,23 @@ export default async function TierSelectionPage() {
               All turnaround times shown are <strong>rough estimates only</strong> and are not a guarantee or promise of completion within any specific timeframe.
             </p>
             <p>
-              Actual processing times may be affected by order volume, card condition, shipping delays, holidays, or other circumstances outside our control. We will always do our best to meet or beat the estimated range, but <strong>The Card Doc cannot be held liable</strong> for services completed outside the estimated window.
+              Actual processing times may be affected by order volume, card condition, shipping delays, holidays, or other circumstances outside our control. We will always do our best to meet or beat the estimated range, but <strong>The Card Doc cannot be held liable</strong> for delays.
             </p>
             <p className="text-xs text-amber-700">
-              By placing an order you acknowledge that turnaround times are estimates and agree that delays do not entitle you to a refund or cancellation. See our <Link href="/terms" className="underline hover:text-amber-900">Terms of Service</Link> for full details.
+              By placing an order you acknowledge that turnaround times are estimates and agree that delays do not entitle you to a refund or cancellation. See our{" "}
+              <Link href="/terms" className="underline hover:text-amber-900">Terms of Service</Link> for full details.
             </p>
           </div>
         </details>
 
-        {/* Waitlist modal — pops up automatically when closed */}
+        {/* Waitlist modal — auto-opens when closed */}
         {!restorationsOpen && <WaitlistModal />}
 
-        {/* Info Footer */}
+        {/* Footer info */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
           <p className="text-muted-foreground">
             All tiers include professional restoration and{" "}
-            <span className="font-semibold text-foreground">grader notes</span>. Questions about which tier is right
-            for you?{" "}
+            <span className="font-semibold text-foreground">grader notes</span>. Not sure which tier fits?{" "}
             <Link href="/how-it-works" className="text-[#1a8fe0] hover:underline font-semibold">
               Learn what we can restore
             </Link>

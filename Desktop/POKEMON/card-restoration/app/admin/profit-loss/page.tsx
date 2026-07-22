@@ -91,7 +91,7 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
   let restRevenue = 0;
   let restCogs = 0;
 
-  const TIER_LABELS: Record<string, string> = { regular: "Regular", expedited: "Expedited", premium: "Premium", ultra_premium: "Ultra Premium" };
+  const TIER_LABELS: Record<string, string> = { regular: "Bronze", expedited: "Silver", premium: "Gold", ultra_premium: "Platinum", elite: "Diamond" };
 
   for (const order of restorationOrders) {
     const tier = order.restoration_tier ?? "regular";

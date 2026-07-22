@@ -23,16 +23,18 @@ type OrderItem = {
 };
 
 const TIER_LABELS: Record<string, string> = {
-  regular:       "Regular",
-  expedited:     "Expedited",
-  premium:       "Premium",
-  ultra_premium: "Ultra Premium",
+  regular:       "Bronze",
+  expedited:     "Silver",
+  premium:       "Gold",
+  ultra_premium: "Platinum",
+  elite:         "Diamond",
 };
 const TIER_COLORS: Record<string, string> = {
-  regular:       "bg-gray-100 text-gray-700",
-  expedited:     "bg-yellow-100 text-yellow-800",
-  premium:       "bg-blue-100 text-blue-800",
-  ultra_premium: "bg-purple-100 text-purple-800",
+  regular:       "bg-amber-100 text-amber-700",
+  expedited:     "bg-slate-100 text-slate-600",
+  premium:       "bg-yellow-100 text-yellow-700",
+  ultra_premium: "bg-blue-100 text-blue-600",
+  elite:         "bg-cyan-100 text-cyan-700",
 };
 
 export default async function ShipQueuePage() {

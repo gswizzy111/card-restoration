@@ -125,10 +125,11 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                     <h1 className="font-heading font-black text-2xl text-foreground">Order #{order.order_number}</h1>
                     {order.restoration_tier && (() => {
                       const TIER_BADGE: Record<string, { label: string; cls: string }> = {
-                        ultra_premium: { label: "Ultra Premium", cls: "bg-purple-100 text-purple-700 border border-purple-200" },
-                        premium:       { label: "Premium",       cls: "bg-blue-100 text-blue-700 border border-blue-200" },
-                        expedited:     { label: "Expedited",     cls: "bg-yellow-100 text-yellow-700 border border-yellow-200" },
-                        regular:       { label: "Regular",       cls: "bg-gray-100 text-gray-600 border border-gray-200" },
+                        elite:         { label: "Diamond",  cls: "bg-cyan-100 text-cyan-700 border border-cyan-300" },
+                        ultra_premium: { label: "Platinum", cls: "bg-blue-100 text-blue-600 border border-blue-300" },
+                        premium:       { label: "Gold",     cls: "bg-yellow-100 text-yellow-700 border border-yellow-300" },
+                        expedited:     { label: "Silver",   cls: "bg-slate-100 text-slate-600 border border-slate-300" },
+                        regular:       { label: "Bronze",   cls: "bg-amber-100 text-amber-700 border border-amber-300" },
                       };
                       const badge = TIER_BADGE[order.restoration_tier] ?? { label: order.restoration_tier, cls: "bg-gray-100 text-gray-600 border border-gray-200" };
                       return (

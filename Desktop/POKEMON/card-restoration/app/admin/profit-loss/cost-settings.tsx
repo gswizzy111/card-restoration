@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import type { ProductCostsConfig } from "@/lib/product-costs";
 
 const TIERS = [
-  { key: "regular_cents" as const, label: "Regular" },
-  { key: "expedited_cents" as const, label: "Expedited" },
-  { key: "premium_cents" as const, label: "Premium" },
-  { key: "ultra_premium_cents" as const, label: "Ultra Premium" },
+  { key: "regular_cents" as const, label: "Bronze" },
+  { key: "expedited_cents" as const, label: "Silver" },
+  { key: "premium_cents" as const, label: "Gold" },
+  { key: "ultra_premium_cents" as const, label: "Platinum" },
 ];
 
 export function CostSettings({ initial }: { initial: ProductCostsConfig }) {
