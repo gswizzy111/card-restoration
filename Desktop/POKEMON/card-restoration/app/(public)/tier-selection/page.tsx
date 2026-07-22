@@ -16,22 +16,6 @@ const iconMap = {
 
 export default async function TierSelectionPage() {
   const restorationsOpen = await getRestorationsOpen();
-  if (!restorationsOpen) {
-    return (
-      <div className="min-h-screen bg-secondary/30 flex items-center justify-center px-6 py-20">
-        <div className="max-w-lg w-full text-center">
-          <p className="text-xs font-bold uppercase tracking-widest text-primary mb-4">Restoration Services</p>
-          <h1 className="font-heading font-black text-3xl md:text-4xl text-foreground mb-3">
-            Not Accepting Restorations Right Now
-          </h1>
-          <p className="text-muted-foreground mb-8">
-            We&apos;re taking a short break from new restoration orders. Sign up below and we&apos;ll contact you as soon as we open back up.
-          </p>
-          <RestorationWaitlistForm />
-        </div>
-      </div>
-    );
-  }
 
   const tiers = getAllTiers();
   const admin = createAdminClient();
@@ -50,13 +34,26 @@ export default async function TierSelectionPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      {/* Closed banner */}
+      {!restorationsOpen && (
+        <div className="bg-amber-50 border-b border-amber-200">
+          <div className="max-w-5xl mx-auto px-6 md:px-10 py-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-amber-800 text-center sm:text-left">
+              ⏸ We&apos;re not accepting new restoration orders right now — but you can still browse our pricing below.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
       <div className="max-w-5xl mx-auto px-6 md:px-10 py-16 md:py-24">
         <h1 className="font-heading text-4xl md:text-5xl text-foreground mb-4 text-center">
           Choose Your Restoration Level
         </h1>
         <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto">
-          Select the tier that best fits your cards&apos; needs. Each tier includes professional grading notes.
+          {restorationsOpen
+            ? "Select the tier that best fits your cards’ needs. Each tier includes professional grading notes."
+            : "We’re temporarily closed. See our pricing below and get notified when we reopen."}
         </p>
       </div>
 
@@ -133,6 +130,10 @@ export default async function TierSelectionPage() {
                     <div className="w-full py-3 px-4 rounded-3xl font-semibold text-center bg-gray-200 text-gray-500 cursor-not-allowed mb-6">
                       Sold Out
                     </div>
+                  ) : !restorationsOpen ? (
+                    <div className="w-full py-3 px-4 rounded-3xl font-semibold text-center bg-amber-100 text-amber-700 cursor-not-allowed mb-6">
+                      Currently Closed
+                    </div>
                   ) : (
                     <Link
                       href={`/restoration?tier=${tier.id}`}
@@ -191,6 +192,19 @@ export default async function TierSelectionPage() {
             </p>
           </div>
         </details>
+
+        {/* Waitlist — only shown when closed */}
+        {!restorationsOpen && (
+          <div className="mt-8 bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
+            <h2 className="font-heading font-black text-xl text-foreground mb-2">Get Notified When We Reopen</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              We&apos;re taking a short break from new restoration orders. Sign up and we&apos;ll contact you as soon as we open back up.
+            </p>
+            <div className="max-w-sm mx-auto">
+              <RestorationWaitlistForm />
+            </div>
+          </div>
+        )}
 
         {/* Info Footer */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
