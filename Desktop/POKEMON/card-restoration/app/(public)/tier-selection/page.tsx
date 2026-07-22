@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAllTiers, formatCents, type RestorationTier } from "@/lib/restoration-tiers";
+import { getAllTiers, applyDbOverride, type RestorationTier } from "@/lib/restoration-tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRestorationsOpen } from "@/lib/store-config";
 import { CheckCircle, Zap, Star, Crown, Gem } from "lucide-react";
@@ -22,7 +22,7 @@ type TierStyle = {
   btn:       string;
   closedBtn: string;
   check:     string;
-  badge?:    { label: string; cls: string };
+  badgeCls?: string; // color for the badge banner
 };
 
 const STYLES: Record<string, TierStyle> = {
@@ -49,7 +49,7 @@ const STYLES: Record<string, TierStyle> = {
     btn:       "bg-yellow-500 text-white hover:bg-yellow-600",
     closedBtn: "bg-yellow-100 text-yellow-700",
     check:     "text-yellow-500",
-    badge:     { label: "Most Popular", cls: "bg-yellow-500 text-white" },
+    badgeCls:  "bg-yellow-500 text-white",
   },
   ultra_premium: {
     card:      "border border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50 hover:shadow-lg",
@@ -58,7 +58,7 @@ const STYLES: Record<string, TierStyle> = {
     btn:       "bg-blue-600 text-white hover:bg-blue-700",
     closedBtn: "bg-blue-100 text-blue-600",
     check:     "text-blue-400",
-    badge:     { label: "Front of Queue", cls: "bg-blue-500 text-white" },
+    badgeCls:  "bg-blue-500 text-white",
   },
   elite: {
     card:      "border-2 border-cyan-400 bg-gradient-to-br from-cyan-50 to-blue-100 hover:shadow-xl",
@@ -67,7 +67,7 @@ const STYLES: Record<string, TierStyle> = {
     btn:       "bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:opacity-90",
     closedBtn: "bg-cyan-100 text-cyan-700",
     check:     "text-cyan-500",
-    badge:     { label: "White Glove", cls: "bg-gradient-to-r from-cyan-500 to-blue-600 text-white" },
+    badgeCls:  "bg-gradient-to-r from-cyan-500 to-blue-600 text-white",
   },
 };
 
@@ -91,24 +91,27 @@ function TierCard({
   const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
   const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
 
+  // Badge label: from tier data (DB-overrideable) or slot count banner
+  const bannerLabel: string | null = isSoldOut
+    ? "SOLD OUT"
+    : slotsLeft !== null
+    ? `${slotsLeft} slot${slotsLeft !== 1 ? "s" : ""} remaining`
+    : (tier.badge ?? null);
+
+  const bannerCls: string = isSoldOut
+    ? "bg-gray-400 text-white"
+    : slotsLeft !== null
+    ? slotsLeft <= 3 ? "bg-red-500 text-white" : "bg-orange-500 text-white"
+    : style.badgeCls ?? "bg-gray-600 text-white";
+
   return (
     <div
-      className={`relative rounded-xl overflow-hidden transition-all duration-200 flex flex-col ${
-        isSoldOut ? "border border-gray-200 bg-gray-50 opacity-60" : style.card
-      }`}
+      className={`relative rounded-xl overflow-hidden transition-all duration-200 flex flex-col ${style.card} ${isSoldOut ? "opacity-60" : ""}`}
     >
-      {/* Top banner — always present to keep cards vertically aligned */}
-      {isSoldOut ? (
-        <div className="bg-gray-400 text-white text-xs font-bold text-center py-1.5 tracking-wide">
-          SOLD OUT
-        </div>
-      ) : slotsLeft !== null ? (
-        <div className={`text-white text-xs font-bold text-center py-1.5 tracking-wide ${slotsLeft <= 3 ? "bg-red-500" : "bg-orange-500"}`}>
-          {slotsLeft} slot{slotsLeft !== 1 ? "s" : ""} remaining
-        </div>
-      ) : style.badge ? (
-        <div className={`text-xs font-bold text-center py-1.5 tracking-wide ${style.badge.cls}`}>
-          {style.badge.label}
+      {/* Top banner — always present so all cards align vertically */}
+      {bannerLabel ? (
+        <div className={`text-xs font-bold text-center py-1.5 tracking-wide ${bannerCls}`}>
+          {bannerLabel}
         </div>
       ) : (
         <div className="py-1.5" />
@@ -117,7 +120,7 @@ function TierCard({
       <div className="p-6 flex flex-col flex-1">
         {/* Icon & Name */}
         <div className="flex items-start gap-3 mb-5">
-          <Icon className={`w-7 h-7 flex-shrink-0 mt-0.5 ${isSoldOut ? "text-gray-400" : style.icon}`} />
+          <Icon className={`w-7 h-7 flex-shrink-0 mt-0.5 ${style.icon}`} />
           <div>
             <h3 className="font-heading text-2xl font-bold text-foreground leading-tight">
               {tier.name}
@@ -128,10 +131,10 @@ function TierCard({
 
         {/* Price */}
         <div className="mb-6">
-          <div className={`text-4xl font-bold ${isSoldOut ? "text-gray-400" : style.price}`}>
+          <div className={`text-4xl font-bold ${style.price}`}>
             {tier.pricing_type === "percentage"
               ? `${((tier.pricing_rate ?? 0) * 100).toFixed(0)}%`
-              : formatCents(tier.price_cents)}
+              : `$${(tier.price_cents / 100).toFixed(2)}`}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
             {tier.pricing_type === "percentage"
@@ -177,13 +180,13 @@ function TierCard({
           </div>
           {tier.includes_notes && (
             <div className="flex items-center gap-2 text-sm">
-              <span className={isSoldOut ? "text-gray-400" : style.check}>✓</span>
+              <span className={style.check}>✓</span>
               <span className="text-muted-foreground">Grader notes included</span>
             </div>
           )}
           {tier.includes_video && (
             <div className="flex items-center gap-2 text-sm">
-              <span className={isSoldOut ? "text-gray-400" : style.check}>✓</span>
+              <span className={style.check}>✓</span>
               <span className="text-muted-foreground">Video showcase</span>
             </div>
           )}
@@ -195,19 +198,34 @@ function TierCard({
 
 export default async function TierSelectionPage() {
   const restorationsOpen = await getRestorationsOpen();
-  const tiers = getAllTiers();
+  const defaultTiers = getAllTiers();
   const admin = createAdminClient();
 
-  const [{ data: tierSettings }, { data: paidOrders }] = await Promise.all([
-    admin.from("restoration_settings").select("tier, is_open, max_slots"),
+  const [{ data: paidOrders }] = await Promise.all([
     admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null),
   ]);
 
-  const settingsMap = Object.fromEntries((tierSettings ?? []).map((s) => [s.tier, s]));
+  // Try extended columns for tier overrides; fall back to basic
+  const { data: extSettings, error: extErr } = await admin
+    .from("restoration_settings")
+    .select("tier, is_open, max_slots, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge");
+
+  const settingsRaw = extErr
+    ? ((await admin.from("restoration_settings").select("tier, is_open, max_slots")).data ?? [])
+    : (extSettings ?? []);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const settingsMap = Object.fromEntries((settingsRaw as any[]).map((s) => [s.tier, s]));
+
   const slotCounts: Record<string, number> = {};
   for (const row of paidOrders ?? []) {
     if (row.restoration_tier) slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
   }
+
+  // Merge DB overrides on top of hardcoded defaults
+  const tiers = defaultTiers.map((t) =>
+    !extErr ? applyDbOverride(t, settingsMap[t.id] ?? null) : t
+  );
 
   const topTiers    = tiers.filter((t) => ["regular", "expedited", "premium"].includes(t.id));
   const bottomTiers = tiers.filter((t) => ["ultra_premium", "elite"].includes(t.id));

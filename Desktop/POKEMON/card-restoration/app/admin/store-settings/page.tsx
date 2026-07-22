@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAllTiers } from "@/lib/restoration-tiers";
+import { getAllTiers, applyDbOverride } from "@/lib/restoration-tiers";
 import { getRestorationsOpen } from "@/lib/store-config";
 import { KitRow } from "./kit-row";
 import { TierRow } from "./tier-row";
@@ -9,19 +9,38 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
+const EXTENDED_SELECT = "tier, is_open, max_slots, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge";
+const BASIC_SELECT    = "tier, is_open, max_slots";
+
 export default async function StoreSettingsPage() {
   const admin = createAdminClient();
 
+  // Try to load extended tier settings; fall back to basic if migration hasn't run
+  let tierSettings: Record<string, unknown>[] | null = null;
+  let hasExtendedColumns = false;
+
+  const { data: extData, error: extErr } = await admin
+    .from("restoration_settings")
+    .select(EXTENDED_SELECT);
+
+  if (!extErr) {
+    tierSettings = extData as Record<string, unknown>[];
+    hasExtendedColumns = true;
+  } else {
+    const { data: basicData } = await admin
+      .from("restoration_settings")
+      .select(BASIC_SELECT);
+    tierSettings = basicData as Record<string, unknown>[] | null;
+  }
+
   const [
     { data: products },
-    { data: tierSettings },
     waitlistTotalRes,
     waitlistPendingRes,
     { data: paidOrders },
     restorationsOpen,
   ] = await Promise.all([
     admin.from("products").select("id, name, price_cents, inventory_count, display_order").eq("active", true).order("display_order", { ascending: true }),
-    admin.from("restoration_settings").select("tier, is_open, max_slots"),
     admin.from("restoration_waitlist").select("*", { count: "exact", head: true }),
     admin.from("restoration_waitlist").select("*", { count: "exact", head: true }).is("notified_at", null),
     admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null),
@@ -33,9 +52,8 @@ export default async function StoreSettingsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pendingWaitlist: number = (waitlistPendingRes as any)?.count ?? 0;
 
-  const settingsMap = Object.fromEntries(
-    (tierSettings ?? []).map((s: { tier: string; is_open: boolean; max_slots: number | null }) => [s.tier, s])
-  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const settingsMap = Object.fromEntries((tierSettings ?? []).map((s: any) => [s.tier, s]));
 
   const slotsUsed: Record<string, number> = {};
   for (const o of paidOrders ?? []) {
@@ -50,7 +68,7 @@ export default async function StoreSettingsPage() {
         <div className="mb-8">
           <Link href="/admin" className="text-sm text-muted-foreground hover:text-primary mb-2 block">← Orders</Link>
           <h1 className="font-heading font-black text-3xl text-foreground">Store Settings</h1>
-          <p className="text-muted-foreground text-sm mt-1">Control what&apos;s available for sale right now.</p>
+          <p className="text-muted-foreground text-sm mt-1">Control what&apos;s available for sale and how each tier is configured.</p>
         </div>
 
         {/* Master Restoration Toggle */}
@@ -63,43 +81,81 @@ export default async function StoreSettingsPage() {
         {/* Restoration Tiers */}
         <div className="bg-white rounded-xl border border-border p-6 mb-6">
           <h2 className="font-heading font-black text-lg text-foreground mb-1">Restoration Tiers</h2>
-          <p className="text-xs text-muted-foreground mb-5">Toggle tiers open/closed and set slot limits. Only applies when restorations are open above.</p>
+          <p className="text-xs text-muted-foreground mb-5">
+            Toggle tiers open/closed, set slot limits, and edit pricing, turnaround, and included features.
+            Click <strong>▼ Edit</strong> on any tier to expand its settings.
+          </p>
 
           {!tierSettings ? (
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
               <p className="font-bold mb-1">Database table not found.</p>
               <p>Run this SQL in your Supabase SQL Editor to enable this feature:</p>
-              <pre className="mt-2 text-xs bg-yellow-100 rounded p-2 overflow-x-auto">{`CREATE TABLE IF NOT EXISTS restoration_settings (
+              <pre className="mt-2 text-xs bg-yellow-100 rounded p-2 overflow-x-auto whitespace-pre-wrap">{`CREATE TABLE IF NOT EXISTS restoration_settings (
   tier TEXT PRIMARY KEY,
   is_open BOOLEAN NOT NULL DEFAULT true,
   max_slots INTEGER DEFAULT NULL
 );
 INSERT INTO restoration_settings (tier, is_open, max_slots) VALUES
-  ('regular', false, NULL),
-  ('expedited', true, 4),
-  ('premium', true, NULL),
-  ('ultra_premium', true, NULL)
+  ('regular', true, NULL), ('expedited', true, NULL),
+  ('premium', true, NULL), ('ultra_premium', true, NULL), ('elite', true, NULL)
 ON CONFLICT (tier) DO NOTHING;`}</pre>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {tiers.map((tier) => {
-                const s = settingsMap[tier.id];
+              {tiers.map((defaultTier) => {
+                const row = settingsMap[defaultTier.id] ?? {};
+                const effective = hasExtendedColumns ? applyDbOverride(defaultTier, row as Parameters<typeof applyDbOverride>[1]) : defaultTier;
                 return (
                   <TierRow
-                    key={tier.id}
-                    tier={tier.id}
-                    name={tier.name}
-                    priceCents={tier.price_cents}
-                    isOpen={s?.is_open ?? true}
-                    maxSlots={s?.max_slots ?? null}
-                    slotsUsed={slotsUsed[tier.id] ?? 0}
+                    key={defaultTier.id}
+                    tierId={defaultTier.id}
+                    name={effective.name}
+                    priceCents={effective.price_cents}
+                    pricingType={effective.pricing_type ?? "fixed"}
+                    pricingRate={effective.pricing_rate ?? 0}
+                    minCardValueCents={effective.min_card_value_cents ?? null}
+                    turnaroundMin={effective.turnaround_min_days}
+                    turnaroundMax={effective.turnaround_max_days}
+                    description={effective.description}
+                    includesNotes={effective.includes_notes}
+                    includesVideo={effective.includes_video}
+                    badge={effective.badge ?? ""}
+                    isOpen={(row as { is_open?: boolean })?.is_open ?? true}
+                    maxSlots={(row as { max_slots?: number | null })?.max_slots ?? null}
+                    slotsUsed={slotsUsed[defaultTier.id] ?? 0}
+                    hasExtendedColumns={hasExtendedColumns}
                   />
                 );
               })}
             </div>
           )}
         </div>
+
+        {/* DB Migration — shown when extended columns are missing */}
+        {tierSettings && !hasExtendedColumns && (
+          <div className="bg-white rounded-xl border border-amber-300 p-6 mb-6">
+            <h2 className="font-heading font-black text-lg text-foreground mb-1">Enable Full Tier Editing</h2>
+            <p className="text-xs text-muted-foreground mb-4">
+              Run this SQL in your <strong>Supabase SQL Editor</strong> to add price, turnaround, and content editing to each tier.
+            </p>
+            <pre className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap text-gray-800">{`ALTER TABLE restoration_settings
+  ADD COLUMN IF NOT EXISTS display_name TEXT,
+  ADD COLUMN IF NOT EXISTS price_cents INTEGER,
+  ADD COLUMN IF NOT EXISTS pricing_rate DECIMAL,
+  ADD COLUMN IF NOT EXISTS min_card_value_cents INTEGER,
+  ADD COLUMN IF NOT EXISTS turnaround_min_days INTEGER,
+  ADD COLUMN IF NOT EXISTS turnaround_max_days INTEGER,
+  ADD COLUMN IF NOT EXISTS description TEXT,
+  ADD COLUMN IF NOT EXISTS includes_notes BOOLEAN,
+  ADD COLUMN IF NOT EXISTS includes_video BOOLEAN,
+  ADD COLUMN IF NOT EXISTS badge TEXT;
+
+-- Make sure all 5 tiers have a row
+INSERT INTO restoration_settings (tier, is_open, max_slots)
+VALUES ('elite', true, NULL)
+ON CONFLICT (tier) DO NOTHING;`}</pre>
+          </div>
+        )}
 
         {/* Restoration Waitlist */}
         <div className="bg-white rounded-xl border border-border p-6 mb-6">

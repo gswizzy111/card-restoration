@@ -52,6 +52,7 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
     max_card_value_cents: 350000, // $3,500
     includes_notes: true,
     includes_video: false,
+    badge: "Most Popular",
   },
   ultra_premium: {
     id: "ultra_premium",
@@ -82,6 +83,38 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
     badge: "White Glove",
   },
 };
+
+// Shape of a row from restoration_settings that can override defaults
+export interface TierDbOverride {
+  display_name?: string | null;
+  price_cents?: number | null;
+  pricing_rate?: number | null;
+  min_card_value_cents?: number | null;
+  turnaround_min_days?: number | null;
+  turnaround_max_days?: number | null;
+  description?: string | null;
+  includes_notes?: boolean | null;
+  includes_video?: boolean | null;
+  badge?: string | null;
+}
+
+/** Merge a DB row's overrides on top of a hardcoded tier; null fields fall back to defaults. */
+export function applyDbOverride(tier: RestorationTier, row?: TierDbOverride | null): RestorationTier {
+  if (!row) return tier;
+  return {
+    ...tier,
+    name:                row.display_name         ?? tier.name,
+    price_cents:         row.price_cents           ?? tier.price_cents,
+    pricing_rate:        row.pricing_rate          ?? tier.pricing_rate,
+    min_card_value_cents: row.min_card_value_cents ?? tier.min_card_value_cents,
+    turnaround_min_days: row.turnaround_min_days   ?? tier.turnaround_min_days,
+    turnaround_max_days: row.turnaround_max_days   ?? tier.turnaround_max_days,
+    description:         row.description           ?? tier.description,
+    includes_notes:      row.includes_notes        ?? tier.includes_notes,
+    includes_video:      row.includes_video        ?? tier.includes_video,
+    badge:               row.badge != null         ? (row.badge || undefined) : tier.badge,
+  };
+}
 
 export function getTierById(id: RestorationTierId): RestorationTier {
   return RESTORATION_TIERS[id];

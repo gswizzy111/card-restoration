@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
-import { getTierById, getCardPriceCents } from "@/lib/restoration-tiers";
+import { getTierById, getCardPriceCents, applyDbOverride } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
 import { isSoldOut, INSURANCE_ENABLED } from "@/lib/site-config";
@@ -17,7 +17,7 @@ const AddressSchema = z.object({
 });
 
 const BodySchema = z.object({
-  restoration_tier: z.enum(["regular", "expedited", "premium", "ultra_premium"]).optional(),
+  restoration_tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite"]).optional(),
   services: z.array(z.object({ id: z.string(), quantity: z.number().int().positive() })).optional(),
   cards: z.array(
     z.object({
@@ -29,7 +29,7 @@ const BodySchema = z.object({
       notes: z.string().optional(),
       photo_urls: z.array(z.string()),
       service_ids: z.array(z.string()),
-      tier: z.enum(["regular", "expedited", "premium", "ultra_premium"]).optional(),
+      tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite"]).optional(),
     })
   ).min(1),
   customer: z.object({
@@ -85,14 +85,17 @@ export async function POST(request: Request) {
   const uniqueTiers = [...new Set(cardTiers.filter(Boolean))] as RestorationTierId[];
   const isMixed = uniqueTiers.length > 1;
 
+  // Tier DB settings — hoisted so line-item building can also use price overrides
+  let settingsMap: Record<string, { is_open?: boolean; max_slots?: number | null; price_cents?: number | null; pricing_rate?: number | null; min_card_value_cents?: number | null }> = {};
+
   if (uniqueTiers.length > 0) {
-    // Enforce availability for each unique tier from DB
+    // Enforce availability and load price overrides from DB
     const { data: tierSettings } = await admin
       .from("restoration_settings")
-      .select("tier, is_open, max_slots")
+      .select("tier, is_open, max_slots, price_cents, pricing_rate, min_card_value_cents")
       .in("tier", uniqueTiers);
 
-    const settingsMap = Object.fromEntries((tierSettings ?? []).map((s) => [s.tier, s]));
+    settingsMap = Object.fromEntries((tierSettings ?? []).map((s) => [s.tier, s]));
 
     for (const tierId of uniqueTiers) {
       const s = settingsMap[tierId];
@@ -112,11 +115,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Calculate subtotal as sum of per-card tier prices (handles fixed and percentage tiers)
+    // Calculate subtotal using DB price overrides when set, otherwise hardcoded defaults
     subtotalCents = data.cards.reduce((sum, card, i) => {
       const tierId = cardTiers[i];
       if (!tierId) return sum;
-      const tier = getTierById(tierId);
+      const tier = applyDbOverride(getTierById(tierId), settingsMap[tierId] ?? null);
       return sum + getCardPriceCents(tier, card.estimated_value_cents);
     }, 0);
 
@@ -325,7 +328,7 @@ export async function POST(request: Request) {
       data.cards.forEach((card, i) => {
         const tierId = cardTiers[i];
         if (!tierId) return;
-        const tier = getTierById(tierId);
+        const tier = applyDbOverride(getTierById(tierId), settingsMap[tierId] ?? null);
         const price = getCardPriceCents(tier, card.estimated_value_cents);
         if (price > 0) {
           lineItems.push({
@@ -340,7 +343,7 @@ export async function POST(request: Request) {
         if (tierId) tierCardCounts[tierId] = (tierCardCounts[tierId] ?? 0) + 1;
       }
       for (const [tierId, count] of Object.entries(tierCardCounts) as [RestorationTierId, number][]) {
-        const tier = getTierById(tierId);
+        const tier = applyDbOverride(getTierById(tierId), settingsMap[tierId] ?? null);
         lineItems.push({
           price_data: { currency: "usd", product_data: { name: `${tier.name} - Full Restoration & PSA Prep` }, unit_amount: tier.price_cents },
           quantity: count,
