@@ -106,7 +106,7 @@ function TierCard({
 
   return (
     <div
-      className={`relative rounded-xl overflow-hidden transition-all duration-200 flex flex-col ${style.card} ${isSoldOut ? "opacity-60" : ""}`}
+      className={`relative rounded-xl overflow-hidden transition-all duration-200 flex flex-col ${style.card} ${(isSoldOut || !restorationsOpen) ? "opacity-60" : ""}`}
     >
       {/* Top banner — always present so all cards align vertically */}
       {bannerLabel ? (
