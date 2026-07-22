@@ -73,7 +73,7 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
     price_cents: 0, // Dynamic — 5% of declared card value
     pricing_type: "percentage",
     pricing_rate: 0.05,
-    min_card_value_cents: 50000, // Cards must be $500+
+    min_card_value_cents: 500000, // Cards must be $5,000+
     description: "White-glove service for high-value cards",
     turnaround_min_days: 2,
     turnaround_max_days: 3,
