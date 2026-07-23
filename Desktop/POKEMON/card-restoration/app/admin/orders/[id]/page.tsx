@@ -143,6 +143,17 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               </div>
             </div>
 
+            {/* Instagram Feature Alert */}
+            {services?.some((s) => s.service_id === "instagram_feature") && (
+              <div className="rounded-xl border-2 border-pink-400 bg-gradient-to-r from-pink-50 to-purple-50 p-5 flex items-center gap-4">
+                <span className="text-4xl">📸</span>
+                <div>
+                  <p className="font-heading font-black text-xl text-pink-700 leading-tight">Instagram Feature Purchased</p>
+                  <p className="text-sm font-bold text-pink-600 mt-0.5">This customer paid for their card to be featured in an Instagram video.</p>
+                </div>
+              </div>
+            )}
+
             {/* Status updater */}
             <div className="bg-white rounded-xl border border-border p-6">
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Order Status</h2>
