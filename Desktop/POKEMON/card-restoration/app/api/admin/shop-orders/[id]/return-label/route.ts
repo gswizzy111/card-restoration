@@ -138,7 +138,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       labels: allLabels,
       return_label_url: transaction.labelUrl,
       tracking_number: trackingNumber,
-      status: "processing",
+      status: "shipped",
     })
     .eq("id", id);
 

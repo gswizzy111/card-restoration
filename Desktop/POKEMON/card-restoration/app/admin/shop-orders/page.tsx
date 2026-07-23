@@ -8,6 +8,7 @@ import { KitStatusUpdater } from "./status-updater";
 import { KitCustomerEditor } from "./kit-customer-editor";
 import { RevenueChart } from "../revenue-chart";
 import { SyncKitOrdersButton } from "./sync-kit-orders-button";
+import { SyncShopDeliveredButton } from "./sync-shop-delivered-button";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +131,7 @@ export default async function ShopOrdersPage() {
             <p className="text-muted-foreground text-sm mt-1">{orders?.length ?? 0} total</p>
           </div>
           <div className="flex items-center gap-3">
+            <SyncShopDeliveredButton />
             <SyncKitOrdersButton />
             <Link href="/admin/shop-orders/new" className="text-sm font-bold px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors whitespace-nowrap">
               + New Order

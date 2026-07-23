@@ -353,8 +353,9 @@ export default async function AdminPage({
   }).filter((o) => !tierFilter || tierFilter === "all" || o.restoration_tier === tierFilter);
 
   const PAST_STATUSES = ["shipped_back", "delivered"];
-  const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status));
-  const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status));
+  const tierMatchFn = (tier: string | null) => !tierFilter || tierFilter === "all" || tier === tierFilter;
+  const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier));
+  const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier));
 
   const allRevenue = [
     ...(orders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, created_at: o.created_at })),
@@ -492,10 +493,27 @@ export default async function AdminPage({
               <RevenueChart entries={kitRevenueEntries} label="Kit Sales" />
             </div>
 
+            {/* Tier filter */}
+            <div className="flex gap-2 flex-wrap mb-3">
+              {[["all", "All Tiers"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"]].map(([val, label]) => (
+                <Link
+                  key={val}
+                  href={`/admin${val === "all" ? "" : `?tier=${val}`}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                    (tierFilter ?? "all") === val
+                      ? "bg-foreground text-background border-foreground"
+                      : "bg-white text-muted-foreground border-border hover:border-foreground"
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+
             {/* Active orders */}
             {activeOrders.length === 0 ? (
               <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
-                No active orders.
+                {tierFilter && tierFilter !== "all" ? `No active ${TIER_STYLES[tierFilter]?.label ?? tierFilter} orders.` : "No active orders."}
               </div>
             ) : (
               <div className="flex flex-col gap-3">
