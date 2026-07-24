@@ -359,12 +359,13 @@ export async function POST(request: Request) {
       const { data: orderForInsurance } = await admin.from("orders").select("insurance_declared_value_cents,insurance_type").eq("id", orderId).single();
       const hasInboundInsurance = orderForInsurance && orderForInsurance.insurance_type !== "none" && (orderForInsurance.insurance_declared_value_cents ?? 0) > 0;
       try {
-        const txPayload: Parameters<typeof shippo.transactions.create>[0] = {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const txPayload = {
           rate: rateObjectId,
           labelFileType: "PDF",
           async: false,
           extra: {
-            signatureConfirmation: "STANDARD" as const,
+            signatureConfirmation: "STANDARD",
             ...(hasInboundInsurance ? {
               insurance: {
                 amount: String((orderForInsurance.insurance_declared_value_cents / 100).toFixed(2)),
@@ -374,7 +375,7 @@ export async function POST(request: Request) {
               },
             } : {}),
           },
-        };
+        } as Parameters<typeof shippo.transactions.create>[0];
         const transaction = await shippo.transactions.create(txPayload);
         if (transaction.status === "SUCCESS" && transaction.labelUrl) {
           shippingLabelUrl = transaction.labelUrl;
