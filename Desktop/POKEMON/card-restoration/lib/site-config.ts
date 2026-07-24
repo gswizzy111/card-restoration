@@ -6,7 +6,10 @@ export function isSoldOut(): boolean {
 
 // ─── INSURANCE ────────────────────────────────────────────────────────────────
 // Set to true and run the Supabase migration to enable package insurance at checkout.
-export const INSURANCE_ENABLED = false;
+export const INSURANCE_ENABLED = true;
+
+// Flat fee charged to customers when we add USPS/carrier signature confirmation to their inbound label.
+export const SIGNATURE_FEE_CENTS = 500;
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── TIER SELECTION ────────────────────────────────────────────────────────────

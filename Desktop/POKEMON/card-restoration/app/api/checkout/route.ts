@@ -5,7 +5,7 @@ import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import { getTierById, getCardPriceCents, applyDbOverride } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
-import { isSoldOut, INSURANCE_ENABLED } from "@/lib/site-config";
+import { isSoldOut, INSURANCE_ENABLED, SIGNATURE_FEE_CENTS } from "@/lib/site-config";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -171,6 +171,8 @@ export async function POST(request: Request) {
   const shippingCents = data.shipping_rate
     ? (data.shipping_method === "buy_label" || isInternational ? data.shipping_rate.amount_cents : 0)
     : 0;
+  const isDomesticBuyLabel = data.shipping_method === "buy_label" && !isInternational;
+  const signatureFeeCents = isDomesticBuyLabel ? SIGNATURE_FEE_CENTS : 0;
 
   // Sales tax — 6.625% on subtotal after discount
   const TAX_RATE = 0.06625;
@@ -211,7 +213,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents + instagramFeeCents - giftCardDiscountCents);
+  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents + instagramFeeCents + signatureFeeCents - giftCardDiscountCents);
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -251,6 +253,8 @@ export async function POST(request: Request) {
       customer_notes: data.customer_notes ?? null,
       affiliate_code: data.affiliate_code ?? null,
       restoration_tier: restorationTier ?? null,
+      insurance_declared_value_cents: (INSURANCE_ENABLED && data.insurance_declared_value_cents) ? data.insurance_declared_value_cents : null,
+      insurance_type: (INSURANCE_ENABLED && data.insurance_type) ? data.insurance_type : null,
       status: "awaiting_payment",
       payment_status: "pending",
     })
@@ -380,6 +384,12 @@ export async function POST(request: Request) {
       : "Package Insurance — Inbound (you → The Card Doc)";
     lineItems.push({
       price_data: { currency: "usd", product_data: { name: insLabel }, unit_amount: insuranceChargeCents },
+      quantity: 1,
+    });
+  }
+  if (signatureFeeCents > 0) {
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: "Signature Confirmation on Delivery" }, unit_amount: signatureFeeCents },
       quantity: 1,
     });
   }

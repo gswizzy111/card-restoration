@@ -101,9 +101,9 @@ const TIER_TURNAROUND_DAYS: Record<string, number> = {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tab?: string; tier?: string; period?: string }>;
+  searchParams: Promise<{ q?: string; tab?: string; tier?: string; period?: string; notes?: string }>;
 }) {
-  const { q, tab, tier: tierFilter, period: shippedPeriod } = await searchParams;
+  const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter } = await searchParams;
   const query = q?.trim() ?? "";
   const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : "orders";
   const activePeriod = shippedPeriod === "week" ? "week" : shippedPeriod === "month" ? "month" : shippedPeriod === "all" ? "all" : "today";
@@ -222,7 +222,7 @@ export default async function AdminPage({
   ] = await Promise.all([
     admin
       .from("orders")
-      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier")
+      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier, admin_notes")
       .neq("status", "awaiting_payment")
       .order("created_at", { ascending: false }),
     admin
@@ -354,8 +354,9 @@ export default async function AdminPage({
 
   const PAST_STATUSES = ["shipped_back", "delivered"];
   const tierMatchFn = (tier: string | null) => !tierFilter || tierFilter === "all" || tier === tierFilter;
-  const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier));
-  const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier));
+  const notesMatchFn = (notes: string | null | undefined) => notesFilter !== "missing" || !notes || notes.trim() === "";
+  const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && notesMatchFn((o as any).admin_notes));
+  const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && notesMatchFn((o as any).admin_notes));
 
   const allRevenue = [
     ...(orders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, created_at: o.created_at })),
@@ -493,21 +494,46 @@ export default async function AdminPage({
               <RevenueChart entries={kitRevenueEntries} label="Kit Sales" />
             </div>
 
-            {/* Tier filter */}
+            {/* Tier filter + Missing Notes toggle */}
             <div className="flex gap-2 flex-wrap mb-3">
-              {[["all", "All Tiers"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"]].map(([val, label]) => (
-                <Link
-                  key={val}
-                  href={`/admin${val === "all" ? "" : `?tier=${val}`}`}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
-                    (tierFilter ?? "all") === val
-                      ? "bg-foreground text-background border-foreground"
-                      : "bg-white text-muted-foreground border-border hover:border-foreground"
-                  }`}
-                >
-                  {label}
-                </Link>
-              ))}
+              {[["all", "All Tiers"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"]].map(([val, label]) => {
+                const notesSuffix = notesFilter === "missing" ? "&notes=missing" : "";
+                const href = val === "all"
+                  ? `/admin${notesFilter === "missing" ? "?notes=missing" : ""}`
+                  : `/admin?tier=${val}${notesSuffix}`;
+                return (
+                  <Link
+                    key={val}
+                    href={href}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                      (tierFilter ?? "all") === val
+                        ? "bg-foreground text-background border-foreground"
+                        : "bg-white text-muted-foreground border-border hover:border-foreground"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
+              <div className="h-px w-px" />
+              {(() => {
+                const tierSuffix = tierFilter && tierFilter !== "all" ? `?tier=${tierFilter}` : "";
+                const noteHref = notesFilter === "missing"
+                  ? `/admin${tierSuffix}`
+                  : `/admin${tierSuffix}${tierSuffix ? "&" : "?"}notes=missing`;
+                return (
+                  <Link
+                    href={noteHref}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                      notesFilter === "missing"
+                        ? "bg-red-600 text-white border-red-600"
+                        : "bg-white text-muted-foreground border-border hover:border-foreground"
+                    }`}
+                  >
+                    {notesFilter === "missing" ? "★ Missing Notes" : "Missing Notes"}
+                  </Link>
+                );
+              })()}
             </div>
 
             {/* Active orders */}

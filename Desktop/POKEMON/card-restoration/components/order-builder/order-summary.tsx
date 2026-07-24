@@ -1,7 +1,7 @@
 import { formatCurrency } from "@/lib/utils";
 import { getTierById, formatCents, RESTORATION_TIERS } from "@/lib/restoration-tiers";
 import type { CardEntry, ShippingRate, InsuranceSelection } from "@/lib/types";
-import { INSURANCE_ENABLED } from "@/lib/site-config";
+import { INSURANCE_ENABLED, SIGNATURE_FEE_CENTS } from "@/lib/site-config";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 interface OrderSummaryProps {
@@ -33,9 +33,10 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
   const insuranceCents = INSURANCE_ENABLED ? (insurance?.chargeCents ?? 0) : 0;
+  const signatureCents = shippingMethod === "buy_label" && !isInternational ? SIGNATURE_FEE_CENTS : 0;
   const slabCrackCount = cards.filter((c) => c.needs_slab_crack).length;
   const slabCrackCents = slabCrackCount * 700;
-  const total = subtotal - discountCents + shipping + insuranceCents + slabCrackCents;
+  const total = subtotal - discountCents + shipping + insuranceCents + signatureCents + slabCrackCents;
 
   const turnaroundText = isMixed
     ? "Turnaround varies by tier"
@@ -90,6 +91,12 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
               : shippingMethod === "self_ship" ? "Self-ship" : selectedRate ? formatCurrency(selectedRate.amount_cents) : "—"}
           </span>
         </div>
+        {signatureCents > 0 && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>Signature Confirmation</span>
+            <span>{formatCurrency(signatureCents)}</span>
+          </div>
+        )}
         {insuranceCents > 0 && (
           <div className="flex justify-between text-muted-foreground">
             <span>Insurance</span>

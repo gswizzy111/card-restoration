@@ -363,16 +363,17 @@ export async function POST(request: Request) {
           rate: rateObjectId,
           labelFileType: "PDF",
           async: false,
-          ...(hasInboundInsurance ? {
-            extra: {
+          extra: {
+            signatureConfirmation: "STANDARD" as const,
+            ...(hasInboundInsurance ? {
               insurance: {
                 amount: String((orderForInsurance.insurance_declared_value_cents / 100).toFixed(2)),
                 currency: "USD",
                 provider: "SHIPPO",
                 content: "Trading cards",
               },
-            },
-          } : {}),
+            } : {}),
+          },
         };
         const transaction = await shippo.transactions.create(txPayload);
         if (transaction.status === "SUCCESS" && transaction.labelUrl) {

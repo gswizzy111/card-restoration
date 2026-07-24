@@ -100,8 +100,12 @@ export function StepShipping({
       .then((r) => r.json())
       .then((data) => {
         if (data.rates) {
-          setRates(data.rates);
-          if (data.rates.length > 0) onRateChange(data.rates[0]);
+          const all: ShippingRate[] = data.rates;
+          // Only show Priority/Express options for restoration inbound labels
+          const expedited = all.filter((r) => /priority|express/i.test(r.service_level));
+          const filtered = expedited.length > 0 ? expedited : all;
+          setRates(filtered);
+          if (filtered.length > 0) onRateChange({ ...filtered[0], amount_cents: filtered[0].amount_cents * 2 });
         } else {
           setRatesError("Could not load shipping rates. Please try self-ship.");
         }
@@ -208,7 +212,7 @@ export function StepShipping({
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                We generate a label and email it to you. Just print, tape it on, drop it off. Includes tracking and insurance.
+                We generate a prepaid label and email it to you. Print, tape it on, and drop it off. Includes tracking, insurance, and signature confirmation (+$5).
               </p>
               {shippingMethod === "buy_label" && (
                 <div className="mt-4 flex flex-col gap-2">

@@ -8,7 +8,7 @@ import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import { getTierById, getCardPriceCents, formatCents } from "@/lib/restoration-tiers";
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
-import { INSURANCE_ENABLED } from "@/lib/site-config";
+import { INSURANCE_ENABLED, SIGNATURE_FEE_CENTS } from "@/lib/site-config";
 import { SignaturePad } from "./signature-pad";
 
 interface StepReviewProps {
@@ -168,8 +168,9 @@ export function StepReview({
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
+  const signatureCents = shippingMethod === "buy_label" ? SIGNATURE_FEE_CENTS : 0;
   const instagramFeeCents = instagramFeature ? 10000 : 0;
-  const preTaxTotal = subtotal - discountCents + taxCents + shipping + (INSURANCE_ENABLED ? insurance.chargeCents : 0) + instagramFeeCents;
+  const preTaxTotal = subtotal - discountCents + taxCents + shipping + signatureCents + (INSURANCE_ENABLED ? insurance.chargeCents : 0) + instagramFeeCents;
   const gcApplied = Math.min(giftCardAmountCents, preTaxTotal);
   const total = Math.max(0, preTaxTotal - gcApplied);
 
@@ -383,6 +384,12 @@ export function StepReview({
           <span>Shipping</span>
           <span>{shippingMethod === "self_ship" ? "Self-ship" : formatCurrency(shipping)}</span>
         </div>
+        {signatureCents > 0 && (
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>Signature Confirmation</span>
+            <span>{formatCurrency(signatureCents)}</span>
+          </div>
+        )}
         {INSURANCE_ENABLED && insurance.chargeCents > 0 && (
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>Insurance ({insurance.type === "round_trip" ? "round trip" : "inbound"})</span>
