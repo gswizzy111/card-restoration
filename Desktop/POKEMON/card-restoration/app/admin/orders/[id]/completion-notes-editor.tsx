@@ -30,6 +30,7 @@ export function CompletionNotesEditor({
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [aiContext, setAiContext] = useState("");
 
   async function save() {
     setSaving(true);
@@ -65,6 +66,7 @@ export function CompletionNotesEditor({
           cards,
           order_tier: orderTier ?? null,
           customer_notes: customerNotes ?? null,
+          admin_context: aiContext.trim() || null,
         }),
       });
       const data = await res.json();
@@ -87,6 +89,20 @@ export function CompletionNotesEditor({
         placeholder="e.g. Removed crease from top-left corner, cleaned surface with microfiber, pressed under glass overnight. Card came out 9/10."
         className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm resize-y focus:outline-none focus:border-primary font-mono"
       />
+      <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 flex flex-col gap-1.5">
+        <label className="text-xs font-bold text-violet-700 uppercase tracking-wide">
+          Additional context for AI
+        </label>
+        <textarea
+          value={aiContext}
+          onChange={(e) => setAiContext(e.target.value)}
+          rows={2}
+          placeholder="e.g. The crease on card 1 was too deep to fully fix but improved significantly. Card 2 had light surface scratches not mentioned by the customer — cleaned those up too."
+          className="w-full rounded border border-violet-200 bg-white px-2.5 py-1.5 text-sm resize-y focus:outline-none focus:border-violet-400 placeholder:text-violet-300"
+        />
+        <p className="text-xs text-violet-500">Anything you type here gets sent to Claude alongside the customer's card info.</p>
+      </div>
+
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={save}

@@ -15,6 +15,7 @@ const BodySchema = z.object({
   cards: z.array(CardSchema).min(1),
   order_tier: z.string().nullable().optional(),
   customer_notes: z.string().nullable().optional(),
+  admin_context: z.string().nullable().optional(),
 });
 
 const SYSTEM_PROMPT = `You write professional grader notes for The Card Doc, a card restoration service.
@@ -50,7 +51,7 @@ export async function POST(
     return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { cards, order_tier, customer_notes } = parsed.data;
+  const { cards, order_tier, customer_notes, admin_context } = parsed.data;
 
   // Build a structured user message from the card data
   const tierLabel = (t: string | null | undefined) => {
@@ -83,6 +84,7 @@ export async function POST(
   const userMessage = [
     customer_notes ? `General order notes from customer: ${customer_notes}` : null,
     ...cardLines,
+    admin_context ? `Additional context from the restorer (use this to inform the notes — do not copy verbatim, weave it in naturally): ${admin_context}` : null,
   ]
     .filter(Boolean)
     .join("\n\n");
