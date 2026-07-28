@@ -181,6 +181,16 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               <CompletionNotesEditor
                 orderId={order.id}
                 existingNotes={(order.admin_notes as string) ?? ""}
+                cards={(cards ?? []).map((c) => ({
+                  card_name: c.card_name,
+                  card_set: c.card_set ?? null,
+                  card_number: c.card_number ?? null,
+                  estimated_value_cents: c.estimated_value_cents ?? null,
+                  notes: c.notes ?? null,
+                  tier: c.tier ?? null,
+                }))}
+                orderTier={(order.restoration_tier as string | null) ?? null}
+                customerNotes={(order.customer_notes as string | null) ?? null}
               />
 
               <div className="border-t border-border mt-6 pt-5">
