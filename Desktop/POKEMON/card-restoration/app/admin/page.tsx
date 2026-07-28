@@ -353,10 +353,16 @@ export default async function AdminPage({
   }).filter((o) => !tierFilter || tierFilter === "all" || o.restoration_tier === tierFilter);
 
   const PAST_STATUSES = ["shipped_back", "delivered"];
+  // Orders we consider "done" for grader-notes purposes
+  const DONE_STATUSES = ["completed", "shipped_back", "delivered"];
   const tierMatchFn = (tier: string | null) => !tierFilter || tierFilter === "all" || tier === tierFilter;
-  const notesMatchFn = (notes: string | null | undefined) => notesFilter !== "missing" || !notes || notes.trim() === "";
-  const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && notesMatchFn((o as any).admin_notes));
-  const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && notesMatchFn((o as any).admin_notes));
+  // When the missing-notes filter is on: only surface done orders that have no notes
+  const notesMatchFn = (status: string, notes: string | null | undefined) => {
+    if (notesFilter !== "missing") return true;
+    return DONE_STATUSES.includes(status) && (!notes || notes.trim() === "");
+  };
+  const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && notesMatchFn(o.status, (o as any).admin_notes));
+  const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && notesMatchFn(o.status, (o as any).admin_notes));
 
   const allRevenue = [
     ...(orders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, created_at: o.created_at })),
@@ -539,7 +545,11 @@ export default async function AdminPage({
             {/* Active orders */}
             {activeOrders.length === 0 ? (
               <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
-                {tierFilter && tierFilter !== "all" ? `No active ${TIER_STYLES[tierFilter]?.label ?? tierFilter} orders.` : "No active orders."}
+                {notesFilter === "missing"
+                  ? "No completed orders with missing grader notes."
+                  : tierFilter && tierFilter !== "all"
+                  ? `No active ${TIER_STYLES[tierFilter]?.label ?? tierFilter} orders.`
+                  : "No active orders."}
               </div>
             ) : (
               <div className="flex flex-col gap-3">
