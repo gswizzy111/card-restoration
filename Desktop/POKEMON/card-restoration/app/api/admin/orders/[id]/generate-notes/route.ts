@@ -32,6 +32,7 @@ Output rules:
 - If something unusual is requested (e.g., "crack the slab"), include that step naturally.
 - Do NOT put "Thank you for trusting The Card Doc." after each individual card. Only include that sign-off line once, at the very end of the entire message, after all card descriptions.
 - Keep tone professional but warm — written like a note to the customer explaining what was done.
+- Never use double dashes (--) or em dashes (—) anywhere in the output. Use commas, periods, or rephrase instead.
 - If multiple cards are submitted, number/list them clearly (card name as its own bolded line) so it's easy to tell them apart.`;
 
 export async function POST(
