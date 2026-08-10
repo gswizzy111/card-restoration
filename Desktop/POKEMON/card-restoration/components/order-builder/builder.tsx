@@ -67,9 +67,10 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [signatureDataUrl, setSignatureDataUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [insurance, setInsurance] = useState<InsuranceSelection>({ declaredValueCents: 0, type: "none", chargeCents: 0 });
+  const [addSignatureConfirmation, setAddSignatureConfirmation] = useState(false);
 
   function canAdvance(): boolean {
-    if (step === 1) return cards.every((c) => c.card_name.trim().length > 0);
+    if (step === 1) return cards.every((c) => c.card_name.trim().length > 0 && c.photo_urls.length > 0);
     if (step === 2) {
       const c = customer;
       const isUS = !c.country || c.country === "US";
@@ -155,6 +156,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           instagram_feature: instagramFeature || undefined,
           insurance_declared_value_cents: insurance.declaredValueCents > 0 ? insurance.declaredValueCents : undefined,
           insurance_type: insurance.type !== "none" ? insurance.type : undefined,
+          add_signature_confirmation: addSignatureConfirmation || undefined,
           slab_crack_count: cards.filter((c) => c.needs_slab_crack).length || undefined,
           signature_path: signaturePath,
         }),
@@ -221,6 +223,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               onSignatureChange={setSignatureDataUrl}
               insurance={insurance}
               onInsuranceChange={setInsurance}
+              addSignatureConfirmation={addSignatureConfirmation}
+              onSignatureConfirmationChange={setAddSignatureConfirmation}
               giftCardCode={giftCardCode}
               onGiftCardCodeChange={setGiftCardCode}
               giftCardAmountCents={giftCardAmountCents}

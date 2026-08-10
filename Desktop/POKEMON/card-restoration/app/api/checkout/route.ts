@@ -55,6 +55,7 @@ const BodySchema = z.object({
   insurance_type: z.enum(["inbound", "round_trip"]).optional(),
   slab_crack_count: z.number().int().min(0).max(100).optional(),
   signature_path: z.string().optional(),
+  add_signature_confirmation: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -172,7 +173,7 @@ export async function POST(request: Request) {
     ? (data.shipping_method === "buy_label" || isInternational ? data.shipping_rate.amount_cents : 0)
     : 0;
   const isDomesticBuyLabel = data.shipping_method === "buy_label" && !isInternational;
-  const signatureFeeCents = isDomesticBuyLabel ? SIGNATURE_FEE_CENTS : 0;
+  const signatureFeeCents = isDomesticBuyLabel && data.add_signature_confirmation ? SIGNATURE_FEE_CENTS : 0;
 
   // Sales tax — 6.625% on subtotal after discount
   const TAX_RATE = 0.06625;

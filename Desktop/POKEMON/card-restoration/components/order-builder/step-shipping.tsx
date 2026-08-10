@@ -212,7 +212,7 @@ export function StepShipping({
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                We generate a prepaid label and email it to you. Print, tape it on, and drop it off. Includes tracking, insurance, and signature confirmation (+$5).
+                We generate a prepaid label and email it to you. Print, tape it on, and drop it off. Includes tracking. Insured shipping and signature confirmation are optional add-ons at checkout.
               </p>
               {shippingMethod === "buy_label" && (
                 <div className="mt-4 flex flex-col gap-2">
@@ -229,31 +229,39 @@ export function StepShipping({
                       Price covers shipping to us + return shipping back to you.
                     </p>
                   )}
-                  {!loadingRates && rates.map((rate) => (
-                    <button
-                      key={rate.object_id}
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRateChange({ ...rate, amount_cents: rate.amount_cents * 2 });
-                      }}
-                      className={`w-full text-left rounded-lg border px-4 py-3 flex items-center justify-between transition-colors ${
-                        selectedRate?.object_id === rate.object_id
-                          ? "border-accent bg-accent/10"
-                          : "border-border hover:border-muted-foreground"
-                      }`}
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {rate.carrier} — {rate.service_level}
-                        </p>
-                        {rate.days && (
-                          <p className="text-xs text-muted-foreground">Est. {rate.days} business days each way</p>
-                        )}
-                      </div>
-                      <span className="font-medium text-foreground">{formatCurrency(rate.amount_cents * 2)}</span>
-                    </button>
-                  ))}
+                  {!loadingRates && rates.map((rate) => {
+                    const chosen = selectedRate?.object_id === rate.object_id;
+                    return (
+                      <button
+                        key={rate.object_id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRateChange({ ...rate, amount_cents: rate.amount_cents * 2 });
+                        }}
+                        className={`w-full text-left rounded-lg border-2 px-4 py-3 flex items-center justify-between transition-all ${
+                          chosen
+                            ? "border-[#1a8fe0] bg-blue-50 shadow-sm"
+                            : "border-border hover:border-[#1a8fe0]/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${chosen ? "border-[#1a8fe0] bg-[#1a8fe0]" : "border-muted-foreground"}`}>
+                            {chosen && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </div>
+                          <div>
+                            <p className={`text-sm font-semibold ${chosen ? "text-[#1a8fe0]" : "text-foreground"}`}>
+                              {rate.carrier} — {rate.service_level}
+                            </p>
+                            {rate.days && (
+                              <p className="text-xs text-muted-foreground">Est. {rate.days} business days each way</p>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`font-bold ${chosen ? "text-[#1a8fe0]" : "text-foreground"}`}>{formatCurrency(rate.amount_cents * 2)}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

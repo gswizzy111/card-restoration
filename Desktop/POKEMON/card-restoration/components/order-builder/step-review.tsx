@@ -36,6 +36,8 @@ interface StepReviewProps {
   selectedTier?: RestorationTierId;
   insurance: InsuranceSelection;
   onInsuranceChange: (ins: InsuranceSelection) => void;
+  addSignatureConfirmation: boolean;
+  onSignatureConfirmationChange: (v: boolean) => void;
 }
 
 export function StepReview({
@@ -62,6 +64,8 @@ export function StepReview({
   selectedTier,
   insurance,
   onInsuranceChange,
+  addSignatureConfirmation,
+  onSignatureConfirmationChange,
 }: StepReviewProps) {
   const [codeStatus, setCodeStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [codeName, setCodeName] = useState("");
@@ -168,7 +172,7 @@ export function StepReview({
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
   const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const signatureCents = shippingMethod === "buy_label" ? SIGNATURE_FEE_CENTS : 0;
+  const signatureCents = addSignatureConfirmation && shippingMethod === "buy_label" ? SIGNATURE_FEE_CENTS : 0;
   const instagramFeeCents = instagramFeature ? 10000 : 0;
   const preTaxTotal = subtotal - discountCents + taxCents + shipping + signatureCents + (INSURANCE_ENABLED ? insurance.chargeCents : 0) + instagramFeeCents;
   const gcApplied = Math.min(giftCardAmountCents, preTaxTotal);
@@ -259,10 +263,33 @@ export function StepReview({
         </p>
       </div>
 
-      {/* Insurance */}
+      {/* Signature confirmation add-on */}
+      {shippingMethod === "buy_label" && (
+        <div className={`border-2 rounded-xl p-4 transition-colors ${addSignatureConfirmation ? "border-blue-400 bg-blue-50" : "border-border"}`}>
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={addSignatureConfirmation}
+              onChange={(e) => onSignatureConfirmationChange(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+            />
+            <div>
+              <p className="font-medium text-foreground text-sm">
+                Add signature confirmation on delivery{" "}
+                <span className="text-primary font-semibold">+$5.00</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Requires someone to sign for the package when delivered to you. Adds an extra layer of security for high-value cards.
+              </p>
+            </div>
+          </label>
+        </div>
+      )}
+
+      {/* Insured Shipping */}
       {INSURANCE_ENABLED && <div className="flex flex-col gap-3">
-        <h3 className="font-medium text-foreground">Package Insurance <span className="text-xs font-normal text-muted-foreground">(optional)</span></h3>
-        <p className="text-xs text-muted-foreground">Insure your cards against loss or damage in transit via Shippo / ShipSurance. Up to $10,000.</p>
+        <h3 className="font-medium text-foreground">Insured Shipping <span className="text-xs font-normal text-muted-foreground">(optional)</span></h3>
+        <p className="text-xs text-muted-foreground">Add insurance to your shipment in case of loss or damage in transit via Shippo / ShipSurance. Up to $10,000. This insures the shipping — not the restoration.</p>
 
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Declared Value</label>
@@ -287,8 +314,8 @@ export function StepReview({
         {insuranceQuote && insurance.declaredValueCents > 0 && (
           <div className="flex flex-col gap-2">
             {(["none", "inbound", "round_trip"] as const).map((type) => {
-              const label = type === "none" ? "No insurance" : type === "inbound" ? "Inbound only" : "Round trip";
-              const sublabel = type === "none" ? "" : type === "inbound" ? "You → The Card Doc" : "Both ways (you → us → back to you)";
+              const label = type === "none" ? "No insured shipping" : type === "inbound" ? "Insured shipping (inbound)" : "Insured shipping (round trip)";
+              const sublabel = type === "none" ? "" : type === "inbound" ? "Covers your package from you to The Card Doc" : "Covers both ways — you to us, and back to you";
               const price = type === "none" ? null : type === "inbound" ? insuranceQuote.customerChargeCents : insuranceQuote.roundTripChargeCents;
               return (
                 <label key={type} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${insurance.type === type ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
@@ -392,7 +419,7 @@ export function StepReview({
         )}
         {INSURANCE_ENABLED && insurance.chargeCents > 0 && (
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Insurance ({insurance.type === "round_trip" ? "round trip" : "inbound"})</span>
+            <span>Insured Shipping ({insurance.type === "round_trip" ? "round trip" : "inbound"})</span>
             <span>{formatCurrency(insurance.chargeCents)}</span>
           </div>
         )}
