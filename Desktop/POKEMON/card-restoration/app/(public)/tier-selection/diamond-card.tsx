@@ -22,10 +22,13 @@ export function DiamondCard({
   const priceDollars = numericValue >= MIN_VALUE ? (numericValue * RATE).toFixed(2) : null;
   const tooLow = rawValue !== "" && numericValue > 0 && numericValue < MIN_VALUE;
 
-  const bannerLabel = isSoldOut
+  const maxSlots = 30; // matches site-config TIER_MAX_SLOTS.elite
+  const bannerLabel = slotsLeft !== null
+    ? isSoldOut
+      ? `SOLD OUT · 0 / ${maxSlots} slots`
+      : `${slotsLeft} / ${maxSlots} slots remaining`
+    : isSoldOut
     ? "SOLD OUT"
-    : slotsLeft !== null
-    ? `${slotsLeft} slot${slotsLeft !== 1 ? "s" : ""} remaining`
     : "White Glove";
 
   const bannerCls = isSoldOut

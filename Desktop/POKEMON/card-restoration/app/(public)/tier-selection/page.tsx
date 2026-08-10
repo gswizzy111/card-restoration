@@ -101,10 +101,12 @@ function TierCard({
   const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
   const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
 
-  const bannerLabel: string | null = isSoldOut
+  const bannerLabel: string | null = maxSlots !== null
+    ? isSoldOut
+      ? `SOLD OUT · 0 / ${maxSlots} slots`
+      : `${slotsLeft} / ${maxSlots} slots remaining`
+    : isSoldOut
     ? "SOLD OUT"
-    : slotsLeft !== null
-    ? `${slotsLeft} slot${slotsLeft !== 1 ? "s" : ""} remaining`
     : (tier.badge ?? null);
 
   const bannerCls: string = isSoldOut
@@ -229,10 +231,10 @@ export default async function TierSelectionPage() {
     !extErr ? applyDbOverride(t, settingsMap[t.id] ?? null) : t
   );
 
-  const topTiers    = tiers.filter((t) => ["regular", "expedited", "premium"].includes(t.id));
-  const midTiers    = tiers.filter((t) => ["ultra_premium"].includes(t.id));
-  const fastPass    = tiers.find((t) => t.id === "fast_pass");
-  const eliteTier   = tiers.find((t) => t.id === "elite");
+  const topTiers  = tiers.filter((t) => ["regular", "expedited", "premium"].includes(t.id));
+  const midTiers  = tiers.filter((t) => t.id === "ultra_premium");
+  const fastPass  = tiers.find((t) => t.id === "fast_pass");
+  const eliteTier = tiers.find((t) => t.id === "elite");
 
   const sharedProps = { settingsMap, slotCounts, restorationsOpen };
 
@@ -269,18 +271,6 @@ export default async function TierSelectionPage() {
             : "We're temporarily closed. Browse our pricing below and join the waitlist to be notified when we reopen."}
         </p>
 
-        {/* Fast Pass — featured at top */}
-        {fastPass && (
-          <div className="mb-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-xs font-bold uppercase tracking-widest text-orange-500">⚡ Express Option</span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-            <TierCard tier={fastPass} {...sharedProps} />
-          </div>
-        )}
-
         {/* Top row: Bronze · Silver · Gold */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
           {topTiers.map((tier) => (
@@ -288,8 +278,8 @@ export default async function TierSelectionPage() {
           ))}
         </div>
 
-        {/* Bottom row: Platinum · Diamond */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Middle row: Platinum · Diamond */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
           {midTiers.map((tier) => (
             <TierCard key={tier.id} tier={tier} {...sharedProps} />
           ))}
@@ -301,6 +291,18 @@ export default async function TierSelectionPage() {
             />
           )}
         </div>
+
+        {/* Fast Pass — bottom */}
+        {fastPass && (
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs font-bold uppercase tracking-widest text-orange-500">⚡ Express Option</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            <TierCard tier={fastPass} {...sharedProps} />
+          </div>
+        )}
 
         {/* Turnaround disclaimer */}
         <details className="mt-8 border border-amber-200 bg-amber-50 rounded-lg group">
