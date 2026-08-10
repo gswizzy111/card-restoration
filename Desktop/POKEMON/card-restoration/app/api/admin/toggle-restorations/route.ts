@@ -12,10 +12,15 @@ export async function PATCH(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid body" }, { status: 400 });
 
   const admin = createAdminClient();
-  const { error } = await admin.from("store_config").upsert(
-    { key: "restorations_open", value: String(parsed.data.open), updated_at: new Date().toISOString() },
-    { onConflict: "key" }
-  );
+  const now = new Date().toISOString();
+
+  const rows = [
+    { key: "restorations_open", value: String(parsed.data.open), updated_at: now },
+    // When opening, record the timestamp so slot counts only include orders from this window
+    ...(parsed.data.open ? [{ key: "slots_opened_at", value: now, updated_at: now }] : []),
+  ];
+
+  const { error } = await admin.from("store_config").upsert(rows, { onConflict: "key" });
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ ok: true, open: parsed.data.open });

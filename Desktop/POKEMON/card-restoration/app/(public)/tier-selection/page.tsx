@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getAllTiers, applyDbOverride, type RestorationTier } from "@/lib/restoration-tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getRestorationsOpen } from "@/lib/store-config";
+import { getRestorationsOpen, getSlotsOpenedAt } from "@/lib/store-config";
 import { TIER_MAX_SLOTS } from "@/lib/site-config";
 import { CheckCircle, Zap, Star, Crown, Rocket } from "lucide-react";
 import { WaitlistModal } from "./waitlist-modal";
@@ -211,13 +211,17 @@ function TierCard({
 }
 
 export default async function TierSelectionPage() {
-  const restorationsOpen = await getRestorationsOpen();
+  const [restorationsOpen, slotsOpenedAt] = await Promise.all([
+    getRestorationsOpen(),
+    getSlotsOpenedAt(),
+  ]);
   const defaultTiers = getAllTiers();
   const admin = createAdminClient();
 
-  const [{ data: paidOrders }] = await Promise.all([
-    admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null),
-  ]);
+  // Only count orders placed after the last time the shop was opened
+  let ordersQuery = admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null);
+  if (slotsOpenedAt) ordersQuery = ordersQuery.gte("created_at", slotsOpenedAt);
+  const [{ data: paidOrders }] = await Promise.all([ordersQuery]);
 
   const { data: extSettings, error: extErr } = await admin
     .from("restoration_settings")

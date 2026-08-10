@@ -25,3 +25,16 @@ export async function getRestorationsOpen(): Promise<boolean> {
   } catch {}
   return true;
 }
+
+export async function getSlotsOpenedAt(): Promise<string | null> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("store_config")
+      .select("value")
+      .eq("key", "slots_opened_at")
+      .single();
+    return data?.value ?? null;
+  } catch {}
+  return null;
+}

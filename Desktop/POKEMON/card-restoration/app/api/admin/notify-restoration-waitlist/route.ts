@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 
+export const maxDuration = 60;
+
 const DEFAULT_SUBJECT = `We're accepting restorations again — ${businessName}`;
 const DEFAULT_EMAIL_BODY = `Hi [first name], great news — ${businessName} is now accepting restoration orders again.
 
@@ -76,50 +78,55 @@ export async function POST(request: Request) {
   let emailsSent = 0;
   let textsSent = 0;
   const notifiedIds: string[] = [];
+  const textbeltKey = process.env.TEXTBELT_API_KEY;
 
-  for (const person of waitlist) {
+  // Build all email messages first
+  const emailMessages = waitlist.map((person) => {
     const firstName = (person.name ?? "").split(" ")[0] || "there";
-    const personalizedBody = personalize(emailBody, firstName);
-    const personalizedSms = personalize(smsMessage, firstName);
+    return {
+      from: fromEmail,
+      to: person.email,
+      subject: emailSubject,
+      html: bodyToHtml(personalize(emailBody, firstName)),
+    };
+  });
 
-    // Send email
+  // Send emails in batches of 100 (Resend batch limit)
+  const BATCH = 100;
+  for (let i = 0; i < emailMessages.length; i += BATCH) {
+    const chunk = emailMessages.slice(i, i + BATCH);
     try {
-      await resend.emails.send({
-        from: fromEmail,
-        to: person.email,
-        subject: emailSubject,
-        html: bodyToHtml(personalizedBody),
-      });
-      emailsSent++;
+      await resend.batch.send(chunk);
+      emailsSent += chunk.length;
     } catch (e) {
-      console.error("Failed to email", person.email, e);
+      console.error(`Email batch ${i / BATCH + 1} failed`, e);
     }
+  }
 
-    // Send SMS via Textbelt
-    const textbeltKey = process.env.TEXTBELT_API_KEY;
-    if (textbeltKey && person.phone) {
-      // Normalize to digits only, prepend +1 if 10 digits (US)
-      const digits = person.phone.replace(/\D/g, "");
-      const normalized = digits.length === 10 ? `+1${digits}` : `+${digits}`;
-      try {
-        const res = await fetch("https://textbelt.com/text", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            phone: normalized,
-            message: `${personalizedSms} ${bookingUrl}`,
-            key: textbeltKey,
-          }),
-        });
-        const data = await res.json();
-        if (data.success) textsSent++;
-        else console.error("Textbelt error for", normalized, data.error, data.errors);
-      } catch (e) {
-        console.error("Failed to text", person.phone, e);
-      }
-    }
-
+  // Send SMS individually (Textbelt has no batch API)
+  for (const person of waitlist) {
     notifiedIds.push(person.id);
+
+    if (!textbeltKey || !person.phone) continue;
+    const firstName = (person.name ?? "").split(" ")[0] || "there";
+    const digits = person.phone.replace(/\D/g, "");
+    const normalized = digits.length === 10 ? `+1${digits}` : `+${digits}`;
+    try {
+      const res = await fetch("https://textbelt.com/text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: normalized,
+          message: `${personalize(smsMessage, firstName)} ${bookingUrl}`,
+          key: textbeltKey,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) textsSent++;
+      else console.error("Textbelt error for", normalized, data.error);
+    } catch (e) {
+      console.error("Failed to text", person.phone, e);
+    }
   }
 
   // Only mark as notified when sending to all unnotified (not for targeted/test sends)
