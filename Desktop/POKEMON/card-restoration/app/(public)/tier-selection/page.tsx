@@ -87,7 +87,7 @@ function TierCard({
   restorationsOpen,
 }: {
   tier: RestorationTier;
-  settingsMap: Record<string, { is_open?: boolean; max_slots?: number | null }>;
+  settingsMap: Record<string, { is_open?: boolean; max_slots?: number | null; display_slots_remaining?: number | null }>;
   slotCounts: Record<string, number>;
   restorationsOpen: boolean;
 }) {
@@ -98,7 +98,10 @@ function TierCard({
   // DB max_slots (from Store Settings) takes priority; fall back to site-config
   const maxSlots = (s?.max_slots ?? null) ?? TIER_MAX_SLOTS[tier.id] ?? null;
   const usedSlots = slotCounts[tier.id] ?? 0;
-  const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
+  // display_slots_remaining lets admin manually override what customers see
+  const slotsLeft = (s?.display_slots_remaining ?? null) !== null
+    ? (s!.display_slots_remaining as number)
+    : maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
   const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
 
   const bannerLabel: string | null = maxSlots !== null
@@ -225,7 +228,7 @@ export default async function TierSelectionPage() {
 
   const { data: extSettings, error: extErr } = await admin
     .from("restoration_settings")
-    .select("tier, is_open, max_slots, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge");
+    .select("tier, is_open, max_slots, display_slots_remaining, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge");
 
   const settingsRaw = extErr
     ? ((await admin.from("restoration_settings").select("tier, is_open, max_slots")).data ?? [])
@@ -255,7 +258,9 @@ export default async function TierSelectionPage() {
   // Diamond slot info for client component
   const eliteMaxSlots = (settingsMap["elite"]?.max_slots ?? null) ?? TIER_MAX_SLOTS["elite"] ?? null;
   const eliteUsed = slotCounts["elite"] ?? 0;
-  const eliteSlotsLeft = eliteMaxSlots !== null ? Math.max(0, eliteMaxSlots - eliteUsed) : null;
+  const eliteSlotsLeft = (settingsMap["elite"]?.display_slots_remaining ?? null) !== null
+    ? (settingsMap["elite"]!.display_slots_remaining as number)
+    : eliteMaxSlots !== null ? Math.max(0, eliteMaxSlots - eliteUsed) : null;
   const eliteIsSoldOut = settingsMap["elite"]?.is_open === false || (eliteSlotsLeft !== null && eliteSlotsLeft === 0);
 
   return (

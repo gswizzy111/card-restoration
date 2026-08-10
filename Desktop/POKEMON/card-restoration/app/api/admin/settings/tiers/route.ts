@@ -2,9 +2,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 
 const Body = z.object({
-  tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite"]),
+  tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite", "fast_pass"]),
   is_open: z.boolean(),
   max_slots: z.number().int().min(1).nullable(),
+  display_slots_remaining: z.number().int().min(0).nullable().optional(),
   display_name: z.string().nullable().optional(),
   price_cents: z.number().int().min(0).nullable().optional(),
   pricing_rate: z.number().min(0).max(1).nullable().optional(),

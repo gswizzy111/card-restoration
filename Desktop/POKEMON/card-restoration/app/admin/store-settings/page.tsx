@@ -9,7 +9,7 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-const EXTENDED_SELECT = "tier, is_open, max_slots, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge";
+const EXTENDED_SELECT = "tier, is_open, max_slots, display_slots_remaining, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge";
 const BASIC_SELECT    = "tier, is_open, max_slots";
 
 export default async function StoreSettingsPage() {
@@ -125,6 +125,7 @@ ON CONFLICT (tier) DO NOTHING;`}</pre>
                     badge={effective.badge ?? ""}
                     isOpen={(row as { is_open?: boolean })?.is_open ?? true}
                     maxSlots={(row as { max_slots?: number | null })?.max_slots ?? null}
+                    displaySlotsRemaining={(row as { display_slots_remaining?: number | null })?.display_slots_remaining ?? null}
                     slotsUsed={slotsUsed[defaultTier.id] ?? 0}
                     hasExtendedColumns={hasExtendedColumns}
                   />

@@ -19,6 +19,7 @@ interface Props {
   // Availability
   isOpen: boolean;
   maxSlots: number | null;
+  displaySlotsRemaining: number | null;
   slotsUsed: number;
   // Whether the DB has the extended columns yet
   hasExtendedColumns: boolean;
@@ -39,6 +40,7 @@ export function TierRow({
   badge,
   isOpen,
   maxSlots,
+  displaySlotsRemaining,
   slotsUsed,
   hasExtendedColumns,
 }: Props) {
@@ -47,9 +49,15 @@ export function TierRow({
   // Availability state
   const [open, setOpen] = useState(isOpen);
   const [slots, setSlots] = useState(maxSlots !== null ? String(maxSlots) : "");
+  const [displayRemaining, setDisplayRemaining] = useState(
+    displaySlotsRemaining !== null ? String(displaySlotsRemaining) : ""
+  );
   const parsedSlots = slots === "" ? null : parseInt(slots) || null;
+  const parsedDisplayRemaining = displayRemaining === "" ? null : parseInt(displayRemaining) ?? null;
   const autoSoldOut = parsedSlots !== null && slotsUsed >= parsedSlots;
-  const slotsLeft = parsedSlots !== null ? Math.max(0, parsedSlots - slotsUsed) : null;
+  const slotsLeft = parsedDisplayRemaining !== null
+    ? parsedDisplayRemaining
+    : parsedSlots !== null ? Math.max(0, parsedSlots - slotsUsed) : null;
 
   // Detail fields state
   const [displayName, setDisplayName] = useState(name);
@@ -66,13 +74,14 @@ export function TierRow({
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState("");
 
-  async function saveAll(overrides?: { is_open?: boolean; max_slots?: number | null }) {
+  async function saveAll(overrides?: { is_open?: boolean; max_slots?: number | null; display_slots_remaining?: number | null }) {
     setSaving(true);
     setFlash("");
     const payload: Record<string, unknown> = {
       tier: tierId,
       is_open: overrides?.is_open ?? open,
       max_slots: "max_slots" in (overrides ?? {}) ? overrides!.max_slots : parsedSlots,
+      display_slots_remaining: "display_slots_remaining" in (overrides ?? {}) ? overrides!.display_slots_remaining : parsedDisplayRemaining,
       display_name: displayName.trim() || null,
       turnaround_min_days: parseInt(minDays) || null,
       turnaround_max_days: parseInt(maxDays) || null,
@@ -111,7 +120,7 @@ export function TierRow({
   }
 
   function handleSlotsBlur() {
-    saveAll({ max_slots: parsedSlots });
+    saveAll({ max_slots: parsedSlots, display_slots_remaining: parsedDisplayRemaining });
   }
 
   const effectivelySoldOut = !open || autoSoldOut;
@@ -303,9 +312,25 @@ export function TierRow({
           {/* Availability */}
           <div className="border-t border-border pt-4">
             <p className="text-xs font-semibold text-muted-foreground mb-3">Availability</p>
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <label className="text-xs text-muted-foreground whitespace-nowrap">Max slots:</label>
+
+            {/* Slot display — customers see: remaining / total */}
+            <div className="mb-3">
+              <label className="text-xs text-muted-foreground block mb-1.5">
+                Customer slot display —{" "}
+                <span className="font-semibold text-foreground">remaining / total</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  value={displayRemaining}
+                  placeholder="auto"
+                  onChange={(e) => setDisplayRemaining(e.target.value)}
+                  onBlur={handleSlotsBlur}
+                  title="Slots remaining shown to customers (leave blank to auto-calculate)"
+                  className="w-20 h-9 border-2 border-primary/60 rounded-lg px-2 text-sm text-center font-bold focus:outline-none focus:border-primary bg-white"
+                />
+                <span className="text-lg font-bold text-muted-foreground">/</span>
                 <input
                   type="number"
                   min={1}
@@ -313,19 +338,38 @@ export function TierRow({
                   placeholder="∞"
                   onChange={(e) => setSlots(e.target.value)}
                   onBlur={handleSlotsBlur}
-                  className="w-20 h-8 border border-border rounded-lg px-2 text-sm text-center focus:outline-none focus:border-primary bg-white"
+                  title="Total slots (controls when tier auto-closes)"
+                  className="w-20 h-9 border border-border rounded-lg px-2 text-sm text-center focus:outline-none focus:border-primary bg-white"
                 />
+                <span className="text-xs text-muted-foreground">slots</span>
+                {parsedDisplayRemaining !== null && (
+                  <button
+                    onClick={() => { setDisplayRemaining(""); saveAll({ max_slots: parsedSlots, display_slots_remaining: null }); }}
+                    className="text-xs text-muted-foreground hover:text-red-500 transition-colors ml-1"
+                    title="Clear override — revert to auto-calculation"
+                  >
+                    ✕ clear
+                  </button>
+                )}
               </div>
-              <button
-                onClick={toggleOpen}
-                disabled={saving}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                  open ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200"
-                }`}
-              >
-                {open ? "● Open" : "○ Closed"}
-              </button>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Left = what customers see. Right = hard cap (auto-closes when full).{" "}
+                {parsedDisplayRemaining !== null
+                  ? <span className="text-primary font-semibold">Customers will see <strong>{parsedDisplayRemaining}/{parsedSlots ?? "∞"}</strong>.</span>
+                  : <span>Leave left blank to auto-calculate from real orders.</span>
+                }
+              </p>
             </div>
+
+            <button
+              onClick={toggleOpen}
+              disabled={saving}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                open ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-100 text-red-700 hover:bg-red-200"
+              }`}
+            >
+              {open ? "● Open" : "○ Closed"}
+            </button>
           </div>
 
           {hasExtendedColumns && (
