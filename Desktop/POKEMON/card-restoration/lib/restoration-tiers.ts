@@ -67,7 +67,7 @@ export const RESTORATION_TIERS: Record<RestorationTierId, RestorationTier> = {
     turnaround_min_days: 10,
     turnaround_max_days: 15,
     turnaround_label: "10–15 business days",
-    max_card_value_cents: null,
+    max_card_value_cents: 500000, // $5,000
     includes_notes: true,
     includes_video: false,
     badge: "Front of Queue",
