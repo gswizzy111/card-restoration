@@ -16,11 +16,19 @@ export const SIGNATURE_FEE_CENTS = 500;
 export const TIER_SELECTION_ENABLED = true;
 
 // Tiers listed here are always shown as sold out regardless of slot count.
-export const SOLD_OUT_TIERS: string[] = ["regular"];
+export const SOLD_OUT_TIERS: string[] = [];
 
-// Max slots per tier. When paid order count hits the max, tier auto-closes.
+// Max slots per tier when the shop opens. Used as fallback if DB has no max_slots set.
 // Remove a tier from this map to give it unlimited slots.
 export const TIER_MAX_SLOTS: Partial<Record<string, number>> = {
-  expedited: 4,
+  regular:       20,
+  expedited:     30,
+  premium:       30,
+  ultra_premium: 30,
+  elite:         30,
+  fast_pass:     30,
 };
+
+// Shop opening time — countdown shows to this time (24h, ET)
+export const SHOP_OPEN_HOUR_ET = 15; // 3:00 PM
 // ─────────────────────────────────────────────────────────────────────────────

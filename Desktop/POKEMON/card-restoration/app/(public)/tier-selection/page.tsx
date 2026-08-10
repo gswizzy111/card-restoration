@@ -2,8 +2,11 @@ import Link from "next/link";
 import { getAllTiers, applyDbOverride, type RestorationTier } from "@/lib/restoration-tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRestorationsOpen } from "@/lib/store-config";
-import { CheckCircle, Zap, Star, Crown, Gem } from "lucide-react";
+import { TIER_MAX_SLOTS } from "@/lib/site-config";
+import { CheckCircle, Zap, Star, Crown, Rocket } from "lucide-react";
 import { WaitlistModal } from "./waitlist-modal";
+import { CountdownBanner } from "./countdown-banner";
+import { DiamondCard } from "./diamond-card";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +15,8 @@ const ICON_MAP = {
   expedited:     Zap,
   premium:       Star,
   ultra_premium: Crown,
-  elite:         Gem,
+  elite:         Crown,    // replaced by DiamondCard client component
+  fast_pass:     Rocket,
 } as const;
 
 type TierStyle = {
@@ -22,7 +26,7 @@ type TierStyle = {
   btn:       string;
   closedBtn: string;
   check:     string;
-  badgeCls?: string; // color for the badge banner
+  badgeCls?: string;
 };
 
 const STYLES: Record<string, TierStyle> = {
@@ -60,16 +64,21 @@ const STYLES: Record<string, TierStyle> = {
     check:     "text-blue-400",
     badgeCls:  "bg-blue-500 text-white",
   },
-  elite: {
-    card:      "border-2 border-cyan-400 bg-gradient-to-br from-cyan-50 to-blue-100 hover:shadow-xl",
-    icon:      "text-cyan-600",
-    price:     "text-cyan-700",
-    btn:       "bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:opacity-90",
-    closedBtn: "bg-cyan-100 text-cyan-700",
-    check:     "text-cyan-500",
-    badgeCls:  "bg-gradient-to-r from-cyan-500 to-blue-600 text-white",
+  fast_pass: {
+    card:      "border-2 border-orange-400 bg-gradient-to-br from-orange-50 to-red-50 hover:shadow-xl",
+    icon:      "text-orange-600",
+    price:     "text-orange-700",
+    btn:       "bg-gradient-to-r from-orange-500 to-red-500 text-white hover:opacity-90",
+    closedBtn: "bg-orange-100 text-orange-700",
+    check:     "text-orange-500",
+    badgeCls:  "bg-gradient-to-r from-orange-500 to-red-500 text-white",
   },
 };
+
+function formatTurnaround(tier: RestorationTier): string {
+  if (tier.turnaround_label) return tier.turnaround_label;
+  return `${tier.turnaround_min_days}–${tier.turnaround_max_days} days`;
+}
 
 function TierCard({
   tier,
@@ -86,12 +95,12 @@ function TierCard({
   const Icon = ICON_MAP[tier.id as keyof typeof ICON_MAP] ?? CheckCircle;
 
   const s = settingsMap[tier.id];
-  const maxSlots = s?.max_slots ?? null;
+  // DB max_slots takes priority; fall back to site-config hardcoded slots
+  const maxSlots = s?.max_slots ?? TIER_MAX_SLOTS[tier.id] ?? null;
   const usedSlots = slotCounts[tier.id] ?? 0;
   const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
   const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
 
-  // Badge label: from tier data (DB-overrideable) or slot count banner
   const bannerLabel: string | null = isSoldOut
     ? "SOLD OUT"
     : slotsLeft !== null
@@ -105,10 +114,7 @@ function TierCard({
     : style.badgeCls ?? "bg-gray-600 text-white";
 
   return (
-    <div
-      className={`relative rounded-xl overflow-hidden transition-all duration-200 flex flex-col ${style.card} ${(isSoldOut || !restorationsOpen) ? "opacity-60" : ""}`}
-    >
-      {/* Top banner — always present so all cards align vertically */}
+    <div className={`relative rounded-xl overflow-hidden transition-all duration-200 flex flex-col ${style.card} ${(isSoldOut || !restorationsOpen) ? "opacity-60" : ""}`}>
       {bannerLabel ? (
         <div className={`text-xs font-bold text-center py-1.5 tracking-wide ${bannerCls}`}>
           {bannerLabel}
@@ -118,18 +124,14 @@ function TierCard({
       )}
 
       <div className="p-6 flex flex-col flex-1">
-        {/* Icon & Name */}
         <div className="flex items-start gap-3 mb-5">
           <Icon className={`w-7 h-7 flex-shrink-0 mt-0.5 ${style.icon}`} />
           <div>
-            <h3 className="font-heading text-2xl font-bold text-foreground leading-tight">
-              {tier.name}
-            </h3>
+            <h3 className="font-heading text-2xl font-bold text-foreground leading-tight">{tier.name}</h3>
             <p className="text-sm text-muted-foreground mt-0.5">{tier.description}</p>
           </div>
         </div>
 
-        {/* Price */}
         <div className="mb-6">
           <div className={`text-4xl font-bold ${style.price}`}>
             {tier.pricing_type === "percentage"
@@ -139,11 +141,12 @@ function TierCard({
           <p className="text-sm text-muted-foreground mt-0.5">
             {tier.pricing_type === "percentage"
               ? `of declared card value · cards $${((tier.min_card_value_cents ?? 0) / 100).toFixed(0)}+`
+              : tier.id === "fast_pass"
+              ? "per card · cards under $5,000"
               : "per card"}
           </p>
         </div>
 
-        {/* CTA Button */}
         {isSoldOut ? (
           <div className="w-full py-2.5 px-4 rounded-full font-semibold text-center text-sm bg-gray-200 text-gray-500 cursor-not-allowed mb-6">
             Sold Out
@@ -161,19 +164,20 @@ function TierCard({
           </Link>
         )}
 
-        {/* Features */}
         <div className="border-t border-black/10 pt-4 space-y-2.5 flex-1">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Turnaround</span>
             <span className="font-medium text-foreground">
-              {tier.turnaround_min_days}–{tier.turnaround_max_days} days{" "}
+              {formatTurnaround(tier)}{" "}
               <span className="text-xs text-muted-foreground">(est.)</span>
             </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Card value</span>
             <span className="font-medium text-foreground">
-              {tier.max_card_value_cents === null
+              {tier.id === "fast_pass"
+                ? "Under $5,000"
+                : tier.max_card_value_cents === null
                 ? "Unlimited"
                 : `Up to $${(tier.max_card_value_cents / 100).toLocaleString()}`}
             </span>
@@ -184,10 +188,10 @@ function TierCard({
               <span className="text-muted-foreground">Grader notes included</span>
             </div>
           )}
-          {tier.includes_video && (
+          {tier.id === "fast_pass" && (
             <div className="flex items-center gap-2 text-sm">
               <span className={style.check}>✓</span>
-              <span className="text-muted-foreground">Video showcase</span>
+              <span className="text-muted-foreground">Skips the restoration queue</span>
             </div>
           )}
         </div>
@@ -205,7 +209,6 @@ export default async function TierSelectionPage() {
     admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null),
   ]);
 
-  // Try extended columns for tier overrides; fall back to basic
   const { data: extSettings, error: extErr } = await admin
     .from("restoration_settings")
     .select("tier, is_open, max_slots, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge");
@@ -222,19 +225,30 @@ export default async function TierSelectionPage() {
     if (row.restoration_tier) slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
   }
 
-  // Merge DB overrides on top of hardcoded defaults
   const tiers = defaultTiers.map((t) =>
     !extErr ? applyDbOverride(t, settingsMap[t.id] ?? null) : t
   );
 
   const topTiers    = tiers.filter((t) => ["regular", "expedited", "premium"].includes(t.id));
-  const bottomTiers = tiers.filter((t) => ["ultra_premium", "elite"].includes(t.id));
+  const midTiers    = tiers.filter((t) => ["ultra_premium"].includes(t.id));
+  const fastPass    = tiers.find((t) => t.id === "fast_pass");
+  const eliteTier   = tiers.find((t) => t.id === "elite");
 
   const sharedProps = { settingsMap, slotCounts, restorationsOpen };
 
+  // Diamond slot info for client component
+  const eliteSettings = settingsMap["elite"];
+  const eliteMaxSlots = eliteSettings?.max_slots ?? TIER_MAX_SLOTS["elite"] ?? null;
+  const eliteUsed = slotCounts["elite"] ?? 0;
+  const eliteSlotsLeft = eliteMaxSlots !== null ? Math.max(0, eliteMaxSlots - eliteUsed) : null;
+  const eliteIsSoldOut = eliteSettings?.is_open === false || (eliteSlotsLeft !== null && eliteSlotsLeft === 0);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      {/* Closed banner */}
+      {/* Countdown — shown when shop is closed */}
+      {!restorationsOpen && <CountdownBanner />}
+
+      {/* Closed text banner */}
       {!restorationsOpen && (
         <div className="bg-amber-50 border-b border-amber-200">
           <div className="max-w-5xl mx-auto px-6 py-4 text-center">
@@ -255,6 +269,18 @@ export default async function TierSelectionPage() {
             : "We're temporarily closed. Browse our pricing below and join the waitlist to be notified when we reopen."}
         </p>
 
+        {/* Fast Pass — featured at top */}
+        {fastPass && (
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs font-bold uppercase tracking-widest text-orange-500">⚡ Express Option</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            <TierCard tier={fastPass} {...sharedProps} />
+          </div>
+        )}
+
         {/* Top row: Bronze · Silver · Gold */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
           {topTiers.map((tier) => (
@@ -264,9 +290,16 @@ export default async function TierSelectionPage() {
 
         {/* Bottom row: Platinum · Diamond */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {bottomTiers.map((tier) => (
+          {midTiers.map((tier) => (
             <TierCard key={tier.id} tier={tier} {...sharedProps} />
           ))}
+          {eliteTier && (
+            <DiamondCard
+              slotsLeft={eliteSlotsLeft}
+              isSoldOut={eliteIsSoldOut}
+              restorationsOpen={restorationsOpen}
+            />
+          )}
         </div>
 
         {/* Turnaround disclaimer */}

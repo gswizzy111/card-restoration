@@ -156,7 +156,13 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                       }`}
                     >
                       <span className="block font-semibold">{t.name}</span>
-                      <span className="text-xs">{formatCents(t.price_cents)}/card · {t.turnaround_min_days}–{t.turnaround_max_days} days</span>
+                      <span className="text-xs">
+                        {t.pricing_type === "percentage"
+                          ? `${((t.pricing_rate ?? 0) * 100).toFixed(0)}% of value`
+                          : `${formatCents(t.price_cents)}/card`}
+                        {" · "}
+                        {t.turnaround_label ?? `${t.turnaround_min_days}–${t.turnaround_max_days} days`}
+                      </span>
                     </button>
                   );
                 })}

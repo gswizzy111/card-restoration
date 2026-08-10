@@ -17,7 +17,7 @@ const AddressSchema = z.object({
 });
 
 const BodySchema = z.object({
-  restoration_tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite"]).optional(),
+  restoration_tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite", "fast_pass"]).optional(),
   services: z.array(z.object({ id: z.string(), quantity: z.number().int().positive() })).optional(),
   cards: z.array(
     z.object({
@@ -29,7 +29,7 @@ const BodySchema = z.object({
       notes: z.string().optional(),
       photo_urls: z.array(z.string()),
       service_ids: z.array(z.string()),
-      tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite"]).optional(),
+      tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite", "fast_pass"]).optional(),
     })
   ).min(1),
   customer: z.object({

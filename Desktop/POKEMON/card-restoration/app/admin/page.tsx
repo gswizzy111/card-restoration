@@ -12,19 +12,21 @@ import { SyncTrackingButton } from "./sync-tracking-button";
 import { SyncDeliveredButton } from "./sync-delivered-button";
 
 const TIER_BADGES: Record<string, { label: string; color: string }> = {
-  regular:       { label: "Bronze",   color: "bg-amber-100 text-amber-700" },
-  expedited:     { label: "Silver",   color: "bg-slate-100 text-slate-600" },
-  premium:       { label: "Gold",     color: "bg-yellow-100 text-yellow-700" },
-  ultra_premium: { label: "Platinum", color: "bg-blue-100 text-blue-600" },
-  elite:         { label: "Diamond",  color: "bg-cyan-100 text-cyan-700" },
+  regular:       { label: "Bronze",    color: "bg-amber-100 text-amber-700" },
+  expedited:     { label: "Silver",    color: "bg-slate-100 text-slate-600" },
+  premium:       { label: "Gold",      color: "bg-yellow-100 text-yellow-700" },
+  ultra_premium: { label: "Platinum",  color: "bg-blue-100 text-blue-600" },
+  elite:         { label: "Diamond",   color: "bg-cyan-100 text-cyan-700" },
+  fast_pass:     { label: "Fast Pass", color: "bg-orange-100 text-orange-700" },
 };
 
 const TIER_STYLES: Record<string, { label: string; cls: string }> = {
-  regular:       { label: "Bronze",   cls: "bg-amber-100 text-amber-700" },
-  expedited:     { label: "Silver",   cls: "bg-slate-100 text-slate-600" },
-  premium:       { label: "Gold",     cls: "bg-yellow-100 text-yellow-700" },
-  ultra_premium: { label: "Platinum", cls: "bg-blue-100 text-blue-600" },
-  elite:         { label: "Diamond",  cls: "bg-cyan-100 text-cyan-700" },
+  regular:       { label: "Bronze",    cls: "bg-amber-100 text-amber-700" },
+  expedited:     { label: "Silver",    cls: "bg-slate-100 text-slate-600" },
+  premium:       { label: "Gold",      cls: "bg-yellow-100 text-yellow-700" },
+  ultra_premium: { label: "Platinum",  cls: "bg-blue-100 text-blue-600" },
+  elite:         { label: "Diamond",   cls: "bg-cyan-100 text-cyan-700" },
+  fast_pass:     { label: "Fast Pass", cls: "bg-orange-100 text-orange-700" },
 };
 
 export const dynamic = "force-dynamic";
@@ -92,10 +94,12 @@ function businessDaysUntil(target: Date): number {
 }
 
 const TIER_TURNAROUND_DAYS: Record<string, number> = {
-  regular:       20,
-  expedited:     15,
-  premium:       8,
-  ultra_premium: 5,
+  regular:       90,
+  expedited:     45,
+  premium:       20,
+  ultra_premium: 15,
+  elite:         10,
+  fast_pass:     5,
 };
 
 export default async function AdminPage({
