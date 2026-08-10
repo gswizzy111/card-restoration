@@ -50,30 +50,22 @@ export async function POST() {
       console.error("Failed to email", person.email, e);
     }
 
-    // Send SMS via Twilio if configured
-    const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-    const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-    const twilioFrom = process.env.TWILIO_FROM_NUMBER;
-
-    if (twilioSid && twilioToken && twilioFrom && person.phone) {
+    // Send SMS via Textbelt
+    const textbeltKey = process.env.TEXTBELT_API_KEY;
+    if (textbeltKey && person.phone) {
       try {
-        const body = new URLSearchParams({
-          From: twilioFrom,
-          To: person.phone,
-          Body: `Hi ${person.name.split(" ")[0] || "there"}! ${businessName} is now accepting restoration orders. Book your spot: ${bookingUrl}`,
+        const res = await fetch("https://textbelt.com/text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone: person.phone,
+            message: `Hi ${person.name.split(" ")[0] || "there"}! ${businessName} is now accepting restoration orders. Book your spot: ${bookingUrl}`,
+            key: textbeltKey,
+          }),
         });
-        const res = await fetch(
-          `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString("base64")}`,
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: body.toString(),
-          }
-        );
-        if (res.ok) textsSent++;
+        const data = await res.json();
+        if (data.success) textsSent++;
+        else console.error("Textbelt error", data.error);
       } catch (e) {
         console.error("Failed to text", person.phone, e);
       }
