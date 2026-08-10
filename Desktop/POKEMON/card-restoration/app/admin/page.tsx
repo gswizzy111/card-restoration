@@ -10,6 +10,7 @@ import type { RestorationTierId } from "@/lib/restoration-tiers";
 import type { Track } from "shippo/models/components";
 import { SyncTrackingButton } from "./sync-tracking-button";
 import { SyncDeliveredButton } from "./sync-delivered-button";
+import { ResendConfirmationsButton } from "./resend-confirmations-button";
 
 const TIER_BADGES: Record<string, { label: string; color: string }> = {
   regular:       { label: "Bronze",    color: "bg-amber-100 text-amber-700" },
@@ -158,7 +159,8 @@ export default async function AdminPage({
                 {matchedOrders?.length ?? 0} order{matchedOrders?.length !== 1 ? "s" : ""} matching &ldquo;{query}&rdquo;
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              <ResendConfirmationsButton />
               <Suspense>
                 <CardSearch />
               </Suspense>
