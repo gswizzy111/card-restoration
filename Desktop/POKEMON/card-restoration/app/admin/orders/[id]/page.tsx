@@ -291,7 +291,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 />
               </div>
               <div className="flex flex-col gap-2">
-                {services?.map((s) => (
+                {services?.filter((s) => s.service_id !== "instagram_feature").map((s) => (
                   <div key={s.id} className="flex justify-between text-sm">
                     <span className="text-foreground">{s.service_name} × {s.quantity}</span>
                     <span className="font-bold text-foreground">{formatCurrency(s.price_cents * s.quantity)}</span>
@@ -309,6 +309,92 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 </div>
               </div>
             </div>
+
+            {/* Payment Breakdown */}
+            {(() => {
+              const subtotalCents: number = (order.subtotal_cents as number) ?? 0;
+              const discountCents: number = (order.discount_cents as number) ?? 0;
+              const discountPct: number = (order.discount_percent as number) ?? 0;
+              const shippingCents: number = (order.shipping_cents as number) ?? 0;
+              const totalCents: number = order.total_cents ?? 0;
+
+              // Re-compute tax using same rate as checkout
+              const TAX_RATE = 0.06625;
+              const taxCents = Math.round((subtotalCents - discountCents) * TAX_RATE);
+
+              // Slab crack fee from cards
+              const slabCount = (cards ?? []).filter((c) => (c as Record<string, unknown>).needs_slab_crack).length;
+              const slabCents = slabCount * 700;
+
+              // Instagram feature from order_services
+              const instagramSvc = (services ?? []).find((s) => s.service_id === "instagram_feature");
+              const instagramCents = instagramSvc ? (instagramSvc.price_cents as number) : 0;
+
+              // Re-compute insurance using same rate as checkout
+              const declaredValueCents: number = (order.insurance_declared_value_cents as number) ?? 0;
+              const insuranceType: string | null = (order.insurance_type as string | null) ?? null;
+              let insuranceCents = 0;
+              if (declaredValueCents > 0 && insuranceType && insuranceType !== "none") {
+                const base = Math.max(Math.round(declaredValueCents * 0.01), 100);
+                const perDir = Math.round(base * 1.2);
+                insuranceCents = insuranceType === "round_trip" ? perDir * 2 : perDir;
+              }
+
+              // Signature confirmation: whatever's unaccounted for (up to $5)
+              const knownSum = subtotalCents - discountCents + taxCents + shippingCents + instagramCents + insuranceCents + slabCents;
+              const residual = totalCents - knownSum;
+              const signatureCents = residual >= 400 && residual <= 600 ? 500 : 0;
+              const gcApplied = Math.max(0, knownSum + signatureCents - totalCents);
+
+              const rows: { label: string; cents: number; style?: string }[] = [];
+
+              // Restoration per card
+              if ((cards ?? []).length > 0 && subtotalCents > 0) {
+                const uniqueTiers = [...new Set((cards ?? []).map((c) => (c as Record<string,unknown>).tier ?? order.restoration_tier).filter(Boolean))];
+                if (uniqueTiers.length <= 1) {
+                  rows.push({ label: `Restoration — ${order.restoration_tier ?? "service"} (${cards?.length ?? 1} card${(cards?.length ?? 1) !== 1 ? "s" : ""})`, cents: subtotalCents });
+                } else {
+                  rows.push({ label: `Restoration (${cards?.length ?? 1} cards, mixed tiers)`, cents: subtotalCents });
+                }
+              } else if (subtotalCents > 0) {
+                rows.push({ label: "Restoration", cents: subtotalCents });
+              }
+
+              if (slabCents > 0) rows.push({ label: `Slab crack × ${slabCount}`, cents: slabCents });
+              if (instagramCents > 0) rows.push({ label: "Instagram Feature", cents: instagramCents });
+              if (discountCents > 0) rows.push({ label: `Discount${discountPct > 0 ? ` (${discountPct}% off)` : ""}`, cents: -discountCents, style: "text-green-600" });
+              rows.push({ label: "Sales Tax (6.625%)", cents: taxCents, style: "text-muted-foreground" });
+              if (shippingCents > 0) rows.push({ label: "Shipping (prepaid label)", cents: shippingCents, style: "text-muted-foreground" });
+              if (insuranceCents > 0) rows.push({ label: `Insured Shipping (${insuranceType === "round_trip" ? "round trip" : "inbound"})`, cents: insuranceCents, style: "text-muted-foreground" });
+              if (signatureCents > 0) rows.push({ label: "Signature Confirmation", cents: signatureCents, style: "text-muted-foreground" });
+              if (gcApplied > 0) rows.push({ label: "Gift Card Applied", cents: -gcApplied, style: "text-green-600" });
+
+              return (
+                <div className="bg-white rounded-xl border border-border p-6">
+                  <h2 className="font-heading font-black text-lg text-foreground mb-4">Payment Breakdown</h2>
+                  <div className="flex flex-col gap-2">
+                    {rows.map((row, i) => (
+                      <div key={i} className={`flex justify-between text-sm ${row.style ?? "text-foreground"}`}>
+                        <span>{row.label}</span>
+                        <span className={row.cents < 0 ? "font-semibold" : "font-medium"}>
+                          {row.cents < 0 ? `−${formatCurrency(-row.cents)}` : formatCurrency(row.cents)}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="border-t border-border mt-1 pt-3 flex justify-between font-black text-foreground text-base">
+                      <span>Total Charged</span>
+                      <span className="text-primary">{formatCurrency(totalCents)}</span>
+                    </div>
+                    {order.affiliate_code && (
+                      <p className="text-xs text-muted-foreground pt-1">Affiliate/coupon: <span className="font-mono font-semibold">{order.affiliate_code as string}</span></p>
+                    )}
+                    {order.gift_card_code && (
+                      <p className="text-xs text-muted-foreground">Gift card: <span className="font-mono font-semibold">{order.gift_card_code as string}</span></p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Right column */}
