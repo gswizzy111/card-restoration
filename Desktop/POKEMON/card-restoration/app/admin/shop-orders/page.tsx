@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ReturnLabelButton } from "./return-label-button";
 import { KitStatusUpdater } from "./status-updater";
 import { KitCustomerEditor } from "./kit-customer-editor";
+import { KitTrackingEditor } from "./kit-tracking-editor";
 import { RevenueChart } from "../revenue-chart";
 import { SyncKitOrdersButton } from "./sync-kit-orders-button";
 import { SyncShopDeliveredButton } from "./sync-shop-delivered-button";
@@ -24,6 +25,7 @@ type ShopOrderItem = {
   product_name: string;
   quantity: number;
   price_cents: number;
+  size?: string | null;
 };
 
 type ShippingAddress = {
@@ -223,6 +225,11 @@ export default async function ShopOrdersPage() {
                         }
                       />
                     )}
+                    <KitTrackingEditor
+                      orderId={order.id}
+                      initialTracking={(order as any).tracking_number ?? null}
+                      initialCarrier={(order as any).carrier ?? null}
+                    />
                   </div>
                 </div>
               </div>
