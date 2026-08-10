@@ -28,6 +28,17 @@ export async function PATCH(request: Request) {
     .from("restoration_settings")
     .upsert(parsed.data, { onConflict: "tier" });
 
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // Column doesn't exist yet — retry without display_slots_remaining
+    if (error.code === "42703" || error.message.includes("display_slots_remaining")) {
+      const { display_slots_remaining: _dsr, ...dataWithout } = parsed.data;
+      const { error: error2 } = await admin
+        .from("restoration_settings")
+        .upsert(dataWithout, { onConflict: "tier" });
+      if (error2) return Response.json({ error: error2.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+    return Response.json({ error: error.message }, { status: 500 });
+  }
   return Response.json({ ok: true });
 }

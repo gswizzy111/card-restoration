@@ -9,28 +9,39 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-const EXTENDED_SELECT = "tier, is_open, max_slots, display_slots_remaining, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge";
+const FULL_SELECT     = "tier, is_open, max_slots, display_slots_remaining, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge";
+const EXTENDED_SELECT = "tier, is_open, max_slots, display_name, price_cents, pricing_rate, min_card_value_cents, turnaround_min_days, turnaround_max_days, description, includes_notes, includes_video, badge";
 const BASIC_SELECT    = "tier, is_open, max_slots";
 
 export default async function StoreSettingsPage() {
   const admin = createAdminClient();
 
-  // Try to load extended tier settings; fall back to basic if migration hasn't run
+  // Try full select (all columns including display_slots_remaining)
+  // Fall back to extended (without display_slots_remaining) if that column isn't migrated yet
+  // Fall back to basic if even the extended columns haven't been migrated
   let tierSettings: Record<string, unknown>[] | null = null;
   let hasExtendedColumns = false;
 
-  const { data: extData, error: extErr } = await admin
+  const { data: fullData, error: fullErr } = await admin
     .from("restoration_settings")
-    .select(EXTENDED_SELECT);
+    .select(FULL_SELECT);
 
-  if (!extErr) {
-    tierSettings = extData as Record<string, unknown>[];
+  if (!fullErr) {
+    tierSettings = fullData as Record<string, unknown>[];
     hasExtendedColumns = true;
   } else {
-    const { data: basicData } = await admin
+    const { data: extData, error: extErr } = await admin
       .from("restoration_settings")
-      .select(BASIC_SELECT);
-    tierSettings = basicData as Record<string, unknown>[] | null;
+      .select(EXTENDED_SELECT);
+    if (!extErr) {
+      tierSettings = extData as Record<string, unknown>[];
+      hasExtendedColumns = true;
+    } else {
+      const { data: basicData } = await admin
+        .from("restoration_settings")
+        .select(BASIC_SELECT);
+      tierSettings = basicData as Record<string, unknown>[] | null;
+    }
   }
 
   const [
@@ -152,11 +163,16 @@ ON CONFLICT (tier) DO NOTHING;`}</pre>
   ADD COLUMN IF NOT EXISTS description TEXT,
   ADD COLUMN IF NOT EXISTS includes_notes BOOLEAN,
   ADD COLUMN IF NOT EXISTS includes_video BOOLEAN,
-  ADD COLUMN IF NOT EXISTS badge TEXT;
+  ADD COLUMN IF NOT EXISTS badge TEXT,
+  ADD COLUMN IF NOT EXISTS display_slots_remaining INTEGER;
 
--- Make sure all 5 tiers have a row
+-- Also needed for card completion tracking:
+ALTER TABLE cards
+  ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT false;
+
+-- Make sure all tiers have a row
 INSERT INTO restoration_settings (tier, is_open, max_slots)
-VALUES ('elite', true, NULL)
+VALUES ('elite', true, NULL), ('fast_pass', true, NULL)
 ON CONFLICT (tier) DO NOTHING;`}</pre>
           </div>
         )}

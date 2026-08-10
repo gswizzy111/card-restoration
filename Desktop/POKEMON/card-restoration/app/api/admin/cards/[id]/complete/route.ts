@@ -14,11 +14,21 @@ export async function POST(
   const admin = createAdminClient();
 
   const { data: card, error: fetchErr } = await admin.from("cards").select("completed").eq("id", id).single();
-  if (fetchErr) return Response.json({ error: fetchErr.message }, { status: 500 });
+
+  if (fetchErr) {
+    // Column doesn't exist yet — return a no-op
+    if (fetchErr.code === "42703" || fetchErr.message.includes("completed")) {
+      return Response.json({ completed: false, migration_needed: true });
+    }
+    return Response.json({ error: fetchErr.message }, { status: 500 });
+  }
   if (!card) return Response.json({ error: "Card not found" }, { status: 404 });
 
   const newState = !card.completed;
-  await admin.from("cards").update({ completed: newState }).eq("id", id);
+  const { error: updateErr } = await admin.from("cards").update({ completed: newState }).eq("id", id);
+  if (updateErr && (updateErr.code === "42703" || updateErr.message.includes("completed"))) {
+    return Response.json({ completed: false, migration_needed: true });
+  }
 
   return Response.json({ completed: newState });
 }
