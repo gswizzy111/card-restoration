@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ComposeForm } from "./compose-form";
+import { ResendConfirmationsButton } from "@/app/admin/resend-confirmations-button";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,22 @@ export default async function EmailBlastPage() {
           <p className="text-muted-foreground text-sm mt-1">
             {contacts.length} unique contacts across restoration orders, kit orders, and waitlists
           </p>
+        </div>
+
+        {/* Resend confirmation emails */}
+        <div className="bg-white rounded-xl border border-border p-6 mb-8">
+          <div className="flex items-start justify-between gap-6 flex-wrap">
+            <div>
+              <h2 className="font-heading font-black text-lg text-foreground mb-1">Resend Order Confirmations</h2>
+              <p className="text-sm text-muted-foreground max-w-md">
+                Resends the order confirmation email (with shipping address / label) to every customer who paid today.
+                Use this if your Resend limit was hit and some customers never received their confirmation.
+              </p>
+            </div>
+            <div className="shrink-0">
+              <ResendConfirmationsButton />
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
