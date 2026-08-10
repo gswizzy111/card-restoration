@@ -4,7 +4,7 @@ import { getRestorationsOpen } from "@/lib/store-config";
 import { KitRow } from "./kit-row";
 import { TierRow } from "./tier-row";
 import { RestorationsToggle } from "./restorations-toggle";
-import { NotifyWaitlistButton } from "./notify-waitlist-button";
+import { WaitlistNotifier } from "./waitlist-notifier";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -35,22 +35,25 @@ export default async function StoreSettingsPage() {
 
   const [
     { data: products },
-    waitlistTotalRes,
-    waitlistPendingRes,
+    { data: waitlistRows },
     { data: paidOrders },
     restorationsOpen,
   ] = await Promise.all([
     admin.from("products").select("id, name, price_cents, inventory_count, display_order").eq("active", true).order("display_order", { ascending: true }),
-    admin.from("restoration_waitlist").select("*", { count: "exact", head: true }),
-    admin.from("restoration_waitlist").select("*", { count: "exact", head: true }).is("notified_at", null),
+    admin.from("restoration_waitlist").select("id, name, email, phone, notified_at").order("created_at", { ascending: false }),
     admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null),
     getRestorationsOpen(),
   ]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalWaitlist: number = (waitlistTotalRes as any)?.count ?? 0;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pendingWaitlist: number = (waitlistPendingRes as any)?.count ?? 0;
+  const waitlistPeople = (waitlistRows ?? []).map((w) => ({
+    id: w.id as string,
+    name: (w.name as string) ?? "",
+    email: (w.email as string) ?? "",
+    phone: (w.phone as string | null) ?? null,
+    notified_at: (w.notified_at as string | null) ?? null,
+  }));
+  const totalWaitlist = waitlistPeople.length;
+  const pendingWaitlist = waitlistPeople.filter((p) => !p.notified_at).length;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const settingsMap = Object.fromEntries((tierSettings ?? []).map((s: any) => [s.tier, s]));
@@ -175,17 +178,7 @@ ON CONFLICT (tier) DO NOTHING;`}</pre>
             </div>
           </div>
 
-          {pendingWaitlist === 0 ? (
-            <p className="text-sm text-muted-foreground">Everyone on the waitlist has already been notified.</p>
-          ) : (
-            <NotifyWaitlistButton count={pendingWaitlist} />
-          )}
-
-          {totalWaitlist > 0 && (
-            <p className="text-xs text-muted-foreground mt-3">
-              Clicking &ldquo;Notify&rdquo; sends an email (and text if Twilio is configured) to each un-notified customer and marks them as notified.
-            </p>
-          )}
+          <WaitlistNotifier people={waitlistPeople} />
         </div>
 
         {/* Kit Inventory */}

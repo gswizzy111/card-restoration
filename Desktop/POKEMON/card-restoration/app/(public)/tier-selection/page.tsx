@@ -176,14 +176,20 @@ function TierCard({
               <span className="text-xs text-muted-foreground">(est.)</span>
             </span>
           </div>
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-sm items-center">
             <span className="text-muted-foreground">Card value</span>
-            <span className="font-medium text-foreground">
+            <span className="font-medium text-foreground flex items-center gap-1">
               {tier.id === "fast_pass"
                 ? "Under $5,000"
                 : tier.max_card_value_cents === null
                 ? "Unlimited"
                 : `Up to $${(tier.max_card_value_cents / 100).toLocaleString()}`}
+              <span className="relative group">
+                <span className="text-xs text-muted-foreground cursor-help">*</span>
+                <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-max max-w-[180px] rounded-lg bg-gray-800 px-2.5 py-1.5 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-20 leading-snug">
+                  Current value, raw or graded
+                </span>
+              </span>
             </span>
           </div>
           {tier.includes_notes && (

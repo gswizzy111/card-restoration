@@ -118,9 +118,17 @@ export function DiamondCard({
             <span className="text-muted-foreground">Turnaround</span>
             <span className="font-medium text-foreground">5–10 business days <span className="text-xs text-muted-foreground">(est.)</span></span>
           </div>
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-sm items-center">
             <span className="text-muted-foreground">Card value</span>
-            <span className="font-medium text-foreground">$5,000+</span>
+            <span className="font-medium text-foreground flex items-center gap-1">
+              $5,000+
+              <span className="relative group">
+                <span className="text-xs text-muted-foreground cursor-help">*</span>
+                <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-max max-w-[180px] rounded-lg bg-gray-800 px-2.5 py-1.5 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-20 leading-snug">
+                  Current value, raw or graded
+                </span>
+              </span>
+            </span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <span className="text-cyan-500">✓</span>
