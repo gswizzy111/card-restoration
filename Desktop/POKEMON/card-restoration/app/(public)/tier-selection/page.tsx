@@ -104,6 +104,8 @@ function TierCard({
   const bannerLabel: string | null = maxSlots !== null
     ? isSoldOut
       ? `SOLD OUT · 0 / ${maxSlots} slots`
+      : !restorationsOpen
+      ? `0 / ${maxSlots} slots`
       : `${slotsLeft} / ${maxSlots} slots remaining`
     : isSoldOut
     ? "SOLD OUT"
@@ -223,8 +225,10 @@ export default async function TierSelectionPage() {
   const settingsMap = Object.fromEntries((settingsRaw as any[]).map((s) => [s.tier, s]));
 
   const slotCounts: Record<string, number> = {};
-  for (const row of paidOrders ?? []) {
-    if (row.restoration_tier) slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
+  if (restorationsOpen) {
+    for (const row of paidOrders ?? []) {
+      if (row.restoration_tier) slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
+    }
   }
 
   const tiers = defaultTiers.map((t) =>

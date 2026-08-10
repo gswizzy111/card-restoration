@@ -26,6 +26,8 @@ export function DiamondCard({
   const bannerLabel = slotsLeft !== null
     ? isSoldOut
       ? `SOLD OUT · 0 / ${maxSlots} slots`
+      : !restorationsOpen
+      ? `0 / ${maxSlots} slots`
       : `${slotsLeft} / ${maxSlots} slots remaining`
     : isSoldOut
     ? "SOLD OUT"
