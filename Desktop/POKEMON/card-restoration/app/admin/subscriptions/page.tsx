@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { CreateKitOrderButton } from "./create-kit-order-button";
+import { CancelSubscriptionButton } from "./cancel-button";
 
 export const dynamic = "force-dynamic";
 
@@ -223,8 +224,12 @@ export default async function AdminSubscriptionsPage() {
                     </Link>
                   )}
                   {pendingOrders.length === 0 && sub.status === "active" && (
-                    <div className="mt-2">
+                    <div className="mt-2 flex flex-col items-end gap-2">
                       <CreateKitOrderButton subscriptionId={sub.id} />
+                      <CancelSubscriptionButton
+                        subscriptionId={sub.id}
+                        customerName={sub.customer_name}
+                      />
                     </div>
                   )}
                 </div>

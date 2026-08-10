@@ -98,19 +98,22 @@ export async function POST(request: Request) {
     // Send SMS via Textbelt
     const textbeltKey = process.env.TEXTBELT_API_KEY;
     if (textbeltKey && person.phone) {
+      // Normalize to digits only, prepend +1 if 10 digits (US)
+      const digits = person.phone.replace(/\D/g, "");
+      const normalized = digits.length === 10 ? `+1${digits}` : `+${digits}`;
       try {
         const res = await fetch("https://textbelt.com/text", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            phone: person.phone,
+            phone: normalized,
             message: `${personalizedSms} ${bookingUrl}`,
             key: textbeltKey,
           }),
         });
         const data = await res.json();
         if (data.success) textsSent++;
-        else console.error("Textbelt error", data.error);
+        else console.error("Textbelt error for", normalized, data.error, data.errors);
       } catch (e) {
         console.error("Failed to text", person.phone, e);
       }

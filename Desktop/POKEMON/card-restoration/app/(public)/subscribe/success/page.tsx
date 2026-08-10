@@ -18,6 +18,12 @@ export default function SubscribeSuccessPage() {
         >
           Back to home
         </Link>
+        <p className="text-xs text-muted-foreground mt-6">
+          Need to cancel?{" "}
+          <Link href="/subscribe/manage" className="underline hover:text-foreground">
+            Manage your subscription
+          </Link>
+        </p>
       </div>
     </div>
   );
