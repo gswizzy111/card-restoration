@@ -13,7 +13,8 @@ export async function POST(
   const { id } = await params;
   const admin = createAdminClient();
 
-  const { data: card } = await admin.from("cards").select("completed").eq("id", id).single();
+  const { data: card, error: fetchErr } = await admin.from("cards").select("completed").eq("id", id).single();
+  if (fetchErr) return Response.json({ error: fetchErr.message }, { status: 500 });
   if (!card) return Response.json({ error: "Card not found" }, { status: 404 });
 
   const newState = !card.completed;
