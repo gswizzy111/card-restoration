@@ -13,6 +13,7 @@ import { InboundTrackingEditor } from "./inbound-tracking-editor";
 import { OrderEditor } from "./order-editor";
 import { CustomerEditor } from "./customer-editor";
 import { DeleteOrderButton } from "./delete-order-button";
+import { CardCompletionToggle } from "./card-completion-toggle";
 import type { Track } from "shippo/models/components";
 
 export const dynamic = "force-dynamic";
@@ -204,9 +205,30 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
 
             {/* Cards */}
             <div className="bg-white rounded-xl border border-border p-6">
-              <h2 className="font-heading font-black text-lg text-foreground mb-4">
-                Cards ({cards?.length ?? 0})
-              </h2>
+              {(() => {
+                const total = cards?.length ?? 0;
+                const done = (cards ?? []).filter((c) => c.completed).length;
+                const allDone = total > 0 && done === total;
+                return (
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-heading font-black text-lg text-foreground">
+                      Cards ({total})
+                    </h2>
+                    {total > 0 && (
+                      <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold ${
+                        allDone ? "bg-green-100 text-green-700" : done > 0 ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500"
+                      }`}>
+                        <span>{done}/{total} done</span>
+                        {allDone && (
+                          <svg viewBox="0 0 10 8" fill="none" className="w-3 h-3">
+                            <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="flex flex-col gap-4">
                 {cards?.map((card, i) => {
                   const CARD_TIER_BADGE: Record<string, { label: string; cls: string }> = {
@@ -218,12 +240,19 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                   const cardTier = card.tier ?? order.restoration_tier;
                   const tierBadge = cardTier ? (CARD_TIER_BADGE[cardTier] ?? { label: cardTier, cls: "bg-gray-100 text-gray-600" }) : null;
                   return (
-                  <div key={card.id} className="p-4 rounded-lg bg-secondary/40 border border-border">
-                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <p className="font-bold text-foreground">{i + 1}. {card.card_name}</p>
-                      {tierBadge && (
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tierBadge.cls}`}>{tierBadge.label}</span>
-                      )}
+                  <div key={card.id} className={`p-4 rounded-lg border transition-colors ${
+                    card.completed ? "bg-green-50 border-green-200" : "bg-secondary/40 border-border"
+                  }`}>
+                    <div className="flex items-start justify-between gap-3 mb-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className={`font-bold ${card.completed ? "text-green-700 line-through decoration-green-400" : "text-foreground"}`}>
+                          {i + 1}. {card.card_name}
+                        </p>
+                        {tierBadge && (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tierBadge.cls}`}>{tierBadge.label}</span>
+                        )}
+                      </div>
+                      <CardCompletionToggle cardId={card.id} initialCompleted={!!card.completed} />
                     </div>
                     {card.card_set && <p className="text-sm text-muted-foreground">Set: {card.card_set}</p>}
                     {card.card_year && <p className="text-sm text-muted-foreground">Year: {card.card_year}</p>}

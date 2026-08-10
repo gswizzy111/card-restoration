@@ -101,9 +101,9 @@ const TIER_TURNAROUND_DAYS: Record<string, number> = {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tab?: string; tier?: string; period?: string; notes?: string }>;
+  searchParams: Promise<{ q?: string; tab?: string; tier?: string; period?: string; notes?: string; sort?: string }>;
 }) {
-  const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter } = await searchParams;
+  const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter, sort: sortMode } = await searchParams;
   const query = q?.trim() ?? "";
   const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : "orders";
   const activePeriod = shippedPeriod === "week" ? "week" : shippedPeriod === "month" ? "month" : shippedPeriod === "all" ? "all" : "today";
@@ -316,15 +316,17 @@ export default async function AdminPage({
     });
   }
 
-  // Card counts for fulfillment queue
+  // Card counts + completion for fulfillment queue
   const fulfillmentIds = (fulfillmentOrders ?? []).map((o) => o.id);
   const { data: fulfillmentCards } = fulfillmentIds.length > 0
-    ? await admin.from("cards").select("order_id").in("order_id", fulfillmentIds)
+    ? await admin.from("cards").select("order_id, completed").in("order_id", fulfillmentIds)
     : { data: [] };
 
   const cardCountByOrder: Record<string, number> = {};
+  const completedCountByOrder: Record<string, number> = {};
   for (const row of fulfillmentCards ?? []) {
     cardCountByOrder[row.order_id] = (cardCountByOrder[row.order_id] ?? 0) + 1;
+    if (row.completed) completedCountByOrder[row.order_id] = (completedCountByOrder[row.order_id] ?? 0) + 1;
   }
 
   // Find when each fulfillment order was marked received (for accurate "days since received")
@@ -341,8 +343,18 @@ export default async function AdminPage({
     if (!receivedAtByOrder[ev.order_id]) receivedAtByOrder[ev.order_id] = ev.created_at;
   }
 
-  // Sort fulfillment orders by business-day due date (most urgent first)
+  // Sort fulfillment orders by due date (default) or completion progress
   const sortedFulfillmentOrders = [...(fulfillmentOrders ?? [])].sort((a, b) => {
+    if (sortMode === "completion") {
+      const totalA = cardCountByOrder[a.id] ?? 0;
+      const doneA = completedCountByOrder[a.id] ?? 0;
+      const totalB = cardCountByOrder[b.id] ?? 0;
+      const doneB = completedCountByOrder[b.id] ?? 0;
+      const pctA = totalA > 0 ? doneA / totalA : 0;
+      const pctB = totalB > 0 ? doneB / totalB : 0;
+      if (pctB !== pctA) return pctB - pctA; // most complete first
+      return doneB - doneA;
+    }
     const recA = receivedAtByOrder[a.id] ?? a.created_at;
     const recB = receivedAtByOrder[b.id] ?? b.created_at;
     const daysA = TIER_TURNAROUND_DAYS[(a.restoration_tier as string) ?? "regular"] ?? 20;
@@ -722,21 +734,41 @@ export default async function AdminPage({
         {/* ── FULFILLMENT TAB ── */}
         {activeTab === "fulfillment" && (
           <>
-            {/* Tier filter */}
-            <div className="flex gap-2 flex-wrap mb-3">
-              {[["all", "All Tiers"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"]].map(([val, label]) => (
-                <Link
-                  key={val}
-                  href={`/admin?tab=fulfillment&tier=${val}`}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
-                    (tierFilter ?? "all") === val
-                      ? "bg-foreground text-background border-foreground"
-                      : "bg-white text-muted-foreground border-border hover:border-foreground"
-                  }`}
-                >
-                  {label}
-                </Link>
-              ))}
+            {/* Tier filter + sort */}
+            <div className="flex gap-2 flex-wrap mb-3 items-center">
+              {[["all", "All Tiers"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"]].map(([val, label]) => {
+                const sortSuffix = sortMode === "completion" ? "&sort=completion" : "";
+                return (
+                  <Link
+                    key={val}
+                    href={`/admin?tab=fulfillment&tier=${val}${sortSuffix}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                      (tierFilter ?? "all") === val
+                        ? "bg-foreground text-background border-foreground"
+                        : "bg-white text-muted-foreground border-border hover:border-foreground"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
+              <div className="h-4 w-px bg-border mx-1" />
+              {[["due", "Sort: Due Date"], ["completion", "Sort: Most Complete"]].map(([val, label]) => {
+                const tierSuffix = tierFilter && tierFilter !== "all" ? `&tier=${tierFilter}` : "";
+                return (
+                  <Link
+                    key={val}
+                    href={`/admin?tab=fulfillment${tierSuffix}&sort=${val}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                      (sortMode ?? "due") === val
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-white text-muted-foreground border-border hover:border-foreground"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
             </div>
 
             {fulfillmentCount === 0 ? (
@@ -757,7 +789,7 @@ export default async function AdminPage({
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Order</th>
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tier</th>
-                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Cards</th>
+                      <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Progress</th>
                       <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Biz Days In</th>
                       <th className="text-center px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Biz Days Left</th>
                       <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
@@ -803,7 +835,17 @@ export default async function AdminPage({
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-center font-bold text-foreground">{cards}</td>
+                          <td className="px-4 py-3 text-center">
+                            {(() => {
+                              const done = completedCountByOrder[order.id] ?? 0;
+                              const allDone = cards > 0 && done === cards;
+                              return (
+                                <span className={`font-bold text-sm ${allDone ? "text-green-600" : done > 0 ? "text-yellow-600" : "text-foreground"}`}>
+                                  {done}/{cards}
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td className="px-4 py-3 text-center">
                             {bizDaysIn !== null
                               ? <span className="font-bold text-sm text-foreground">{bizDaysIn}d</span>
