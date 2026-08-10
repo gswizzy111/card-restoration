@@ -95,8 +95,8 @@ function TierCard({
   const Icon = ICON_MAP[tier.id as keyof typeof ICON_MAP] ?? CheckCircle;
 
   const s = settingsMap[tier.id];
-  // DB max_slots takes priority; fall back to site-config hardcoded slots
-  const maxSlots = s?.max_slots ?? TIER_MAX_SLOTS[tier.id] ?? null;
+  // Hardcoded site-config always wins; DB max_slots is ignored
+  const maxSlots = TIER_MAX_SLOTS[tier.id] ?? null;
   const usedSlots = slotCounts[tier.id] ?? 0;
   const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
   const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
@@ -243,8 +243,7 @@ export default async function TierSelectionPage() {
   const sharedProps = { settingsMap, slotCounts, restorationsOpen };
 
   // Diamond slot info for client component
-  const eliteSettings = settingsMap["elite"];
-  const eliteMaxSlots = eliteSettings?.max_slots ?? TIER_MAX_SLOTS["elite"] ?? null;
+  const eliteMaxSlots = TIER_MAX_SLOTS["elite"] ?? null;
   const eliteUsed = slotCounts["elite"] ?? 0;
   const eliteSlotsLeft = eliteMaxSlots !== null ? Math.max(0, eliteMaxSlots - eliteUsed) : null;
   const eliteIsSoldOut = eliteSettings?.is_open === false || (eliteSlotsLeft !== null && eliteSlotsLeft === 0);
