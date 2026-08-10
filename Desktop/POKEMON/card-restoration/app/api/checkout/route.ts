@@ -233,31 +233,38 @@ export async function POST(request: Request) {
     country: "US",
   };
 
+  // Build insert — only include optional columns when they have values so missing
+  // DB columns (not yet migrated) don't cause every order to fail.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const orderPayload: Record<string, any> = {
+    customer_email: data.customer.email,
+    customer_name: data.customer.name,
+    customer_phone: data.customer.phone,
+    ship_from_address: shipFromAddress,
+    ship_to_address: shipToAddress,
+    inbound_method: data.shipping_method,
+    inbound_carrier: data.shipping_rate?.carrier ?? null,
+    inbound_service_level: data.shipping_rate?.service_level ?? null,
+    subtotal_cents: subtotalCents,
+    discount_cents: discountCents,
+    discount_percent: discountPercent,
+    shipping_cents: shippingCents,
+    total_cents: totalCents,
+    customer_notes: data.customer_notes ?? null,
+    affiliate_code: data.affiliate_code ?? null,
+    restoration_tier: restorationTier ?? null,
+    status: "awaiting_payment",
+    payment_status: "pending",
+  };
+  if (INSURANCE_ENABLED && data.insurance_declared_value_cents) {
+    orderPayload.insurance_declared_value_cents = data.insurance_declared_value_cents;
+    orderPayload.insurance_type = data.insurance_type ?? null;
+  }
+
   // Create order in DB
   const { data: order, error: orderErr } = await admin
     .from("orders")
-    .insert({
-      customer_email: data.customer.email,
-      customer_name: data.customer.name,
-      customer_phone: data.customer.phone,
-      ship_from_address: shipFromAddress,
-      ship_to_address: shipToAddress,
-      inbound_method: data.shipping_method,
-      inbound_carrier: data.shipping_rate?.carrier ?? null,
-      inbound_service_level: data.shipping_rate?.service_level ?? null,
-      subtotal_cents: subtotalCents,
-      discount_cents: discountCents,
-      discount_percent: discountPercent,
-      shipping_cents: shippingCents,
-      total_cents: totalCents,
-      customer_notes: data.customer_notes ?? null,
-      affiliate_code: data.affiliate_code ?? null,
-      restoration_tier: restorationTier ?? null,
-      insurance_declared_value_cents: (INSURANCE_ENABLED && data.insurance_declared_value_cents) ? data.insurance_declared_value_cents : null,
-      insurance_type: (INSURANCE_ENABLED && data.insurance_type) ? data.insurance_type : null,
-      status: "awaiting_payment",
-      payment_status: "pending",
-    })
+    .insert(orderPayload)
     .select("id, order_number")
     .single();
   if (orderErr || !order) {
