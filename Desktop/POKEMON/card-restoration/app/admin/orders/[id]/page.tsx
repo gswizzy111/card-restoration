@@ -14,6 +14,7 @@ import { OrderEditor } from "./order-editor";
 import { CustomerEditor } from "./customer-editor";
 import { DeleteOrderButton } from "./delete-order-button";
 import { CardCompletionToggle } from "./card-completion-toggle";
+import { RefundButton } from "./refund-button";
 import type { Track } from "shippo/models/components";
 
 export const dynamic = "force-dynamic";
@@ -391,6 +392,18 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                     {order.gift_card_code && (
                       <p className="text-xs text-muted-foreground">Gift card: <span className="font-mono font-semibold">{order.gift_card_code as string}</span></p>
                     )}
+                    {((order.refunded_cents as number) ?? 0) > 0 && (
+                      <div className="border-t border-red-200 mt-2 pt-2 flex justify-between text-sm text-red-600 font-semibold">
+                        <span>Refunded</span>
+                        <span>−{formatCurrency((order.refunded_cents as number))}</span>
+                      </div>
+                    )}
+                    {((order.refunded_cents as number) ?? 0) > 0 && (
+                      <div className="flex justify-between text-sm font-black text-foreground">
+                        <span>Net Collected</span>
+                        <span>{formatCurrency(Math.max(0, totalCents - ((order.refunded_cents as number) ?? 0)))}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -415,6 +428,18 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 zip={address?.zip}
               />
             </div>
+
+            {/* Refund */}
+            {order.payment_status === "paid" || order.payment_status === "partially_refunded" || order.payment_status === "refunded" ? (
+              <div className="bg-white rounded-xl border border-border p-6">
+                <h2 className="font-heading font-black text-lg text-foreground mb-3">Refund</h2>
+                <RefundButton
+                  orderId={order.id}
+                  totalCents={order.total_cents as number}
+                  alreadyRefundedCents={(order.refunded_cents as number) ?? 0}
+                />
+              </div>
+            ) : null}
 
             {/* Shipping */}
             <div className="bg-white rounded-xl border border-border p-6">

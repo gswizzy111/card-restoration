@@ -39,7 +39,7 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
       return q;
     })(),
     (() => {
-      let q = admin.from("orders").select("total_cents, restoration_tier, created_at").not("status", "in", '("cancelled","awaiting_payment")');
+      let q = admin.from("orders").select("total_cents, refunded_cents, restoration_tier, created_at").not("status", "in", '("cancelled","awaiting_payment")');
       if (start) q = q.gte("created_at", start);
       return q;
     })(),
@@ -93,14 +93,19 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
 
   const TIER_LABELS: Record<string, string> = { regular: "Bronze", expedited: "Silver", premium: "Gold", ultra_premium: "Platinum", elite: "Diamond" };
 
+  let totalRefundedCents = 0;
+
   for (const order of restorationOrders) {
     const tier = order.restoration_tier ?? "regular";
-    const revenue = order.total_cents ?? 0;
+    const gross = order.total_cents ?? 0;
+    const refunded = (order as Record<string, unknown>).refunded_cents as number ?? 0;
+    const revenue = Math.max(0, gross - refunded);
     const costKey = `${tier}_cents` as keyof typeof costConfig.restoration;
     const cogs = costConfig.restoration[costKey] ?? 0;
 
     restRevenue += revenue;
     restCogs += cogs;
+    totalRefundedCents += refunded;
 
     if (!tierStats[tier]) tierStats[tier] = { label: TIER_LABELS[tier] ?? tier, orders: 0, revenue_cents: 0, cogs_cents: 0 };
     tierStats[tier].orders += 1;
@@ -155,6 +160,9 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
             <Row label="  Shipping collected" value={formatCurrency(kitShipping)} muted />
             <Row label="  Tax owed (6.625%)" value={formatCurrency(taxOwed)} muted />
             <Row label="Restoration Services" value={formatCurrency(restRevenue)} />
+            {totalRefundedCents > 0 && (
+              <Row label="  Refunds issued" value={`−${formatCurrency(totalRefundedCents)}`} muted />
+            )}
             <div className="border-t border-border pt-2.5 mt-1">
               <Row label="Total Revenue" value={formatCurrency(totalRevenue)} bold />
             </div>
