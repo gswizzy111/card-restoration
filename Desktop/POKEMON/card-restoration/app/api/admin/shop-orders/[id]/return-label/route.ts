@@ -131,8 +131,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const admin = createAdminClient();
 
-  // Try to save to the new `labels` column; always also update the legacy fields
-  await (admin as any)
+  // Try saving with the labels JSONB column; fall back to just the scalar fields
+  // if the column doesn't exist yet (avoids silent data loss).
+  const { error: saveErr } = await (admin as any)
     .from("shop_orders")
     .update({
       labels: allLabels,
@@ -141,6 +142,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       status: "shipped",
     })
     .eq("id", id);
+
+  if (saveErr) {
+    // Column missing — save just the scalar fields so nothing is lost
+    await admin
+      .from("shop_orders")
+      .update({
+        return_label_url: transaction.labelUrl,
+        tracking_number: trackingNumber,
+        status: "shipped",
+      })
+      .eq("id", id);
+  }
 
   // Send shipping notification email on first label only
   if (existingLabels.length === 0 && order.customer_email && trackingNumber) {

@@ -62,6 +62,13 @@ export function Nav() {
             )}
           </Link>
           <Link
+            href="/account"
+            className="text-sm font-medium text-white/90 hover:text-white transition-colors duration-150"
+            title="My Account"
+          >
+            My Account
+          </Link>
+          <Link
             href="/restoration"
             className="text-sm font-bold text-[#1a8fe0] bg-white border border-white px-4 py-2 hover:bg-white/90 transition-colors duration-150 rounded-lg"
           >
@@ -102,6 +109,13 @@ export function Nav() {
               {l.label}
             </Link>
           ))}
+          <Link
+            href="/account"
+            onClick={() => setOpen(false)}
+            className="text-base font-medium text-white hover:text-white/80 transition-colors"
+          >
+            My Account
+          </Link>
           <Link
             href="/restoration"
             onClick={() => setOpen(false)}

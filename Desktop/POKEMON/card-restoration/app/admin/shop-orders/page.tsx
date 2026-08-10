@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/utils";
 import Stripe from "stripe";
 import Link from "next/link";
 import { ReturnLabelButton } from "./return-label-button";
+import { InternationalLabelButton } from "./international-label-button";
 import { KitStatusUpdater } from "./status-updater";
 import { KitCustomerEditor } from "./kit-customer-editor";
 import { KitTrackingEditor } from "./kit-tracking-editor";
@@ -159,6 +160,7 @@ export default async function ShopOrdersPage() {
             const address = order.shipping_address as ShippingAddress | null;
             const items = (order.items ?? []) as ShopOrderItem[];
             const isSubscription = items.some((i) => i.product_id === "subscription");
+            const isInternational = address?.country && address.country !== "US";
 
             return (
               <div key={order.id} className="bg-white rounded-xl border border-border p-6">
@@ -174,6 +176,9 @@ export default async function ShopOrdersPage() {
                       </span>
                       {isSubscription && (
                         <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Subscription</span>
+                      )}
+                      {isInternational && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">🌍 {address?.country}</span>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground">{order.customer_email}</p>
@@ -213,7 +218,7 @@ export default async function ShopOrdersPage() {
                       phone={order.customer_phone ?? ""}
                       address={address}
                     />
-                    {address && (
+                    {address && !isInternational && (
                       <ReturnLabelButton
                         orderId={order.id}
                         existingLabels={
@@ -223,6 +228,13 @@ export default async function ShopOrdersPage() {
                               ? [{ labelUrl: order.return_label_url, trackingNumber: order.tracking_number ?? null, createdAt: "" }]
                               : []
                         }
+                      />
+                    )}
+                    {address && isInternational && (
+                      <InternationalLabelButton
+                        orderId={order.id}
+                        existingLabels={(order as any).international_labels ?? []}
+                        orderValueCents={order.total_cents ?? 0}
                       />
                     )}
                     <KitTrackingEditor
