@@ -246,7 +246,7 @@ export default async function TierSelectionPage() {
   const eliteMaxSlots = TIER_MAX_SLOTS["elite"] ?? null;
   const eliteUsed = slotCounts["elite"] ?? 0;
   const eliteSlotsLeft = eliteMaxSlots !== null ? Math.max(0, eliteMaxSlots - eliteUsed) : null;
-  const eliteIsSoldOut = eliteSettings?.is_open === false || (eliteSlotsLeft !== null && eliteSlotsLeft === 0);
+  const eliteIsSoldOut = settingsMap["elite"]?.is_open === false || (eliteSlotsLeft !== null && eliteSlotsLeft === 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
