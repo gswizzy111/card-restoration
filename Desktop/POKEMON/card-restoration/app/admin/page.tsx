@@ -110,7 +110,7 @@ export default async function AdminPage({
 }) {
   const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter, sort: sortMode } = await searchParams;
   const query = q?.trim() ?? "";
-  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : "orders";
+  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : "orders";
   const activePeriod = shippedPeriod === "week" ? "week" : shippedPeriod === "month" ? "month" : shippedPeriod === "all" ? "all" : "today";
 
   const admin = createAdminClient();
@@ -225,10 +225,12 @@ export default async function AdminPage({
     { data: fulfillmentOrders },
     { data: shippedRaw },
     { data: awaitingOrders },
+    { data: insuredOrders },
+    { data: videoServiceRows },
   ] = await Promise.all([
     admin
       .from("orders")
-      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier, admin_notes")
+      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier, admin_notes, insurance_declared_value_cents, insurance_type")
       .neq("status", "awaiting_payment")
       .order("created_at", { ascending: false }),
     admin
@@ -252,7 +254,40 @@ export default async function AdminPage({
       .eq("status", "awaiting_cards")
       .eq("payment_status", "paid")
       .order("created_at", { ascending: true }),
+    admin
+      .from("orders")
+      .select("id, order_number, customer_name, customer_email, status, created_at, total_cents, restoration_tier, insurance_declared_value_cents, insurance_type")
+      .not("insurance_declared_value_cents", "is", null)
+      .gt("insurance_declared_value_cents", 0)
+      .neq("status", "awaiting_payment")
+      .order("created_at", { ascending: false }),
+    admin
+      .from("order_services")
+      .select("order_id")
+      .eq("service_id", "instagram_feature"),
   ]);
+
+  // Fetch full video orders from their service rows
+  const videoOrderIds = [...new Set((videoServiceRows ?? []).map((r) => r.order_id))];
+  const { data: videoOrders } = videoOrderIds.length > 0
+    ? await admin
+        .from("orders")
+        .select("id, order_number, customer_name, customer_email, status, created_at, total_cents, restoration_tier")
+        .in("id", videoOrderIds)
+        .neq("status", "awaiting_payment")
+        .order("created_at", { ascending: false })
+    : { data: [] as { id: string; order_number: string | number; customer_name: string; customer_email: string; status: string; created_at: string; total_cents: number; restoration_tier: string | null }[] };
+
+  // Cards for video orders (need to know which cards to film)
+  const { data: videoCards } = videoOrderIds.length > 0
+    ? await admin.from("cards").select("order_id, card_name, photo_urls").in("order_id", videoOrderIds)
+    : { data: [] };
+  const videoCardsByOrder: Record<string, { name: string; photo: string | null }[]> = {};
+  for (const card of videoCards ?? []) {
+    if (!videoCardsByOrder[card.order_id]) videoCardsByOrder[card.order_id] = [];
+    const urls: string[] = Array.isArray(card.photo_urls) ? card.photo_urls : [];
+    videoCardsByOrder[card.order_id].push({ name: card.card_name, photo: urls[0] ?? null });
+  }
 
   // Query Shippo live tracking for shipped orders that have a tracking number
   type ShippedWithTracking = typeof shippedRaw extends (infer T)[] | null ? T & { track: Track | null } : never;
@@ -400,6 +435,8 @@ export default async function AdminPage({
   const fulfillmentCount = fulfillmentOrders?.length ?? 0;
   const shippedCount = shippedRaw?.length ?? 0;
   const awaitingCount = awaitingOrders?.length ?? 0;
+  const insuredCount = insuredOrders?.length ?? 0;
+  const videosCount = videoOrders?.length ?? 0;
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -492,6 +529,40 @@ export default async function AdminPage({
                 activeTab === "shipped" ? "bg-cyan-100 text-cyan-700" : "bg-cyan-600 text-white"
               }`}>
                 {shippedCount}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/admin?tab=insured"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+              activeTab === "insured"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Insured
+            {insuredCount > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeTab === "insured" ? "bg-emerald-100 text-emerald-700" : "bg-emerald-600 text-white"
+              }`}>
+                {insuredCount}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/admin?tab=videos"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+              activeTab === "videos"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Videos
+            {videosCount > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeTab === "videos" ? "bg-pink-100 text-pink-700" : "bg-pink-600 text-white"
+              }`}>
+                {videosCount}
               </span>
             )}
           </Link>
@@ -588,6 +659,16 @@ export default async function AdminPage({
                             {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
                           </span>
                         )}
+                        {(order as any).insurance_declared_value_cents > 0 && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                            Insured ${((order as any).insurance_declared_value_cents / 100).toFixed(0)}
+                          </span>
+                        )}
+                        {videoOrderIds.includes(order.id) && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">
+                            Video
+                          </span>
+                        )}
                       </div>
                       <p className="font-medium text-foreground">{order.customer_name}</p>
                       <p className="text-sm text-muted-foreground">{order.customer_email}</p>
@@ -641,6 +722,16 @@ export default async function AdminPage({
                           {order.restoration_tier && TIER_BADGES[order.restoration_tier] && (
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIER_BADGES[order.restoration_tier as RestorationTierId].color}`}>
                               {TIER_BADGES[order.restoration_tier as RestorationTierId].label}
+                            </span>
+                          )}
+                          {(order as any).insurance_declared_value_cents > 0 && (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                              Insured ${((order as any).insurance_declared_value_cents / 100).toFixed(0)}
+                            </span>
+                          )}
+                          {videoOrderIds.includes(order.id) && (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">
+                              Video
                             </span>
                           )}
                         </div>
@@ -1046,6 +1137,147 @@ export default async function AdminPage({
             </>
           );
         })()}
+
+        {/* ── INSURED TAB ── */}
+        {activeTab === "insured" && (
+          <>
+            {insuredCount === 0 ? (
+              <div className="bg-white rounded-xl border border-border p-16 text-center">
+                <p className="text-2xl mb-2">🛡️</p>
+                <p className="font-heading font-black text-lg text-foreground">No insured orders</p>
+                <p className="text-sm text-muted-foreground mt-1">Orders with package insurance will appear here.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/40">
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Order</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tier</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Declared Value</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Coverage</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Date</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(insuredOrders ?? []).map((order) => {
+                      const tier = order.restoration_tier ? TIER_STYLES[order.restoration_tier] : null;
+                      const declaredValue = (order as any).insurance_declared_value_cents as number;
+                      const insuranceType = (order as any).insurance_type as string | null;
+                      return (
+                        <tr key={order.id} className="border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
+                          <td className="px-4 py-3">
+                            <Link href={`/admin/orders/${order.id}`} className="font-mono font-bold text-primary hover:underline">
+                              {/^\d+$/.test(String(order.order_number)) ? `R${order.order_number}` : order.order_number}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-foreground">{order.customer_name}</p>
+                            <p className="text-xs text-muted-foreground">{order.customer_email}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                              {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {tier ? (
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tier.cls}`}>{tier.label}</span>
+                            ) : <span className="text-xs text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-foreground">
+                            ${(declaredValue / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${insuranceType === "round_trip" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+                              {insuranceType === "round_trip" ? "Round Trip" : "Inbound"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" })}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Link href={`/admin/orders/${order.id}`} className="text-xs font-bold text-primary hover:underline">View →</Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── VIDEOS TAB ── */}
+        {activeTab === "videos" && (
+          <>
+            <div className="bg-pink-50 border border-pink-200 rounded-xl p-4 mb-5">
+              <p className="font-bold text-pink-900 text-sm">Instagram Feature Orders</p>
+              <p className="text-xs text-pink-700 mt-0.5">
+                These customers paid $100 to have their card featured in an Instagram video. Film and post before shipping their cards back.
+              </p>
+            </div>
+            {videosCount === 0 ? (
+              <div className="bg-white rounded-xl border border-border p-16 text-center">
+                <p className="text-2xl mb-2">🎬</p>
+                <p className="font-heading font-black text-lg text-foreground">No video orders</p>
+                <p className="text-sm text-muted-foreground mt-1">Orders with the Instagram feature add-on will appear here.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {(videoOrders ?? []).map((order) => {
+                  const tier = order.restoration_tier ? TIER_STYLES[order.restoration_tier] : null;
+                  const cards = videoCardsByOrder[order.id] ?? [];
+                  return (
+                    <Link
+                      key={order.id}
+                      href={`/admin/orders/${order.id}`}
+                      className="bg-white rounded-xl border-2 border-pink-200 p-5 flex flex-col sm:flex-row sm:items-start gap-4 hover:border-pink-400 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1 flex-wrap">
+                          <span className="font-heading font-black text-foreground">{/^\d+$/.test(String(order.order_number)) ? `R${order.order_number}` : order.order_number}</span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                            {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
+                          </span>
+                          {tier && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tier.cls}`}>{tier.label}</span>
+                          )}
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">Instagram Video</span>
+                        </div>
+                        <p className="font-medium text-foreground">{order.customer_name}</p>
+                        <p className="text-sm text-muted-foreground mb-3">{order.customer_email}</p>
+                        {cards.length > 0 && (
+                          <div className="flex flex-wrap gap-3 mt-2">
+                            {cards.map((card, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                {card.photo && (
+                                  /* eslint-disable-next-line @next/next/no-img-element */
+                                  <img src={card.photo} alt={card.name} className="w-12 h-12 object-cover rounded-lg border border-pink-200 flex-shrink-0" />
+                                )}
+                                <span className="text-sm font-medium text-foreground">{card.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex sm:flex-col items-center sm:items-end gap-3 sm:pt-0.5">
+                        <span className="font-heading font-black text-xl text-primary">{formatCurrency(order.total_cents)}</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" })}
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
 
       </div>
     </div>
