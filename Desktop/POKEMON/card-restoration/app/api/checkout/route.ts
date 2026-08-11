@@ -298,6 +298,7 @@ export async function POST(request: Request) {
     orderPayload.insurance_declared_value_cents = data.insurance_declared_value_cents;
     orderPayload.insurance_type = data.insurance_type ?? null;
   }
+  if (data.add_signature_confirmation) orderPayload.add_signature_confirmation = true;
 
   // Create order in DB
   const { data: order, error: orderErr } = await admin

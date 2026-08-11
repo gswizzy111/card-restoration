@@ -355,9 +355,10 @@ export async function POST(request: Request) {
     const rateObjectId = session.metadata?.shipping_rate_object_id;
     const isInternational = session.metadata?.is_international === "true";
     if (rateObjectId && !isInternational) {
-      // Fetch order to check insurance
-      const { data: orderForInsurance } = await admin.from("orders").select("insurance_declared_value_cents,insurance_type").eq("id", orderId).single();
+      // Fetch order to check insurance and signature confirmation preference
+      const { data: orderForInsurance } = await admin.from("orders").select("insurance_declared_value_cents,insurance_type,add_signature_confirmation").eq("id", orderId).single();
       const hasInboundInsurance = orderForInsurance && orderForInsurance.insurance_type !== "none" && (orderForInsurance.insurance_declared_value_cents ?? 0) > 0;
+      const wantsSignature = orderForInsurance?.add_signature_confirmation === true;
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const txPayload = {
@@ -365,7 +366,7 @@ export async function POST(request: Request) {
           labelFileType: "PDF",
           async: false,
           extra: {
-            signatureConfirmation: "STANDARD",
+            ...(wantsSignature ? { signatureConfirmation: "STANDARD" } : {}),
             ...(hasInboundInsurance ? {
               insurance: {
                 amount: String((orderForInsurance.insurance_declared_value_cents / 100).toFixed(2)),
