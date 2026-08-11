@@ -233,7 +233,13 @@ export default async function ShopOrdersPage() {
                     {address && isInternational && (
                       <InternationalLabelButton
                         orderId={order.id}
-                        existingLabels={(order as any).international_labels ?? []}
+                        existingLabels={
+                          Array.isArray((order as any).international_labels) && (order as any).international_labels.length > 0
+                            ? (order as any).international_labels
+                            : order.return_label_url
+                              ? [{ label_url: order.return_label_url, customs_url: null, tracking_number: (order as any).tracking_number ?? null, tracking_url: null, created_at: "" }]
+                              : []
+                        }
                         orderValueCents={order.total_cents ?? 0}
                       />
                     )}

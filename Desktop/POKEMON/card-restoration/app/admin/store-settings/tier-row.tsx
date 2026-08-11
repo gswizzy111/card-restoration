@@ -49,15 +49,9 @@ export function TierRow({
   // Availability state
   const [open, setOpen] = useState(isOpen);
   const [slots, setSlots] = useState(maxSlots !== null ? String(maxSlots) : "");
-  const [displayRemaining, setDisplayRemaining] = useState(
-    displaySlotsRemaining !== null ? String(displaySlotsRemaining) : ""
-  );
   const parsedSlots = slots === "" ? null : parseInt(slots) || null;
-  const parsedDisplayRemaining = displayRemaining === "" ? null : parseInt(displayRemaining) ?? null;
   const autoSoldOut = parsedSlots !== null && slotsUsed >= parsedSlots;
-  const slotsLeft = parsedDisplayRemaining !== null
-    ? parsedDisplayRemaining
-    : parsedSlots !== null ? Math.max(0, parsedSlots - slotsUsed) : null;
+  const slotsLeft = parsedSlots !== null ? Math.max(0, parsedSlots - slotsUsed) : null;
 
   // Detail fields state
   const [displayName, setDisplayName] = useState(name);
@@ -81,7 +75,7 @@ export function TierRow({
       tier: tierId,
       is_open: overrides?.is_open ?? open,
       max_slots: "max_slots" in (overrides ?? {}) ? overrides!.max_slots : parsedSlots,
-      display_slots_remaining: "display_slots_remaining" in (overrides ?? {}) ? overrides!.display_slots_remaining : parsedDisplayRemaining,
+      display_slots_remaining: null, // always auto-calculate from live orders
       display_name: displayName.trim() || null,
       turnaround_min_days: parseInt(minDays) || null,
       turnaround_max_days: parseInt(maxDays) || null,
@@ -120,7 +114,7 @@ export function TierRow({
   }
 
   function handleSlotsBlur() {
-    saveAll({ max_slots: parsedSlots, display_slots_remaining: parsedDisplayRemaining });
+    saveAll({ max_slots: parsedSlots });
   }
 
   const effectivelySoldOut = !open || autoSoldOut;
@@ -313,52 +307,38 @@ export function TierRow({
           <div className="border-t border-border pt-4">
             <p className="text-xs font-semibold text-muted-foreground mb-3">Availability</p>
 
-            {/* Slot display — customers see: remaining / total */}
             <div className="mb-3">
               <label className="text-xs text-muted-foreground block mb-1.5">
-                Customer slot display —{" "}
-                <span className="font-semibold text-foreground">remaining / total</span>
+                Max slots <span className="font-normal">(tier auto-closes when full — leave blank for unlimited)</span>
               </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  value={displayRemaining}
-                  placeholder="auto"
-                  onChange={(e) => setDisplayRemaining(e.target.value)}
-                  onBlur={handleSlotsBlur}
-                  title="Slots remaining shown to customers (leave blank to auto-calculate)"
-                  className="w-20 h-9 border-2 border-primary/60 rounded-lg px-2 text-sm text-center font-bold focus:outline-none focus:border-primary bg-white"
-                />
-                <span className="text-lg font-bold text-muted-foreground">/</span>
+              <div className="flex items-center gap-3">
                 <input
                   type="number"
                   min={1}
                   value={slots}
-                  placeholder="∞"
+                  placeholder="∞ unlimited"
                   onChange={(e) => setSlots(e.target.value)}
                   onBlur={handleSlotsBlur}
-                  title="Total slots (controls when tier auto-closes)"
-                  className="w-20 h-9 border border-border rounded-lg px-2 text-sm text-center focus:outline-none focus:border-primary bg-white"
+                  className="w-32 h-9 border border-border rounded-lg px-3 text-sm text-center focus:outline-none focus:border-primary bg-white"
                 />
-                <span className="text-xs text-muted-foreground">slots</span>
-                {parsedDisplayRemaining !== null && (
-                  <button
-                    onClick={() => { setDisplayRemaining(""); saveAll({ max_slots: parsedSlots, display_slots_remaining: null }); }}
-                    className="text-xs text-muted-foreground hover:text-red-500 transition-colors ml-1"
-                    title="Clear override — revert to auto-calculation"
-                  >
-                    ✕ clear
-                  </button>
+                {parsedSlots !== null && (
+                  <span className="text-sm text-muted-foreground">
+                    <span className={slotsLeft === 0 ? "text-red-600 font-bold" : slotsLeft !== null && slotsLeft <= 3 ? "text-orange-600 font-semibold" : "text-green-700 font-semibold"}>
+                      {slotsLeft} remaining
+                    </span>
+                    {" · "}
+                    {slotsUsed} used
+                  </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-1.5">
-                Left = what customers see. Right = hard cap (auto-closes when full).{" "}
-                {parsedDisplayRemaining !== null
-                  ? <span className="text-primary font-semibold">Customers will see <strong>{parsedDisplayRemaining}/{parsedSlots ?? "∞"}</strong>.</span>
-                  : <span>Leave left blank to auto-calculate from real orders.</span>
-                }
-              </p>
+              {parsedSlots !== null && slotsLeft !== null && (
+                <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden w-48">
+                  <div
+                    className={`h-full rounded-full transition-all ${slotsLeft === 0 ? "bg-red-500" : slotsLeft <= 3 ? "bg-orange-500" : "bg-green-500"}`}
+                    style={{ width: `${Math.min(100, (slotsUsed / parsedSlots) * 100)}%` }}
+                  />
+                </div>
+              )}
             </div>
 
             <button

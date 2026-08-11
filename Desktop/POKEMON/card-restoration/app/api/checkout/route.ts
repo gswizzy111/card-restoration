@@ -5,7 +5,8 @@ import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import { getTierById, getCardPriceCents, applyDbOverride } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
-import { isSoldOut, INSURANCE_ENABLED, SIGNATURE_FEE_CENTS } from "@/lib/site-config";
+import { isSoldOut, INSURANCE_ENABLED, SIGNATURE_FEE_CENTS, TIER_MAX_SLOTS } from "@/lib/site-config";
+import { getSlotsOpenedAt, getRestorationsOpen } from "@/lib/store-config";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -63,6 +64,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "Restoration services are currently unavailable. Please check back soon." }, { status: 503 });
   }
 
+  // Enforce master restorations toggle — blocks API-level submissions when shop is closed
+  const restorationsOpen = await getRestorationsOpen();
+  if (!restorationsOpen) {
+    return Response.json({ error: "We're not accepting new restoration orders right now. Check back soon!" }, { status: 503 });
+  }
+
   const body = await request.json();
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {
@@ -98,20 +105,49 @@ export async function POST(request: Request) {
 
     settingsMap = Object.fromEntries((tierSettings ?? []).map((s) => [s.tier, s]));
 
+    // Fetch once — used by every tier's slot check below
+    const slotsOpenedAt = await getSlotsOpenedAt();
+    // Any order pending in Stripe for > 30 min is considered abandoned
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
     for (const tierId of uniqueTiers) {
       const s = settingsMap[tierId];
-      if (s && !s.is_open) {
-        return Response.json({ error: `The ${getTierById(tierId).name} service level is currently closed.` }, { status: 409 });
+      if (s && s.is_open === false) {
+        return Response.json({ error: `The ${getTierById(tierId).name} tier is currently closed.` }, { status: 409 });
       }
-      if (s?.max_slots) {
+
+      // Use DB max_slots if set, otherwise fall back to site-config TIER_MAX_SLOTS constant
+      const effectiveMaxSlots: number | null = (s?.max_slots ?? null) ?? (TIER_MAX_SLOTS[tierId] ?? null);
+
+      if (effectiveMaxSlots !== null) {
         const cardCount = cardTiers.filter((t) => t === tierId).length;
-        const { count } = await admin
+
+        // Count paid orders (confirmed) — the real usage
+        let paidQuery = admin
           .from("orders")
           .select("id", { count: "exact", head: true })
           .eq("restoration_tier", tierId)
           .eq("payment_status", "paid");
-        if ((count ?? 0) + cardCount > s.max_slots) {
-          return Response.json({ error: `Not enough slots available for the ${getTierById(tierId).name} tier.` }, { status: 409 });
+        if (slotsOpenedAt) paidQuery = paidQuery.gte("created_at", slotsOpenedAt);
+        const { count: paidCount } = await paidQuery;
+
+        // Count recent in-progress checkouts (pending + has Stripe session = customer is on payment page)
+        // These act as temporary slot reservations to prevent overselling during concurrent checkouts
+        let pendingQuery = admin
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("restoration_tier", tierId)
+          .eq("payment_status", "pending")
+          .not("stripe_session_id", "is", null)
+          .gte("created_at", thirtyMinAgo);
+        if (slotsOpenedAt) pendingQuery = pendingQuery.gte("created_at", slotsOpenedAt);
+        const { count: pendingCount } = await pendingQuery;
+
+        const occupied = (paidCount ?? 0) + (pendingCount ?? 0);
+        if (occupied + cardCount > effectiveMaxSlots) {
+          return Response.json({
+            error: `Sorry, the ${getTierById(tierId).name} tier is sold out. Please choose a different tier or join the waitlist.`,
+          }, { status: 409 });
         }
       }
     }
@@ -244,19 +280,20 @@ export async function POST(request: Request) {
     ship_from_address: shipFromAddress,
     ship_to_address: shipToAddress,
     inbound_method: data.shipping_method,
-    inbound_carrier: data.shipping_rate?.carrier ?? null,
-    inbound_service_level: data.shipping_rate?.service_level ?? null,
     subtotal_cents: subtotalCents,
-    discount_cents: discountCents,
-    discount_percent: discountPercent,
     shipping_cents: shippingCents,
     total_cents: totalCents,
     customer_notes: data.customer_notes ?? null,
-    affiliate_code: data.affiliate_code ?? null,
     restoration_tier: restorationTier ?? null,
     status: "awaiting_payment",
     payment_status: "pending",
   };
+  // Conditionally include columns that may not exist in older DB schemas
+  if (data.shipping_rate?.carrier) orderPayload.inbound_carrier = data.shipping_rate.carrier;
+  if (data.shipping_rate?.service_level) orderPayload.inbound_service_level = data.shipping_rate.service_level;
+  if (discountCents > 0) orderPayload.discount_cents = discountCents;
+  if (discountPercent > 0) orderPayload.discount_percent = discountPercent;
+  if (data.affiliate_code) orderPayload.affiliate_code = data.affiliate_code;
   if (INSURANCE_ENABLED && data.insurance_declared_value_cents) {
     orderPayload.insurance_declared_value_cents = data.insurance_declared_value_cents;
     orderPayload.insurance_type = data.insurance_type ?? null;
@@ -269,7 +306,8 @@ export async function POST(request: Request) {
     .select("id, order_number")
     .single();
   if (orderErr || !order) {
-    console.error("Failed to create order:", orderErr);
+    console.error("Failed to create order — Supabase error:", JSON.stringify(orderErr));
+    console.error("Payload keys attempted:", Object.keys(orderPayload).join(", "));
     return Response.json({ error: "Failed to save order. Please try again." }, { status: 500 });
   }
 
@@ -292,19 +330,27 @@ export async function POST(request: Request) {
   }
   await admin.from("order_services").insert(orderServices);
 
-  // Insert cards
-  const cardRows = data.cards.map((c) => ({
-    order_id: order.id,
-    card_name: c.card_name,
-    card_set: c.card_set ?? null,
-    card_year: c.card_year ?? null,
-    card_number: c.card_number ?? null,
-    estimated_value_cents: c.estimated_value_cents ?? null,
-    notes: c.notes ?? null,
-    photo_urls: c.photo_urls,
-    service_ids: c.service_ids,
-  }));
-  await admin.from("cards").insert(cardRows);
+  // Insert cards — only include columns that likely exist; strip unknown ones defensively
+  const cardRows = data.cards.map((c) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row: Record<string, any> = {
+      order_id: order.id,
+      card_name: c.card_name,
+      photo_urls: c.photo_urls,
+    };
+    if (c.card_set) row.card_set = c.card_set;
+    if (c.card_year) row.card_year = c.card_year;
+    if (c.card_number) row.card_number = c.card_number;
+    if (c.estimated_value_cents) row.estimated_value_cents = c.estimated_value_cents;
+    if (c.notes) row.notes = c.notes;
+    if (c.service_ids?.length) row.service_ids = c.service_ids;
+    return row;
+  });
+  const { error: cardsErr } = await admin.from("cards").insert(cardRows);
+  if (cardsErr) {
+    console.error("Cards insert error:", JSON.stringify(cardsErr));
+    // Don't block checkout — order exists, cards can be added manually. Log and continue.
+  }
 
   // Insert event
   await admin.from("order_events").insert({

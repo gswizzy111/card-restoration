@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAllTiers, applyDbOverride } from "@/lib/restoration-tiers";
-import { getRestorationsOpen } from "@/lib/store-config";
+import { getRestorationsOpen, getSlotsOpenedAt } from "@/lib/store-config";
 import { KitRow } from "./kit-row";
 import { TierRow } from "./tier-row";
 import { RestorationsToggle } from "./restorations-toggle";
@@ -47,14 +47,18 @@ export default async function StoreSettingsPage() {
   const [
     { data: products },
     { data: waitlistRows },
-    { data: paidOrders },
     restorationsOpen,
+    slotsOpenedAt,
   ] = await Promise.all([
     admin.from("products").select("id, name, price_cents, inventory_count, display_order").eq("active", true).order("display_order", { ascending: true }),
     admin.from("restoration_waitlist").select("id, name, email, phone, notified_at").order("created_at", { ascending: false }),
-    admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null),
     getRestorationsOpen(),
+    getSlotsOpenedAt(),
   ]);
+
+  let paidOrdersQuery = admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null);
+  if (slotsOpenedAt) paidOrdersQuery = paidOrdersQuery.gte("created_at", slotsOpenedAt);
+  const { data: paidOrders } = await paidOrdersQuery;
 
   const waitlistPeople = (waitlistRows ?? []).map((w) => ({
     id: w.id as string,

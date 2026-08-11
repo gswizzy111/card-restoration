@@ -95,13 +95,10 @@ function TierCard({
   const Icon = ICON_MAP[tier.id as keyof typeof ICON_MAP] ?? CheckCircle;
 
   const s = settingsMap[tier.id];
-  // DB max_slots (from Store Settings) takes priority; fall back to site-config
+  // DB max_slots takes priority; fall back to site-config TIER_MAX_SLOTS constant
   const maxSlots = (s?.max_slots ?? null) ?? TIER_MAX_SLOTS[tier.id] ?? null;
   const usedSlots = slotCounts[tier.id] ?? 0;
-  // display_slots_remaining lets admin manually override what customers see
-  const slotsLeft = (s?.display_slots_remaining ?? null) !== null
-    ? (s!.display_slots_remaining as number)
-    : maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
+  const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
   const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
 
   const bannerLabel: string | null = maxSlots !== null
@@ -221,10 +218,20 @@ export default async function TierSelectionPage() {
   const defaultTiers = getAllTiers();
   const admin = createAdminClient();
 
-  // Only count orders placed after the last time the shop was opened
-  let ordersQuery = admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null);
-  if (slotsOpenedAt) ordersQuery = ordersQuery.gte("created_at", slotsOpenedAt);
-  const [{ data: paidOrders }] = await Promise.all([ordersQuery]);
+  // Count paid orders + recent in-progress checkouts (pending + Stripe session, < 30 min old)
+  // This matches the same logic enforced at checkout so the display is accurate.
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  let paidQuery = admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null);
+  if (slotsOpenedAt) paidQuery = paidQuery.gte("created_at", slotsOpenedAt);
+
+  let pendingQuery = admin.from("orders").select("restoration_tier")
+    .eq("payment_status", "pending")
+    .not("restoration_tier", "is", null)
+    .not("stripe_session_id", "is", null)
+    .gte("created_at", thirtyMinAgo);
+  if (slotsOpenedAt) pendingQuery = pendingQuery.gte("created_at", slotsOpenedAt);
+
+  const [{ data: paidOrders }, { data: pendingOrders }] = await Promise.all([paidQuery, pendingQuery]);
 
   const { data: extSettings, error: extErr } = await admin
     .from("restoration_settings")
@@ -240,6 +247,9 @@ export default async function TierSelectionPage() {
   const slotCounts: Record<string, number> = {};
   if (restorationsOpen) {
     for (const row of paidOrders ?? []) {
+      if (row.restoration_tier) slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
+    }
+    for (const row of pendingOrders ?? []) {
       if (row.restoration_tier) slotCounts[row.restoration_tier] = (slotCounts[row.restoration_tier] ?? 0) + 1;
     }
   }
@@ -258,9 +268,7 @@ export default async function TierSelectionPage() {
   // Diamond slot info for client component
   const eliteMaxSlots = (settingsMap["elite"]?.max_slots ?? null) ?? TIER_MAX_SLOTS["elite"] ?? null;
   const eliteUsed = slotCounts["elite"] ?? 0;
-  const eliteSlotsLeft = (settingsMap["elite"]?.display_slots_remaining ?? null) !== null
-    ? (settingsMap["elite"]!.display_slots_remaining as number)
-    : eliteMaxSlots !== null ? Math.max(0, eliteMaxSlots - eliteUsed) : null;
+  const eliteSlotsLeft = eliteMaxSlots !== null ? Math.max(0, eliteMaxSlots - eliteUsed) : null;
   const eliteIsSoldOut = settingsMap["elite"]?.is_open === false || (eliteSlotsLeft !== null && eliteSlotsLeft === 0);
 
   return (

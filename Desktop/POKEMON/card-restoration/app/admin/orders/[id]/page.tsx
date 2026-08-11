@@ -14,6 +14,7 @@ import { OrderEditor } from "./order-editor";
 import { CustomerEditor } from "./customer-editor";
 import { DeleteOrderButton } from "./delete-order-button";
 import { CardCompletionToggle } from "./card-completion-toggle";
+import { AdminCardEditor } from "./admin-card-editor";
 import { RefundButton } from "./refund-button";
 import type { Track } from "shippo/models/components";
 
@@ -272,6 +273,16 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                         ))}
                       </div>
                     )}
+                    <AdminCardEditor
+                      card={{
+                        id: card.id,
+                        card_name: card.card_name,
+                        card_set: card.card_set ?? null,
+                        card_year: (card as Record<string, unknown>).card_year as string | null ?? null,
+                        estimated_value_cents: card.estimated_value_cents ?? null,
+                        notes: card.notes ?? null,
+                      }}
+                    />
                   </div>
                   );
                 })}

@@ -12,6 +12,64 @@ type Address = {
   country?: string;
 };
 
+const COUNTRIES: [string, string][] = [
+  ["US", "United States"],
+  ["CA", "Canada"],
+  ["GB", "United Kingdom"],
+  ["AU", "Australia"],
+  ["AT", "Austria"],
+  ["BE", "Belgium"],
+  ["BR", "Brazil"],
+  ["CL", "Chile"],
+  ["CN", "China"],
+  ["CO", "Colombia"],
+  ["HR", "Croatia"],
+  ["CZ", "Czech Republic"],
+  ["DK", "Denmark"],
+  ["EG", "Egypt"],
+  ["FI", "Finland"],
+  ["FR", "France"],
+  ["DE", "Germany"],
+  ["GR", "Greece"],
+  ["HK", "Hong Kong"],
+  ["HU", "Hungary"],
+  ["IN", "India"],
+  ["ID", "Indonesia"],
+  ["IE", "Ireland"],
+  ["IL", "Israel"],
+  ["IT", "Italy"],
+  ["JP", "Japan"],
+  ["JO", "Jordan"],
+  ["KW", "Kuwait"],
+  ["LV", "Latvia"],
+  ["LT", "Lithuania"],
+  ["LU", "Luxembourg"],
+  ["MY", "Malaysia"],
+  ["MX", "Mexico"],
+  ["NL", "Netherlands"],
+  ["NZ", "New Zealand"],
+  ["NG", "Nigeria"],
+  ["NO", "Norway"],
+  ["PK", "Pakistan"],
+  ["PH", "Philippines"],
+  ["PL", "Poland"],
+  ["PT", "Portugal"],
+  ["QA", "Qatar"],
+  ["RO", "Romania"],
+  ["SA", "Saudi Arabia"],
+  ["SG", "Singapore"],
+  ["ZA", "South Africa"],
+  ["KR", "South Korea"],
+  ["ES", "Spain"],
+  ["SE", "Sweden"],
+  ["CH", "Switzerland"],
+  ["TW", "Taiwan"],
+  ["TH", "Thailand"],
+  ["TR", "Turkey"],
+  ["AE", "United Arab Emirates"],
+  ["VN", "Vietnam"],
+];
+
 interface Props {
   orderId: string;
   name: string;
@@ -38,7 +96,9 @@ export function KitCustomerEditor({ orderId, name, email, phone, address }: Prop
     country: address?.country ?? "US",
   });
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+  const isUS = form.country === "US";
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
   }
 
@@ -68,6 +128,7 @@ export function KitCustomerEditor({ orderId, name, email, phone, address }: Prop
   const inp = "w-full h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:border-primary bg-white transition-colors";
 
   if (!open) {
+    const countryLabel = COUNTRIES.find(([code]) => code === address?.country)?.[1] ?? address?.country;
     return (
       <div className="flex flex-col gap-1 text-sm">
         <div className="flex items-start justify-between gap-2">
@@ -78,8 +139,8 @@ export function KitCustomerEditor({ orderId, name, email, phone, address }: Prop
             {address?.street1 && (
               <div className="mt-2 pt-2 border-t border-border text-muted-foreground">
                 <p>{address.street1}{address.street2 ? `, ${address.street2}` : ""}</p>
-                <p>{address.city}, {address.state} {address.zip}</p>
-                {address.country && address.country !== "US" && <p>{address.country}</p>}
+                <p>{address.city}{address.state ? `, ${address.state}` : ""} {address.zip}</p>
+                {address.country && address.country !== "US" && <p>{countryLabel}</p>}
               </div>
             )}
           </div>
@@ -112,14 +173,38 @@ export function KitCustomerEditor({ orderId, name, email, phone, address }: Prop
 
       <div className="border-t border-border pt-3 flex flex-col gap-2">
         <p className="text-xs text-muted-foreground font-medium">Shipping Address</p>
+
+        {/* Country selector */}
+        <select
+          name="country"
+          value={form.country}
+          onChange={handleChange}
+          className={inp}
+        >
+          {COUNTRIES.map(([code, label]) => (
+            <option key={code} value={code}>{label}</option>
+          ))}
+        </select>
+
         <input name="street1" placeholder="Street address" value={form.street1} onChange={handleChange} className={inp} />
         <input name="street2" placeholder="Apt / Suite (optional)" value={form.street2} onChange={handleChange} className={inp} />
         <div className="grid grid-cols-3 gap-2">
           <input name="city" placeholder="City" value={form.city} onChange={handleChange} className={inp} />
-          <input name="state" placeholder="State" value={form.state} onChange={handleChange} className={`${inp} text-center`} />
-          <input name="zip" placeholder="ZIP" value={form.zip} onChange={handleChange} className={inp} />
+          <input
+            name="state"
+            placeholder={isUS ? "State" : "Province"}
+            value={form.state}
+            onChange={handleChange}
+            className={`${inp} text-center`}
+          />
+          <input
+            name="zip"
+            placeholder={isUS ? "ZIP" : "Postal Code"}
+            value={form.zip}
+            onChange={handleChange}
+            className={inp}
+          />
         </div>
-        <input name="country" placeholder="Country (e.g. US, CA)" value={form.country} onChange={handleChange} className={inp} />
       </div>
 
       {error && <p className="text-xs text-red-500">{error}</p>}

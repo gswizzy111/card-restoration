@@ -5,6 +5,7 @@ import { getProductCosts } from "@/lib/product-costs";
 import { formatCurrency } from "@/lib/utils";
 import { PeriodTabs } from "./period-tabs";
 import { CostSettings } from "./cost-settings";
+import { RevenueChart } from "../revenue-chart";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -31,15 +32,10 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
 
   const admin = createAdminClient();
 
-  // Fetch data in parallel
-  const [shopResult, orderResult, productResult, costConfig] = await Promise.all([
+  // Fetch kit orders + product list + cost config in parallel
+  const [shopResult, productResult, costConfig] = await Promise.all([
     (() => {
       let q = admin.from("shop_orders").select("total_cents, subtotal_cents, shipping_cents, items, created_at").neq("status", "cancelled");
-      if (start) q = q.gte("created_at", start);
-      return q;
-    })(),
-    (() => {
-      let q = admin.from("orders").select("total_cents, refunded_cents, restoration_tier, created_at").not("status", "in", '("cancelled","awaiting_payment")');
       if (start) q = q.gte("created_at", start);
       return q;
     })(),
@@ -47,8 +43,24 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
     getProductCosts(),
   ]);
 
+  // Restoration orders — try with refunded_cents first; fall back if column doesn't exist yet
+  let restorationOrders: Array<{ total_cents: number | null; refunded_cents?: number | null; restoration_tier: string | null; created_at: string }> = [];
+  {
+    let q = admin.from("orders").select("total_cents, refunded_cents, restoration_tier, created_at").not("status", "in", '("cancelled","awaiting_payment")');
+    if (start) q = q.gte("created_at", start);
+    const { data, error } = await q;
+    if (error) {
+      // refunded_cents column may not exist yet — retry without it
+      let q2 = admin.from("orders").select("total_cents, restoration_tier, created_at").not("status", "in", '("cancelled","awaiting_payment")');
+      if (start) q2 = q2.gte("created_at", start);
+      const { data: data2 } = await q2;
+      restorationOrders = (data2 ?? []) as typeof restorationOrders;
+    } else {
+      restorationOrders = (data ?? []) as typeof restorationOrders;
+    }
+  }
+
   const shopOrders = shopResult.data ?? [];
-  const restorationOrders = orderResult.data ?? [];
   const products = productResult.data ?? [];
   const productMap = new Map(products.map((p) => [p.id, p.name]));
 
@@ -91,17 +103,24 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
   let restRevenue = 0;
   let restCogs = 0;
 
-  const TIER_LABELS: Record<string, string> = { regular: "Bronze", expedited: "Silver", premium: "Gold", ultra_premium: "Platinum", elite: "Diamond" };
+  const TIER_LABELS: Record<string, string> = {
+    regular: "Bronze",
+    expedited: "Silver",
+    premium: "Gold",
+    ultra_premium: "Platinum",
+    elite: "Diamond",
+    fast_pass: "Fast Pass",
+  };
 
   let totalRefundedCents = 0;
 
   for (const order of restorationOrders) {
     const tier = order.restoration_tier ?? "regular";
     const gross = order.total_cents ?? 0;
-    const refunded = (order as Record<string, unknown>).refunded_cents as number ?? 0;
+    const refunded = (order.refunded_cents as number | null | undefined) ?? 0;
     const revenue = Math.max(0, gross - refunded);
     const costKey = `${tier}_cents` as keyof typeof costConfig.restoration;
-    const cogs = costConfig.restoration[costKey] ?? 0;
+    const cogs = (costConfig.restoration as unknown as Record<string, number>)[costKey] ?? 0;
 
     restRevenue += revenue;
     restCogs += cogs;
@@ -124,6 +143,12 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
   const hasCosts = Object.values(costConfig.products).some((p) => p.cost_cents > 0) ||
     Object.values(costConfig.restoration).some((v) => v > 0);
 
+  // Combined entries for revenue chart (kit + restoration)
+  const allRevenueEntries = [
+    ...shopOrders.map((o) => ({ cents: o.total_cents ?? 0, createdAt: o.created_at })),
+    ...restorationOrders.map((o) => ({ cents: Math.max(0, (o.total_cents ?? 0) - ((o.refunded_cents as number | null | undefined) ?? 0)), createdAt: o.created_at })),
+  ];
+
   return (
     <div className="p-6 max-w-5xl mx-auto flex flex-col gap-6">
       <div className="flex items-start justify-between flex-wrap gap-4">
@@ -142,6 +167,11 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
         </div>
       )}
 
+      {/* Combined revenue chart */}
+      {allRevenueEntries.length > 0 && (
+        <RevenueChart entries={allRevenueEntries} label="Total Revenue (Kit + Restoration)" />
+      )}
+
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard label="Gross Revenue" value={formatCurrency(totalRevenue)} color="green" />
@@ -149,6 +179,20 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
         <StatCard label="Tax Owed (NJ)" value={formatCurrency(taxOwed)} color="orange" />
         <StatCard label="Net Profit" value={formatCurrency(netProfit)} color={netProfit >= 0 ? "blue" : "red"} />
         <StatCard label="Profit Margin" value={`${margin}%`} color={margin >= 20 ? "purple" : margin >= 0 ? "blue" : "red"} />
+      </div>
+
+      {/* Source breakdown */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-xl border border-border p-4">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Kit Orders</p>
+          <p className="font-heading font-black text-xl text-foreground">{shopOrders.length}</p>
+          <p className="text-sm text-primary font-semibold mt-0.5">{formatCurrency(kitRevenue)}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-border p-4">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Restoration Orders</p>
+          <p className="font-heading font-black text-xl text-foreground">{restorationOrders.length}</p>
+          <p className="text-sm text-primary font-semibold mt-0.5">{formatCurrency(restRevenue)}</p>
+        </div>
       </div>
 
       {/* Breakdown cards */}

@@ -1,21 +1,24 @@
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { businessAddress } from "@/lib/shippo";
-import { pmGetQuotes, pmCreateShipment } from "@/lib/parcel-monkey";
-import type { PmBox, PmAddress } from "@/lib/parcel-monkey";
-import { z } from "zod";
+import { shippo, businessAddress } from "@/lib/shippo";
+import {
+  WeightUnitEnum,
+  DistanceUnitEnum,
+  CustomsDeclarationContentsTypeEnum,
+  CustomsDeclarationNonDeliveryOptionEnum,
+  CustomsDeclarationEelPfcEnum,
+} from "shippo/models/components";
 
 export const maxDuration = 60;
 
 const BOX_KEYWORDS = ["official", "essential", "clamp"];
 
-function getBox(items: { product_name: string }[] | null): PmBox {
+function getParcel(items: { product_name: string }[] | null) {
   const names = (items ?? []).map((i) => i.product_name ?? "");
   const needsBox = names.some((n) => BOX_KEYWORDS.some((kw) => n.toLowerCase().includes(kw)));
-  // Dimensions in cm, weight in kg
   return needsBox
-    ? { length: 25, width: 18, height: 18, weight: 1.8 }
-    : { length: 20, width: 13, height: 3, weight: 0.2 };
+    ? { massUnit: WeightUnitEnum.Lb, weight: "4", distanceUnit: DistanceUnitEnum.In, length: "10", width: "7", height: "7" }
+    : { massUnit: WeightUnitEnum.Oz, weight: "6", distanceUnit: DistanceUnitEnum.In, length: "8", width: "5", height: "1" };
 }
 
 type ShippingAddress = {
@@ -27,11 +30,14 @@ async function authed() {
   return jar.get("admin_auth")?.value === process.env.ADMIN_PASSWORD;
 }
 
-// GET — return Parcel Monkey quotes for this order
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+// GET — create Shippo shipment with customs declaration, return rates
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!await authed()) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+  const url = new URL(req.url);
+  const declaredValueCents = parseInt(url.searchParams.get("declared_value_cents") ?? "0", 10);
+
   const admin = createAdminClient();
   const { data: order } = await admin.from("shop_orders").select("*").eq("id", id).single();
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
@@ -41,112 +47,105 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return Response.json({ error: "Not an international order" }, { status: 400 });
   }
 
-  const box = getBox(order.items as { product_name: string }[] | null);
-  const { quotes, error } = await pmGetQuotes({
-    senderCountry: "US",
-    recipient: { country: addr.country },
-    boxes: [box],
+  const parcel = getParcel(order.items as { product_name: string }[] | null);
+  const valueAmount = ((declaredValueCents || order.total_cents || 0) / 100).toFixed(2);
+
+  const shipment = await shippo.shipments.create({
+    addressFrom: businessAddress,
+    addressTo: {
+      name: order.customer_name ?? "Customer",
+      street1: addr.street1,
+      street2: addr.street2 ?? "",
+      city: addr.city,
+      state: addr.state ?? "",
+      zip: addr.zip,
+      country: addr.country,
+      phone: order.customer_phone ?? "",
+      email: order.customer_email ?? "",
+    },
+    parcels: [parcel],
+    customsDeclaration: {
+      certify: true,
+      certifySigner: businessAddress.name || "The Card Doc",
+      contentsType: CustomsDeclarationContentsTypeEnum.Merchandise,
+      nonDeliveryOption: CustomsDeclarationNonDeliveryOptionEnum.Return,
+      eelPfc: CustomsDeclarationEelPfcEnum.NOEEI3037A,
+      items: [
+        {
+          description: "Card restoration kit supplies",
+          quantity: 1,
+          netWeight: parcel.weight,
+          massUnit: parcel.massUnit,
+          valueAmount,
+          valueCurrency: "USD",
+          originCountry: "US",
+        },
+      ],
+    },
+    async: false,
   });
 
-  if (error) return Response.json({ error }, { status: 500 });
-  if (quotes.length === 0) return Response.json({ error: "No Parcel Monkey quotes available for this destination." }, { status: 400 });
+  const rates = [...(shipment.rates ?? [])]
+    .sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))
+    .map((r) => ({
+      objectId: r.objectId,
+      provider: r.provider,
+      service: r.servicelevel?.name ?? "",
+      amount: r.amount,
+      currency: r.currency,
+      days: r.estimatedDays ?? null,
+    }));
 
-  // Return existing international labels too
+  if (rates.length === 0) return Response.json({ error: "No international rates available for this address." }, { status: 400 });
+
   const existingLabels = (order as Record<string, unknown>).international_labels as unknown[] ?? [];
-
-  return Response.json({ quotes, existingLabels });
+  return Response.json({ rates, existingLabels });
 }
 
-const PostBody = z.object({
-  service_id: z.string().min(1),
-  collection_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  customs_required: z.boolean(),
-  declared_value_cents: z.number().int().min(0).default(0),
-});
-
-// POST — book the shipment with Parcel Monkey
+// POST — purchase the selected rate, save label + customs invoice
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!await authed()) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const body = await req.json().catch(() => ({}));
-  const parsed = PostBody.safeParse(body);
-  if (!parsed.success) return Response.json({ error: "Invalid request" }, { status: 400 });
+  const { rateObjectId } = await req.json().catch(() => ({}));
+  if (!rateObjectId) return Response.json({ error: "Missing rateObjectId" }, { status: 400 });
 
   const admin = createAdminClient();
   const { data: order } = await admin.from("shop_orders").select("*").eq("id", id).single();
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
 
-  const addr = order.shipping_address as ShippingAddress | null;
-  if (!addr?.country || addr.country === "US") {
-    return Response.json({ error: "Not an international order" }, { status: 400 });
-  }
-
-  const box = getBox(order.items as { product_name: string }[] | null);
-
-  const sender: PmAddress = {
-    name: businessAddress.name || "The Card Doc",
-    company: "The Card Doc",
-    address1: businessAddress.street1,
-    address2: businessAddress.street2 || undefined,
-    city: businessAddress.city,
-    county: businessAddress.state,
-    postcode: businessAddress.zip,
-    country: "US",
-    phone: businessAddress.phone,
-    email: businessAddress.email,
-  };
-
-  const recipient: PmAddress = {
-    name: order.customer_name ?? "Customer",
-    company: "",
-    address1: addr.street1,
-    address2: addr.street2 || undefined,
-    city: addr.city,
-    county: addr.state ?? undefined,
-    postcode: addr.zip,
-    country: addr.country,
-    phone: order.customer_phone ?? "",
-    email: order.customer_email ?? "",
-  };
-
-  const { result, error } = await pmCreateShipment({
-    serviceId: parsed.data.service_id,
-    collectionDate: parsed.data.collection_date,
-    sender,
-    recipient,
-    boxes: [box],
-    description: "Card restoration kit — trading card accessories",
-    valueCents: parsed.data.declared_value_cents,
-    currency: "USD",
-    customsRequired: parsed.data.customs_required,
+  const transaction = await shippo.transactions.create({
+    rate: rateObjectId,
+    labelFileType: "PDF",
+    async: false,
   });
 
-  if (error || !result) return Response.json({ error: error ?? "Shipment creation failed" }, { status: 500 });
+  if (transaction.status !== "SUCCESS" || !transaction.labelUrl) {
+    const msgs = (transaction as any).messages ?? [];
+    const detail = msgs.map((m: any) => m.text ?? m.message ?? JSON.stringify(m)).join(" | ");
+    return Response.json({ error: `Label purchase failed: ${detail || transaction.status}`, raw: msgs }, { status: 500 });
+  }
 
-  // Save to DB — append to international_labels jsonb array + update tracking
   const newEntry = {
-    shipment_id: result.shipment_id,
-    label_url: result.label_url,
-    customs_url: result.customs_invoice_url,
-    tracking_number: result.tracking_number,
-    service_id: parsed.data.service_id,
+    label_url: transaction.labelUrl,
+    customs_url: transaction.commercialInvoiceUrl ?? null,
+    tracking_number: transaction.trackingNumber ?? null,
+    tracking_url: transaction.trackingUrlProvider ?? null,
     created_at: new Date().toISOString(),
   };
 
   const existingLabels = (order as Record<string, unknown>).international_labels as unknown[] ?? [];
   const allLabels = [...existingLabels, newEntry];
 
-  // Try saving with international_labels column; fall back to just tracking/status
   const { error: dbErr } = await (admin as any)
     .from("shop_orders")
-    .update({ international_labels: allLabels, status: "shipped", tracking_number: result.tracking_number })
+    .update({ international_labels: allLabels, status: "shipped", tracking_number: newEntry.tracking_number })
     .eq("id", id);
 
   if (dbErr) {
     await admin
       .from("shop_orders")
-      .update({ status: "shipped", tracking_number: result.tracking_number })
+      .update({ status: "shipped", tracking_number: newEntry.tracking_number })
       .eq("id", id);
   }
 

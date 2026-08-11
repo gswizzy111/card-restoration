@@ -5,7 +5,7 @@ import Stripe from "stripe";
 import { isSoldOut } from "@/lib/site-config";
 
 const BodySchema = z.object({
-  items: z.array(z.object({ id: z.string(), quantity: z.number().int().positive(), slug: z.string() })).min(1),
+  items: z.array(z.object({ id: z.string(), quantity: z.number().int().positive(), slug: z.string(), size: z.string().optional() })).min(1),
   customer: z.object({ name: z.string().min(1), email: z.string().email(), phone: z.string().min(10) }),
   address: z.object({
     street1: z.string().min(1),
@@ -42,8 +42,11 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
+  // Strip size suffix (e.g. "gloves-Medium" → "gloves") for DB lookup
+  const baseId = (id: string) => id.replace(/-(?:Small|Medium|Large|XL)$/i, "");
+
   // Fetch products from DB (never trust client prices)
-  const productIds = data.items.map((i) => i.id);
+  const productIds = data.items.map((i) => baseId(i.id));
   const { data: products, error: pErr } = await admin
     .from("products")
     .select("id, name, price_cents, inventory_count, active")
@@ -58,18 +61,19 @@ export async function POST(request: Request) {
   // Validate stock and build product line items
   const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [];
   for (const item of data.items) {
-    const product = productMap[item.id];
+    const product = productMap[baseId(item.id)];
     if (!product || !product.active) return Response.json({ error: "Product not available." }, { status: 400 });
     if (product.inventory_count < item.quantity) return Response.json({ error: `Not enough stock for ${product.name}.` }, { status: 400 });
+    const displayName = item.size ? `${product.name} — ${item.size}` : product.name;
     lineItems.push({
-      price_data: { currency: "usd", product_data: { name: product.name }, unit_amount: product.price_cents },
+      price_data: { currency: "usd", product_data: { name: displayName }, unit_amount: product.price_cents },
       quantity: item.quantity,
     });
   }
 
   // 6.625% sales tax on product subtotal (not shipping)
   const productSubtotalCents = data.items.reduce(
-    (sum, item) => sum + productMap[item.id].price_cents * item.quantity,
+    (sum, item) => sum + (productMap[baseId(item.id)]?.price_cents ?? 0) * item.quantity,
     0
   );
   const taxCents = Math.round(productSubtotalCents * 0.06625);
@@ -152,7 +156,7 @@ export async function POST(request: Request) {
     type: "shop",
     customer_name: data.customer.name,
     customer_phone: data.customer.phone,
-    items: JSON.stringify(data.items.map((i) => ({ id: i.id, qty: i.quantity }))),
+    items: JSON.stringify(data.items.map((i) => ({ id: baseId(i.id), qty: i.quantity, size: i.size ?? null }))),
     affiliate_code: validatedAffiliateCode ?? "",
     gift_card_id: giftCardId ?? "",
     gift_card_discount_cents: giftCardDiscountCents > 0 ? String(giftCardDiscountCents) : "",

@@ -176,7 +176,7 @@ function CheckoutInner() {
     setSubmitting(true);
     try {
       const body: Record<string, unknown> = {
-        items: items.map((i) => ({ id: i.id, quantity: i.quantity, slug: i.slug })),
+        items: items.map((i) => ({ id: i.id, quantity: i.quantity, slug: i.slug, size: i.size ?? undefined })),
         customer: { name: form.name, email: form.email, phone: form.phone },
         address: {
           street1: form.street1,

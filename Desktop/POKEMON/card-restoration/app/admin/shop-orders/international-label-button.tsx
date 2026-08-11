@@ -2,29 +2,21 @@
 
 import { useState } from "react";
 
-interface PmQuote {
-  service_id: string;
-  carrier: string;
-  name: string;
-  price: number;
+interface ShippoRate {
+  objectId: string;
+  provider: string;
+  service: string;
+  amount: string;
   currency: string;
-  transit_days: number | null;
-  customs_invoice_required: boolean;
+  days: number | null;
 }
 
 interface LabelEntry {
-  shipment_id: string;
   label_url: string | null;
   customs_url: string | null;
   tracking_number: string | null;
-  service_id: string;
+  tracking_url: string | null;
   created_at: string;
-}
-
-function todayPlusDays(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
 }
 
 export function InternationalLabelButton({
@@ -38,21 +30,22 @@ export function InternationalLabelButton({
 }) {
   const [labels, setLabels] = useState<LabelEntry[]>(initialLabels);
   const [state, setState] = useState<"idle" | "fetching" | "confirm" | "booking" | "error">("idle");
-  const [quotes, setQuotes] = useState<PmQuote[]>([]);
-  const [selectedQuote, setSelectedQuote] = useState<PmQuote | null>(null);
-  const [collectionDate, setCollectionDate] = useState(todayPlusDays(1));
-  const [declaredValue, setDeclaredValue] = useState(String((orderValueCents / 100).toFixed(2)));
+  const [rates, setRates] = useState<ShippoRate[]>([]);
+  const [selectedRate, setSelectedRate] = useState<ShippoRate | null>(null);
+  const [declaredValueCents, setDeclaredValueCents] = useState(orderValueCents);
   const [errorMsg, setErrorMsg] = useState("");
 
-  async function fetchQuotes() {
+  async function fetchRates() {
     setState("fetching");
     setErrorMsg("");
     try {
-      const res = await fetch(`/api/admin/shop-orders/${orderId}/international-label`);
+      const res = await fetch(
+        `/api/admin/shop-orders/${orderId}/international-label?declared_value_cents=${declaredValueCents}`
+      );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to get quotes");
-      setQuotes(data.quotes);
-      setSelectedQuote(data.quotes[0] ?? null);
+      if (!res.ok) throw new Error(data.error ?? "Failed to get rates");
+      setRates(data.rates);
+      setSelectedRate(data.rates[0] ?? null);
       setState("confirm");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Unknown error");
@@ -61,19 +54,14 @@ export function InternationalLabelButton({
   }
 
   async function bookShipment() {
-    if (!selectedQuote) return;
+    if (!selectedRate) return;
     setState("booking");
     setErrorMsg("");
     try {
       const res = await fetch(`/api/admin/shop-orders/${orderId}/international-label`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          service_id: selectedQuote.service_id,
-          collection_date: collectionDate,
-          customs_required: selectedQuote.customs_invoice_required,
-          declared_value_cents: Math.round(parseFloat(declaredValue) * 100) || 0,
-        }),
+        body: JSON.stringify({ rateObjectId: selectedRate.objectId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Booking failed");
@@ -85,6 +73,8 @@ export function InternationalLabelButton({
     }
   }
 
+  const inp = "w-full h-8 border border-purple-300 rounded-lg px-2 text-xs focus:outline-none focus:border-purple-500 bg-white";
+
   return (
     <div className="flex flex-col gap-3 mt-3">
       {/* Existing international labels */}
@@ -92,7 +82,7 @@ export function InternationalLabelButton({
         <div key={i} className="flex flex-col gap-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-purple-700">
-              Intl Label {labels.length > 1 ? `#${i + 1}` : ""} — Parcel Monkey
+              Intl Label {labels.length > 1 ? `#${i + 1}` : ""} — Shippo
             </span>
             {label.created_at && (
               <span className="text-[10px] text-purple-600">{new Date(label.created_at).toLocaleDateString()}</span>
@@ -112,96 +102,101 @@ export function InternationalLabelButton({
                 Print Label (PDF)
               </a>
             )}
-            {label.customs_url && (
+            {label.customs_url ? (
               <a
                 href={label.customs_url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-block text-xs font-bold px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
               >
-                Print Customs Docs (PDF)
+                Print Customs Invoice (PDF)
+              </a>
+            ) : (
+              <span className="inline-block text-xs px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg">
+                Customs included in label PDF
+              </span>
+            )}
+            {label.tracking_url && (
+              <a
+                href={label.tracking_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-xs font-bold px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Track →
               </a>
             )}
           </div>
         </div>
       ))}
 
-      {/* Create new */}
+      {/* Idle — show declared value + get quotes button */}
       {state === "idle" && (
-        <button
-          onClick={fetchQuotes}
-          className="text-xs font-bold px-3 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors w-fit"
-        >
-          {labels.length === 0 ? "Create International Label (Parcel Monkey)" : "+ Create Another Label"}
-        </button>
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">
+              Declared Value (USD)
+            </label>
+            <div className="flex gap-2 items-center">
+              <div className="relative w-28">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={(declaredValueCents / 100).toFixed(2)}
+                  onChange={(e) => setDeclaredValueCents(Math.round(parseFloat(e.target.value || "0") * 100))}
+                  className="w-full h-8 border border-border rounded-lg pl-5 pr-2 text-xs focus:outline-none focus:border-primary bg-white"
+                />
+              </div>
+              <button
+                onClick={fetchRates}
+                className="text-xs font-bold px-3 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"
+              >
+                {labels.length === 0 ? "Get International Rates" : "+ New Label"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {state === "fetching" && (
-        <p className="text-xs text-muted-foreground">Getting Parcel Monkey rates…</p>
+        <p className="text-xs text-muted-foreground">Getting Shippo rates…</p>
       )}
 
-      {state === "confirm" && selectedQuote && (
+      {state === "confirm" && selectedRate && (
         <div className="flex flex-col gap-3 p-4 bg-purple-50 border border-purple-200 rounded-xl">
           <p className="text-xs font-bold text-purple-900 uppercase tracking-wide">Choose Service</p>
 
-          <div className="flex flex-col gap-1.5">
-            {quotes.map((q) => (
-              <label key={q.service_id} className="flex items-start gap-2 text-xs cursor-pointer">
+          <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+            {rates.map((r) => (
+              <label key={r.objectId} className="flex items-start gap-2 text-xs cursor-pointer">
                 <input
                   type="radio"
-                  name={`pm-rate-${orderId}`}
-                  checked={selectedQuote.service_id === q.service_id}
-                  onChange={() => setSelectedQuote(q)}
+                  name={`rate-${orderId}`}
+                  checked={selectedRate.objectId === r.objectId}
+                  onChange={() => setSelectedRate(r)}
                   className="accent-purple-600 mt-0.5"
                 />
                 <span className="text-purple-800">
-                  <span className="font-bold">{q.carrier}</span> — {q.name}
-                  {q.transit_days ? ` · ${q.transit_days}d` : ""}{" "}
-                  <span className="font-bold">${q.price.toFixed(2)} {q.currency}</span>
-                  {q.customs_invoice_required && (
-                    <span className="ml-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-bold">Customs Required</span>
-                  )}
+                  <span className="font-bold">{r.provider}</span> — {r.service}
+                  {r.days ? ` · ${r.days}d` : ""}{"  "}
+                  <span className="font-bold">${parseFloat(r.amount).toFixed(2)} {r.currency}</span>
                 </span>
               </label>
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wide text-purple-700 block mb-1">Collection Date</label>
-              <input
-                type="date"
-                value={collectionDate}
-                min={todayPlusDays(1)}
-                onChange={(e) => setCollectionDate(e.target.value)}
-                className="w-full h-8 border border-purple-300 rounded-lg px-2 text-xs focus:outline-none focus:border-purple-500 bg-white"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wide text-purple-700 block mb-1">Declared Value (USD)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={declaredValue}
-                onChange={(e) => setDeclaredValue(e.target.value)}
-                className="w-full h-8 border border-purple-300 rounded-lg px-2 text-xs focus:outline-none focus:border-purple-500 bg-white"
-              />
-            </div>
-          </div>
-
-          {selectedQuote.customs_invoice_required && (
-            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              This service requires customs documentation. A customs invoice PDF will be generated automatically.
-            </p>
-          )}
+          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Customs invoice is generated automatically for international shipments.
+          </p>
 
           <div className="flex gap-2 mt-1">
             <button
               onClick={bookShipment}
               className="text-xs font-bold px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
             >
-              Book ${selectedQuote.price.toFixed(2)} with Parcel Monkey
+              Book ${parseFloat(selectedRate.amount).toFixed(2)} with Shippo
             </button>
             <button
               onClick={() => setState("idle")}
@@ -214,7 +209,7 @@ export function InternationalLabelButton({
       )}
 
       {state === "booking" && (
-        <p className="text-xs text-muted-foreground">Booking with Parcel Monkey…</p>
+        <p className="text-xs text-muted-foreground">Booking with Shippo…</p>
       )}
 
       {state === "error" && (
