@@ -12,9 +12,12 @@ interface OrderSummaryProps {
   isInternational?: boolean;
   selectedTier?: RestorationTierId;
   insurance?: InsuranceSelection;
+  addSignatureConfirmation?: boolean;
 }
 
-export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0, isInternational = false, selectedTier, insurance }: OrderSummaryProps) {
+const TAX_RATE = 0.06625;
+
+export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0, isInternational = false, selectedTier, insurance, addSignatureConfirmation = false }: OrderSummaryProps) {
   // Build per-tier breakdown
   const tierCounts: Partial<Record<RestorationTierId, number>> = {};
   let subtotal = 0;
@@ -31,12 +34,13 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
   const isMixed = tierEntries.length > 1;
 
   const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
+  const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
   const insuranceCents = INSURANCE_ENABLED ? (insurance?.chargeCents ?? 0) : 0;
-  const signatureCents = shippingMethod === "buy_label" && !isInternational ? SIGNATURE_FEE_CENTS : 0;
+  const signatureCents = addSignatureConfirmation && shippingMethod === "buy_label" && !isInternational ? SIGNATURE_FEE_CENTS : 0;
   const slabCrackCount = cards.filter((c) => c.needs_slab_crack).length;
   const slabCrackCents = slabCrackCount * 700;
-  const total = subtotal - discountCents + shipping + insuranceCents + signatureCents + slabCrackCents;
+  const total = subtotal - discountCents + taxCents + shipping + insuranceCents + signatureCents + slabCrackCents;
 
   const turnaroundText = isMixed
     ? "Turnaround varies by tier"
@@ -83,6 +87,10 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
             <span>−{formatCurrency(discountCents)}</span>
           </div>
         )}
+        <div className="flex justify-between text-muted-foreground">
+          <span>Sales Tax (6.625%)</span>
+          <span>{formatCurrency(taxCents)}</span>
+        </div>
         <div className="flex justify-between text-muted-foreground">
           <span>{isInternational ? "Return shipping" : "Shipping"}</span>
           <span>

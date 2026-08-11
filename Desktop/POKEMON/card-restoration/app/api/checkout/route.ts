@@ -52,7 +52,7 @@ const BodySchema = z.object({
   affiliate_code: z.string().optional(),
   gift_card_code: z.string().optional(),
   instagram_feature: z.boolean().optional(),
-  insurance_declared_value_cents: z.number().int().min(100).max(1_000_000).optional(),
+  insurance_declared_value_cents: z.number().int().min(0).max(1_000_000).optional(),
   insurance_type: z.enum(["inbound", "round_trip"]).optional(),
   slab_crack_count: z.number().int().min(0).max(100).optional(),
   signature_path: z.string().optional(),
@@ -224,7 +224,7 @@ export async function POST(request: Request) {
   const SHIPPO_MIN_CENTS = 250;
   const MARKUP = 1.1;
   let insuranceChargeCents = 0;
-  if (INSURANCE_ENABLED && data.insurance_declared_value_cents && data.insurance_type) {
+  if (INSURANCE_ENABLED && data.insurance_declared_value_cents && data.insurance_declared_value_cents > 0 && data.insurance_type) {
     const shippoCost = Math.max(Math.round(data.insurance_declared_value_cents * SHIPPO_RATE), SHIPPO_MIN_CENTS);
     const perDirection = Math.round(shippoCost * MARKUP);
     insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;

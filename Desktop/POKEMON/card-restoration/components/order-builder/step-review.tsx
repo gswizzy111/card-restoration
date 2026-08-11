@@ -97,14 +97,21 @@ export function StepReview({
   }
 
   function handleDeclaredValueBlur() {
-    const dollars = parseFloat(insuranceDollars.replace(/[^0-9.]/g, ""));
-    if (isNaN(dollars) || dollars < 1) {
+    const raw = insuranceDollars.replace(/[^0-9.]/g, "");
+    const dollars = parseFloat(raw);
+    if (!raw || isNaN(dollars) || dollars < 1) {
       setInsuranceDollars("");
       onInsuranceChange({ declaredValueCents: 0, type: "none", chargeCents: 0 });
       setInsuranceQuote(null);
       return;
     }
     const clamped = Math.min(Math.floor(dollars), 10000);
+    if (clamped < 1) {
+      setInsuranceDollars("");
+      onInsuranceChange({ declaredValueCents: 0, type: "none", chargeCents: 0 });
+      setInsuranceQuote(null);
+      return;
+    }
     setInsuranceDollars(String(clamped));
     fetchInsuranceQuote(clamped * 100);
   }
@@ -404,7 +411,7 @@ export function StepReview({
           </div>
         )}
         <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Sales Tax (6.5%)</span>
+          <span>Sales Tax (6.625%)</span>
           <span>{formatCurrency(taxCents)}</span>
         </div>
         <div className="flex justify-between text-sm text-muted-foreground">

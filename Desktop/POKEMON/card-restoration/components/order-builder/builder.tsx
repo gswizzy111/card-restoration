@@ -155,7 +155,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           gift_card_code: giftCardCode.trim().toUpperCase() || undefined,
           instagram_feature: instagramFeature || undefined,
           insurance_declared_value_cents: insurance.declaredValueCents > 0 ? insurance.declaredValueCents : undefined,
-          insurance_type: insurance.type !== "none" ? insurance.type : undefined,
+          insurance_type: insurance.declaredValueCents > 0 && insurance.type !== "none" ? insurance.type : undefined,
           add_signature_confirmation: addSignatureConfirmation || undefined,
           slab_crack_count: cards.filter((c) => c.needs_slab_crack).length || undefined,
           signature_path: signaturePath,
@@ -271,6 +271,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               isInternational={!!(customer.country && customer.country !== "US")}
               selectedTier={selectedTier}
               insurance={insurance}
+              addSignatureConfirmation={addSignatureConfirmation}
             />
           </div>
         </div>
