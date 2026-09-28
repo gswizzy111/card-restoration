@@ -5,6 +5,7 @@ import { OrderBuilder } from "@/components/order-builder/builder";
 import { isSoldOut, TIER_SELECTION_ENABLED } from "@/lib/site-config";
 import { getRestorationsOpen } from "@/lib/store-config";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
+import { PixelViewContent } from "@/components/pixel-view-content";
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -47,6 +48,7 @@ export default async function RestorationPage({ searchParams }: PageProps) {
 
   return (
     <Suspense>
+      <PixelViewContent contentName="Restoration Order" contentCategory="Restoration" />
       <OrderBuilder services={services ?? []} selectedTier={tierParam as RestorationTierId | undefined} />
     </Suspense>
   );

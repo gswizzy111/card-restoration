@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
+import { PurchasePixel } from "./purchase-pixel";
 
 export default async function CheckoutSuccessPage({
   searchParams,
@@ -17,50 +18,56 @@ export default async function CheckoutSuccessPage({
     inbound_method: string;
     shipping_label_url: string | null;
   } | null = null;
+  let amountTotal: number | null = null;
 
   if (session_id) {
     const admin = createAdminClient();
 
-    // Primary: look up order by stripe_session_id column (fastest path)
-    const { data: bySession } = await admin
-      .from("orders")
-      .select("id, order_number, customer_email, inbound_method, shipping_label_url")
-      .eq("stripe_session_id", session_id)
-      .maybeSingle();
+    // Run Supabase lookup and Stripe session fetch in parallel
+    const [bySessionResult, stripeResult] = await Promise.allSettled([
+      admin
+        .from("orders")
+        .select("id, order_number, customer_email, inbound_method, shipping_label_url")
+        .eq("stripe_session_id", session_id)
+        .maybeSingle(),
+      stripe.checkout.sessions.retrieve(session_id),
+    ]);
+
+    const bySession = bySessionResult.status === "fulfilled" ? bySessionResult.value.data : null;
+    const stripeSession = stripeResult.status === "fulfilled" ? stripeResult.value : null;
+
+    if (stripeSession?.amount_total != null) {
+      amountTotal = stripeSession.amount_total;
+    }
 
     if (bySession) {
       order = bySession;
-    } else {
-      // Fallback: fetch the Stripe session itself and use order_id from metadata.
-      // This works even when the stripe_session_id column is missing or not yet saved.
-      try {
-        const session = await stripe.checkout.sessions.retrieve(session_id);
-        const orderId = session.metadata?.order_id;
-        if (orderId) {
-          const { data: byId } = await admin
-            .from("orders")
-            .select("id, order_number, customer_email, inbound_method, shipping_label_url")
-            .eq("id", orderId)
-            .maybeSingle();
-          if (byId) order = byId;
+    } else if (stripeSession) {
+      // Fallback: use order_id from Stripe metadata
+      const orderId = stripeSession.metadata?.order_id;
+      if (orderId) {
+        const { data: byId } = await admin
+          .from("orders")
+          .select("id, order_number, customer_email, inbound_method, shipping_label_url")
+          .eq("id", orderId)
+          .maybeSingle();
+        if (byId) order = byId;
 
-          // Opportunistically save the stripe_session_id for future lookups
-          if (byId) {
-            await admin
-              .from("orders")
-              .update({ stripe_session_id: session_id })
-              .eq("id", orderId)
-              .is("stripe_session_id", null);
-          }
+        // Opportunistically save the stripe_session_id for future lookups
+        if (byId) {
+          await admin
+            .from("orders")
+            .update({ stripe_session_id: session_id })
+            .eq("id", orderId)
+            .is("stripe_session_id", null);
         }
-      } catch {
-        // Stripe lookup failed — show generic success, which is still correct
       }
     }
   }
 
   return (
     <section className="flex-1 flex items-center justify-center min-h-[70vh] px-6">
+      <PurchasePixel sessionId={session_id} amountCents={amountTotal} orderId={order?.id} />
       <div className="max-w-sm w-full text-center flex flex-col items-center gap-6">
         <CheckCircle className="h-16 w-16 text-primary" />
         <div>

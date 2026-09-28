@@ -7,6 +7,8 @@ import { CheckCircle, Zap, Star, Crown, Rocket } from "lucide-react";
 import { WaitlistModal } from "./waitlist-modal";
 import { CountdownBanner } from "./countdown-banner";
 import { DiamondCard } from "./diamond-card";
+import { getTestimonials } from "@/lib/testimonials";
+import { PixelViewContent } from "@/components/pixel-view-content";
 
 export const dynamic = "force-dynamic";
 
@@ -101,14 +103,10 @@ function TierCard({
   const slotsLeft = maxSlots !== null ? Math.max(0, maxSlots - usedSlots) : null;
   const isSoldOut = s?.is_open === false || (slotsLeft !== null && slotsLeft === 0);
 
-  const bannerLabel: string | null = maxSlots !== null
-    ? isSoldOut
-      ? `SOLD OUT · 0 / ${maxSlots} slots`
-      : !restorationsOpen
-      ? `0 / ${maxSlots} slots`
-      : `${slotsLeft} / ${maxSlots} slots remaining`
-    : isSoldOut
+  const bannerLabel: string | null = isSoldOut
     ? "SOLD OUT"
+    : slotsLeft !== null && restorationsOpen
+    ? `${slotsLeft} slot${slotsLeft !== 1 ? "s" : ""} left`
     : (tier.badge ?? null);
 
   const bannerCls: string = isSoldOut
@@ -192,12 +190,6 @@ function TierCard({
               </span>
             </span>
           </div>
-          {tier.includes_notes && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className={style.check}>✓</span>
-              <span className="text-muted-foreground">Grader notes included</span>
-            </div>
-          )}
           {tier.id === "fast_pass" && (
             <div className="flex items-center gap-2 text-sm">
               <span className={style.check}>✓</span>
@@ -211,15 +203,17 @@ function TierCard({
 }
 
 export default async function TierSelectionPage() {
-  const [restorationsOpen, slotsOpenedAt] = await Promise.all([
+  const [restorationsOpen, slotsOpenedAt, testimonials] = await Promise.all([
     getRestorationsOpen(),
     getSlotsOpenedAt(),
+    getTestimonials(),
   ]);
   const defaultTiers = getAllTiers();
   const admin = createAdminClient();
 
-  // Count paid orders + recent in-progress checkouts (pending + Stripe session, < 30 min old)
+  // Count paid orders + recent in-progress checkouts (pending, < 30 min old = active reservation)
   // This matches the same logic enforced at checkout so the display is accurate.
+  // Note: stripe_session_id filter removed — that column may not exist yet in the DB.
   const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
   let paidQuery = admin.from("orders").select("restoration_tier").eq("payment_status", "paid").not("restoration_tier", "is", null);
   if (slotsOpenedAt) paidQuery = paidQuery.gte("created_at", slotsOpenedAt);
@@ -227,7 +221,6 @@ export default async function TierSelectionPage() {
   let pendingQuery = admin.from("orders").select("restoration_tier")
     .eq("payment_status", "pending")
     .not("restoration_tier", "is", null)
-    .not("stripe_session_id", "is", null)
     .gte("created_at", thirtyMinAgo);
   if (slotsOpenedAt) pendingQuery = pendingQuery.gte("created_at", slotsOpenedAt);
 
@@ -273,6 +266,7 @@ export default async function TierSelectionPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <PixelViewContent contentName="Restoration Tiers" contentCategory="Restoration" />
       {/* Countdown — shown when shop is closed */}
       {!restorationsOpen && <CountdownBanner />}
 
@@ -293,7 +287,7 @@ export default async function TierSelectionPage() {
         </h1>
         <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mb-12">
           {restorationsOpen
-            ? "Select the tier that best fits your cards' needs. Every tier includes professional grader notes."
+            ? "Select the tier that best fits your cards' needs."
             : "We're temporarily closed. Browse our pricing below and join the waitlist to be notified when we reopen."}
         </p>
 
@@ -359,14 +353,33 @@ export default async function TierSelectionPage() {
         {/* Footer info */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
           <p className="text-muted-foreground">
-            All tiers include professional restoration and{" "}
-            <span className="font-semibold text-foreground">grader notes</span>. Not sure which tier fits?{" "}
+            Not sure which tier fits?{" "}
             <Link href="/how-it-works" className="text-[#1a8fe0] hover:underline font-semibold">
               Learn what we can restore
             </Link>
             .
           </p>
         </div>
+
+        {/* Customer Reviews */}
+        {testimonials.length > 0 && (
+          <div className="mt-20">
+            <div className="mb-8 text-center">
+              <p className="text-2xl md:text-3xl font-bold uppercase tracking-[0.3em] text-primary mb-3">What Our Customers Say</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+              {testimonials.map((t) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={t.id}
+                  src={t.url}
+                  alt={t.alt ?? "Customer review"}
+                  className="w-full h-auto object-cover rounded-lg"
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

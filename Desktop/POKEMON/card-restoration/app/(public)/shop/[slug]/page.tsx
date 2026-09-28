@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AddToCartButtonLarge } from "./add-to-cart-button-large";
 import { RefreshCw } from "lucide-react";
 import { isSoldOut } from "@/lib/site-config";
+import { PixelViewContent } from "@/components/pixel-view-content";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <div className="max-w-6xl mx-auto px-6 md:px-10 py-12">
+      <PixelViewContent contentName={product.name} contentCategory={product.category ?? "Shop"} />
       <a href="/shop" className="text-sm text-muted-foreground hover:text-foreground transition-colors mb-8 block">
         &larr; Back to Shop
       </a>

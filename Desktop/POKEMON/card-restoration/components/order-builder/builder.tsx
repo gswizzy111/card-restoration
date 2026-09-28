@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ProgressIndicator } from "./progress-indicator";
@@ -12,6 +12,7 @@ import { StepReview } from "./step-review";
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import { getTierById } from "@/lib/restoration-tiers";
+import { fbq } from "@/lib/pixel";
 
 function defaultCard(serviceId: string, tier?: RestorationTierId): CardEntry {
   return {
@@ -39,10 +40,13 @@ function InAppBrowserBanner() {
   }, []);
   if (!show) return null;
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-sm">
-      <p className="font-bold text-amber-900 mb-1">⚠️ Open in Safari or Chrome to pay</p>
-      <p className="text-amber-800">
-        Instagram&apos;s browser doesn&apos;t support Stripe payments. Tap the <strong>···</strong> menu at the top right and choose <strong>&quot;Open in browser&quot;</strong>.
+    <div className="bg-red-50 border-2 border-red-400 rounded-xl p-4 mb-6 text-sm shadow-md">
+      <p className="font-black text-red-900 text-base mb-2">⚠️ You must open this in Safari or Chrome</p>
+      <p className="text-red-800 mb-3 leading-relaxed">
+        Instagram&apos;s built-in browser <strong>blocks photo uploads and payments</strong>. You won&apos;t be able to complete your order here.
+      </p>
+      <p className="text-red-900 font-bold">
+        Tap the <strong>···</strong> menu (top right) → <strong>&quot;Open in browser&quot;</strong>
       </p>
     </div>
   );
@@ -61,6 +65,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [customerNotes, setCustomerNotes] = useState("");
   const [affiliateCode, setAffiliateCode] = useState("");
   const [discountPercent, setDiscountPercent] = useState(0);
+  const [loyaltyDiscountPercent, setLoyaltyDiscountPercent] = useState(0);
   const [giftCardCode, setGiftCardCode] = useState("");
   const [giftCardAmountCents, setGiftCardAmountCents] = useState(0);
   const [instagramFeature, setInstagramFeature] = useState(false);
@@ -68,9 +73,26 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [submitting, setSubmitting] = useState(false);
   const [insurance, setInsurance] = useState<InsuranceSelection>({ declaredValueCents: 0, type: "none", chargeCents: 0 });
   const [addSignatureConfirmation, setAddSignatureConfirmation] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<{ message: string; ref: string } | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  const DIAMOND_MIN_CENTS = 500_000; // $5,000
+
+  function totalEstimatedValueCents(): number {
+    return cards.reduce((sum, c) => {
+      const v = c.estimated_value ? Math.round(parseFloat(c.estimated_value.replace(/[$,]/g, "")) * 100) : 0;
+      return sum + (isNaN(v) ? 0 : v);
+    }, 0);
+  }
+
+  const isDiamondOrder = selectedTier === "elite" || cards.some((c) => c.tier === "elite");
+  const diamondValueOk = !isDiamondOrder || totalEstimatedValueCents() >= DIAMOND_MIN_CENTS;
 
   function canAdvance(): boolean {
-    if (step === 1) return cards.every((c) => c.card_name.trim().length > 0 && c.photo_urls.length > 0);
+    if (step === 1) {
+      const basicOk = cards.every((c) => c.card_name.trim().length > 0 && c.photo_urls.length > 0);
+      return basicOk && diamondValueOk;
+    }
     if (step === 2) {
       const c = customer;
       const isUS = !c.country || c.country === "US";
@@ -87,7 +109,9 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   }
 
   async function handleSubmit() {
+    fbq("track", "InitiateCheckout", { num_items: cards.length, currency: "USD" });
     setSubmitting(true);
+    setCheckoutError(null);
     try {
       // Upload signature before going to Stripe
       let signaturePath: string | undefined;
@@ -158,6 +182,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           insurance_type: insurance.declaredValueCents > 0 && insurance.type !== "none" ? insurance.type : undefined,
           add_signature_confirmation: addSignatureConfirmation || undefined,
           slab_crack_count: cards.filter((c) => c.needs_slab_crack).length || undefined,
+          pregrade_count: cards.filter((c) => c.needs_pregrade).length || undefined,
           signature_path: signaturePath,
         }),
       });
@@ -167,13 +192,22 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
         window.location.href = data.url;
       } else {
         const msg = typeof data.error === "string" ? data.error : "Something went wrong. Please try again.";
-        toast.error(msg);
+        const code = typeof data.code === "string" ? data.code : "CHECKOUT_ERROR";
+        // Use server-generated ref if available; fall back to client-generated
+        const ref = typeof data.ref === "string" ? data.ref : `${code}-${Date.now().toString(36).toUpperCase()}`;
+        setCheckoutError({ message: msg, ref });
         setSubmitting(false);
+        setTimeout(() => errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
       }
     } catch (err) {
       console.error("Checkout fetch error:", err);
-      toast.error("Network error. Please try again.");
+      const ref = `NETWORK_ERROR-${Date.now().toString(36).toUpperCase()}`;
+      setCheckoutError({
+        message: "Could not reach our server. Please check your internet connection and try again.",
+        ref,
+      });
       setSubmitting(false);
+      setTimeout(() => errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
     }
   }
 
@@ -231,6 +265,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               onGiftCardAmountChange={setGiftCardAmountCents}
               instagramFeature={instagramFeature}
               onInstagramFeatureChange={setInstagramFeature}
+              loyaltyDiscountPercent={loyaltyDiscountPercent}
+              onLoyaltyDiscountChange={setLoyaltyDiscountPercent}
               onEditStep={(s) => {
                 // remap review edit targets to new step numbers
                 if (s === 2) setStep(1); // cards
@@ -239,6 +275,55 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               }}
               selectedTier={selectedTier}
             />
+          )}
+
+          {step === 4 && checkoutError && (
+            <div ref={errorRef} className="mt-8 bg-red-50 border-2 border-red-400 rounded-xl p-5 shadow-lg">
+              <div className="flex gap-3">
+                <div className="text-red-500 text-2xl shrink-0">⚠️</div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-red-900 text-lg mb-1">Checkout failed</p>
+                  <p className="text-red-800 text-sm mb-4 leading-relaxed">{checkoutError.message}</p>
+
+                  <div className="bg-white border border-red-200 rounded-lg px-3 py-3 mb-4">
+                    <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-1.5">Error Reference</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-mono text-sm text-red-800 select-all break-all font-bold">{checkoutError.ref}</span>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg shrink-0 transition-colors"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`Error ref: ${checkoutError.ref}\n${checkoutError.message}`);
+                          toast.success("Copied!");
+                        }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-red-100 border border-red-200 rounded-lg p-3">
+                    <p className="text-red-900 text-sm font-semibold mb-1">What to do:</p>
+                    <p className="text-red-800 text-sm leading-relaxed">
+                      Screenshot this screen and DM <strong>@the_card_doc</strong> on Instagram — include the error reference above and we&apos;ll complete your order manually right away.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Diamond minimum value warning */}
+          {step === 1 && isDiamondOrder && !diamondValueOk && (
+            <div className="mt-6 rounded-xl border-2 border-amber-300 bg-amber-50 px-5 py-4 flex items-start gap-3">
+              <span className="text-2xl shrink-0">💎</span>
+              <div>
+                <p className="font-bold text-amber-900 text-sm">Diamond tier requires $5,000+ in total card value</p>
+                <p className="text-amber-800 text-sm mt-0.5">
+                  Your current total is <strong>${(totalEstimatedValueCents() / 100).toLocaleString()}</strong>. Please enter estimated values for your cards totaling at least $5,000, or choose a different tier.
+                </p>
+              </div>
+            </div>
           )}
 
           <div className="flex justify-between mt-10 pt-6 border-t border-border">
@@ -267,7 +352,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               cards={cards}
               shippingMethod={shippingMethod}
               selectedRate={selectedRate}
-              discountPercent={discountPercent}
+              discountPercent={Math.max(discountPercent, loyaltyDiscountPercent)}
               isInternational={!!(customer.country && customer.country !== "US")}
               selectedTier={selectedTier}
               insurance={insurance}
