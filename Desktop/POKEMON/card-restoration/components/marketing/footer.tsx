@@ -52,9 +52,14 @@ export function Footer() {
           <p className="text-xs text-white/40">
             All cards are insured during transit. Results may vary by card condition.
           </p>
-          <Link href="/terms" className="text-xs text-white/60 hover:text-white transition-colors">
-            Terms & Conditions
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/terms" className="text-xs text-white/60 hover:text-white transition-colors">
+              Terms & Conditions
+            </Link>
+            <Link href="/privacy" className="text-xs text-white/60 hover:text-white transition-colors">
+              Privacy Policy
+            </Link>
+          </div>
         </div>
       </div>
     </footer>

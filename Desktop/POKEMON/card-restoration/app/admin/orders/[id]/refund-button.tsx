@@ -7,13 +7,16 @@ interface Props {
   orderId: string;
   totalCents: number;
   alreadyRefundedCents: number;
+  customerEmail: string;
 }
 
-export function RefundButton({ orderId, totalCents, alreadyRefundedCents }: Props) {
+export function RefundButton({ orderId, totalCents, alreadyRefundedCents, customerEmail }: Props) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"full" | "partial">("full");
   const [partialDollars, setPartialDollars] = useState("");
   const [reason, setReason] = useState("");
+  const [sendEmail, setSendEmail] = useState(true);
+  const [customerMessage, setCustomerMessage] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
@@ -57,6 +60,8 @@ export function RefundButton({ orderId, totalCents, alreadyRefundedCents }: Prop
       body: JSON.stringify({
         amountCents: mode === "partial" ? partialCents : undefined,
         reason: reason.trim() || undefined,
+        sendEmail,
+        customerMessage: customerMessage.trim() || undefined,
       }),
     });
 
@@ -67,7 +72,7 @@ export function RefundButton({ orderId, totalCents, alreadyRefundedCents }: Prop
       setMessage(data.error ?? "Refund failed. Check the Stripe dashboard.");
     } else {
       setStatus("success");
-      setMessage(`✓ Refund of ${formatCurrency(data.amountCents)} issued. Stripe ID: ${data.refundId}`);
+      setMessage(`✓ Refund of ${formatCurrency(data.amountCents)} issued${sendEmail ? " · Email sent to customer" : ""}. Stripe ID: ${data.refundId}`);
       setOpen(false);
       window.location.reload();
     }
@@ -128,6 +133,33 @@ export function RefundButton({ orderId, totalCents, alreadyRefundedCents }: Prop
               placeholder="e.g. Customer not satisfied, duplicate charge, etc."
               className="w-full h-9 border border-red-300 rounded-lg px-3 text-sm focus:outline-none focus:border-red-500 bg-white"
             />
+          </div>
+
+          {/* Customer email toggle */}
+          <div className="border-t border-red-200 pt-3 flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={sendEmail}
+                onChange={(e) => setSendEmail(e.target.checked)}
+                className="accent-red-600 w-4 h-4"
+              />
+              <span className="font-semibold text-red-800">Send email to customer</span>
+              <span className="text-xs text-red-600 font-normal">({customerEmail})</span>
+            </label>
+
+            {sendEmail && (
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Message to customer (optional)</label>
+                <textarea
+                  value={customerMessage}
+                  onChange={(e) => setCustomerMessage(e.target.value)}
+                  placeholder="Add a personal note explaining the refund (e.g. 'We're sorry for the inconvenience — your refund has been processed.')  Leave blank for a standard refund notice."
+                  rows={3}
+                  className="w-full border border-red-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 bg-white resize-none"
+                />
+              </div>
+            )}
           </div>
 
           {status === "error" && <p className="text-sm text-red-700 font-semibold">{message}</p>}

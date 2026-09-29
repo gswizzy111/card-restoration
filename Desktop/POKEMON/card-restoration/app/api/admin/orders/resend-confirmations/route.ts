@@ -25,10 +25,10 @@ export async function POST(request: Request) {
   if (orderIds && orderIds.length > 0) {
     query = query.in("id", orderIds);
   } else {
-    // Default: all paid orders from today
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    query = query.gte("updated_at", todayStart.toISOString());
+    // Default: orders CREATED today (ET — offset by 5 hours from UTC)
+    const nowEt = new Date(Date.now() - 5 * 60 * 60 * 1000);
+    const todayEtStart = new Date(Date.UTC(nowEt.getUTCFullYear(), nowEt.getUTCMonth(), nowEt.getUTCDate()));
+    query = query.gte("created_at", todayEtStart.toISOString());
   }
 
   const { data: orders, error } = await query;
@@ -44,20 +44,36 @@ export async function POST(request: Request) {
     const labelUrl = order.shipping_label_url as string | null;
 
     const shippingSection = labelUrl
-      ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:20px;margin:24px 0">
-          <p style="margin:0 0 8px;font-weight:700;color:#1e3a8a">Your Prepaid Shipping Label</p>
-          <p style="margin:0 0 16px;color:#1e40af;font-size:14px">Print this label, attach it to your package, and drop it off at the carrier.</p>
-          <a href="${labelUrl}" style="background:#1d4ed8;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Download Label (PDF)</a>
-        </div>`
-      : `<div style="background:#fefce8;border:1px solid #fde68a;border-radius:12px;padding:20px;margin:24px 0">
-          <p style="margin:0 0 8px;font-weight:700;color:#78350f">Ship Your Cards To Us</p>
-          <p style="margin:0 0 4px;color:#92400e;font-size:14px">Please send your cards to the address below using a tracked, insured method:</p>
-          <p style="margin:8px 0 0;color:#78350f;font-weight:600;font-size:14px">
-            ${process.env.BUSINESS_SHIPPING_NAME ?? "The Card Doc"}<br>
-            ${process.env.BUSINESS_SHIPPING_STREET1 ?? ""}${process.env.BUSINESS_SHIPPING_STREET2 ? `<br>${process.env.BUSINESS_SHIPPING_STREET2}` : ""}<br>
-            ${process.env.BUSINESS_SHIPPING_CITY ?? ""}, ${process.env.BUSINESS_SHIPPING_STATE ?? ""} ${process.env.BUSINESS_SHIPPING_ZIP ?? ""}<br>
-            United States
+      ? `<div style="background:#eff6ff;border:2px solid #93c5fd;border-radius:12px;padding:24px;margin:24px 0">
+          <p style="margin:0 0 6px;font-size:18px;font-weight:900;color:#1e3a8a">📦 Your Prepaid Shipping Label Is Ready</p>
+          <p style="margin:0 0 16px;color:#1e40af;font-size:14px;line-height:1.6">
+            We've generated a prepaid label for you. Just:
           </p>
+          <ol style="margin:0 0 16px;padding-left:20px;color:#1e40af;font-size:14px;line-height:2">
+            <li>Package your cards securely in a bubble mailer or small box</li>
+            <li>Print the label below and tape it to the outside</li>
+            <li>Drop the package off at your nearest carrier location</li>
+          </ol>
+          <a href="${labelUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">⬇ Download Shipping Label (PDF)</a>
+        </div>`
+      : `<div style="background:#fefce8;border:2px solid #fbbf24;border-radius:12px;padding:24px;margin:24px 0">
+          <p style="margin:0 0 6px;font-size:18px;font-weight:900;color:#78350f">📬 Ship Your Cards To Us</p>
+          <p style="margin:0 0 12px;color:#92400e;font-size:14px;line-height:1.6">
+            Please send your cards using a tracked, insured shipping method (USPS Priority, UPS, or FedEx recommended).
+          </p>
+          <ol style="margin:0 0 16px;padding-left:20px;color:#92400e;font-size:14px;line-height:2">
+            <li>Package your cards securely in a bubble mailer or small box</li>
+            <li>Write your order number <strong>#${order.order_number}</strong> on the inside</li>
+            <li>Ship to the address below and save your tracking number</li>
+          </ol>
+          <div style="background:#fff8e1;border:1px solid #fde68a;border-radius:8px;padding:14px">
+            <p style="margin:0;color:#78350f;font-weight:700;font-size:15px;line-height:1.8">
+              ${process.env.BUSINESS_SHIPPING_NAME ?? "The Card Doc"}<br>
+              ${process.env.BUSINESS_SHIPPING_STREET1 ?? ""}${process.env.BUSINESS_SHIPPING_STREET2 ? `<br>${process.env.BUSINESS_SHIPPING_STREET2}` : ""}<br>
+              ${process.env.BUSINESS_SHIPPING_CITY ?? ""}, ${process.env.BUSINESS_SHIPPING_STATE ?? ""} ${process.env.BUSINESS_SHIPPING_ZIP ?? ""}<br>
+              United States
+            </p>
+          </div>
         </div>`;
 
     try {
@@ -66,14 +82,27 @@ export async function POST(request: Request) {
         to: order.customer_email,
         subject: `Order Confirmed — ${businessName} #${order.order_number}`,
         html: `
-          <div style="font-family:sans-serif;max-width:560px;margin:0 auto;color:#111">
-            <h1 style="font-size:24px;font-weight:900;margin-bottom:4px">Order Confirmed</h1>
-            <p style="color:#666;margin-top:0">Order <strong>#${order.order_number}</strong></p>
-            <p>Hi ${firstName}, thanks for your order! Here are your shipping instructions.</p>
-            ${shippingSection}
-            <a href="${trackingUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;margin:8px 0 24px">Track Your Order</a>
-            <p style="font-size:13px;color:#666">Questions? DM us on Instagram <strong>@thecarddoc</strong></p>
-            <p style="font-size:13px;color:#999">${businessName}</p>
+          <div style="font-family:sans-serif;max-width:580px;margin:0 auto;color:#111">
+            <div style="background:#1d4ed8;border-radius:12px 12px 0 0;padding:24px;text-align:center">
+              <p style="margin:0;color:#bfdbfe;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em">${businessName}</p>
+              <h1 style="margin:6px 0 0;color:#fff;font-size:28px;font-weight:900">Order Confirmed ✓</h1>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 12px 12px;padding:28px">
+              <p style="color:#666;margin:0 0 4px;font-size:13px">Order number</p>
+              <p style="margin:0 0 20px;font-size:22px;font-weight:900;color:#111">#${order.order_number}</p>
+              <p style="margin:0 0 20px;font-size:15px;color:#333;line-height:1.6">
+                Hi ${firstName}! 👋 Thank you for your order. Here's what to do next to get your cards to us.
+              </p>
+              ${shippingSection}
+              <div style="text-align:center;margin:24px 0">
+                <a href="${trackingUrl}" style="display:inline-block;background:#111;color:#fff;padding:13px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">View Your Order Status →</a>
+              </div>
+              <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+              <p style="font-size:13px;color:#666;margin:0 0 6px">Questions? We're always happy to help:</p>
+              <p style="font-size:13px;color:#333;margin:0">
+                Instagram: <a href="https://instagram.com/the_card_doc" style="color:#1d4ed8;font-weight:600">@the_card_doc</a>
+              </p>
+            </div>
           </div>
         `,
       });

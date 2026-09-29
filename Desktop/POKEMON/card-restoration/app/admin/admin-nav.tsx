@@ -5,24 +5,37 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const NAV_ITEMS = [
-  { href: "/admin",             label: "Orders",     icon: "📋" },
-  { href: "/admin/shop-orders", label: "Kit Orders", icon: "📦" },
+  { href: "/admin",              label: "Orders",       icon: "📋" },
+  { href: "/admin/fast-pass",    label: "Fast Pass",    icon: "⚡" },
+  { href: "/admin/prep-orders",  label: "Prep Orders",  icon: "🧪" },
+  { href: "/admin/shop-orders",  label: "Kit Orders",   icon: "📦" },
   { href: "/admin/incoming",    label: "Incoming",   icon: "📬" },
   { href: "/admin/ship-queue",  label: "Ship Queue", icon: "🚚" },
   { href: "/admin/partners",    label: "Partners",   icon: "🤝" },
   { href: "/admin/products",    label: "Products",   icon: "🛍️" },
   { href: "/admin/store-settings", label: "Store Settings",       icon: "⚙️" },
+  { href: "/admin/prep-settings", label: "Prep Settings",         icon: "🔬" },
   { href: "/admin/affiliates",     label: "Affiliates & Coupons", icon: "🎯" },
   { href: "/admin/subscriptions",  label: "Subscriptions", icon: "🔁" },
   { href: "/admin/customers",      label: "Customers",     icon: "👥" },
   { href: "/admin/email-blast",    label: "Email Blast",   icon: "📧" },
-  { href: "/admin/profit-loss",    label: "P&L",           icon: "💰" },
-  { href: "/admin/cases",          label: "Cases",         icon: "🗂️" },
+  { href: "/admin/profit-loss",       label: "P&L",           icon: "💰" },
+  { href: "/admin/sales-statement",   label: "Statement",     icon: "📄" },
+  { href: "/admin/tax",               label: "Tax Reports",   icon: "🧾" },
+  { href: "/admin/cases",             label: "Cases",         icon: "🗂️" },
   { href: "/admin/gift-cards",     label: "Gift Cards",    icon: "🎁" },
+  { href: "/admin/testimonials",     label: "Reviews",         icon: "⭐" },
+  { href: "/admin/accountant",      label: "Accountant Access", icon: "🔐" },
+  { href: "/admin/checkout-errors", label: "Checkout Errors", icon: "🚨" },
 ];
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+const ACCOUNTANT_NAV_ITEMS = [
+  { href: "/admin/tax", label: "Tax Reports", icon: "🧾" },
+];
+
+function NavLinks({ onNavigate, openCaseCount, role }: { onNavigate?: () => void; openCaseCount?: number; role?: string | null }) {
   const pathname = usePathname();
+  const items = role === "accountant" ? ACCOUNTANT_NAV_ITEMS : NAV_ITEMS;
 
   function isActive(href: string) {
     if (href === "/admin") return pathname === "/admin";
@@ -31,7 +44,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <>
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <Link
           key={item.href}
           href={item.href}
@@ -43,7 +56,12 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           }`}
         >
           <span>{item.icon}</span>
-          {item.label}
+          <span className="flex-1">{item.label}</span>
+          {item.href === "/admin/cases" && openCaseCount && openCaseCount > 0 ? (
+            <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-black px-1">
+              {openCaseCount > 99 ? "99+" : openCaseCount}
+            </span>
+          ) : null}
         </Link>
       ))}
       <a
@@ -60,7 +78,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function AdminNav() {
+export function AdminNav({ openCaseCount, role }: { openCaseCount?: number; role?: string | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -72,7 +90,10 @@ export function AdminNav() {
           <p className="text-xs text-muted-foreground mt-0.5">Admin</p>
         </div>
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
-          <NavLinks />
+          <NavLinks openCaseCount={openCaseCount} role={role} />
+          {role === "accountant" && (
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest px-3 pt-4">Accountant View</p>
+          )}
         </nav>
         <div className="px-3 py-4 border-t border-border">
           <form action="/api/admin/logout" method="POST">
@@ -112,7 +133,7 @@ export function AdminNav() {
       )}
       <div className={`lg:hidden fixed top-14 left-0 right-0 z-30 bg-white border-b border-border transition-transform duration-200 ${open ? "translate-y-0" : "-translate-y-full pointer-events-none"}`}>
         <nav className="px-3 py-3 flex flex-col gap-1">
-          <NavLinks onNavigate={() => setOpen(false)} />
+          <NavLinks onNavigate={() => setOpen(false)} openCaseCount={openCaseCount} role={role} />
         </nav>
         <div className="px-3 py-3 border-t border-border">
           <form action="/api/admin/logout" method="POST">

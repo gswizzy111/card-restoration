@@ -22,15 +22,10 @@ export function DiamondCard({
   const priceDollars = numericValue >= MIN_VALUE ? (numericValue * RATE).toFixed(2) : null;
   const tooLow = rawValue !== "" && numericValue > 0 && numericValue < MIN_VALUE;
 
-  const maxSlots = 30; // matches site-config TIER_MAX_SLOTS.elite
-  const bannerLabel = slotsLeft !== null
-    ? isSoldOut
-      ? `SOLD OUT · 0 / ${maxSlots} slots`
-      : !restorationsOpen
-      ? `0 / ${maxSlots} slots`
-      : `${slotsLeft} / ${maxSlots} slots remaining`
-    : isSoldOut
+  const bannerLabel = isSoldOut
     ? "SOLD OUT"
+    : slotsLeft !== null && restorationsOpen
+    ? `${slotsLeft} slot${slotsLeft !== 1 ? "s" : ""} left`
     : "White Glove";
 
   const bannerCls = isSoldOut
@@ -129,10 +124,6 @@ export function DiamondCard({
                 </span>
               </span>
             </span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-cyan-500">✓</span>
-            <span className="text-muted-foreground">Grader notes included</span>
           </div>
         </div>
       </div>

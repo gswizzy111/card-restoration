@@ -51,77 +51,111 @@ async function authed() {
 
 // GET — return rates (always, so a new label can always be created)
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!await authed()) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    if (!await authed()) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
-  const order = await getOrder(id);
-  if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
+    const { id } = await params;
+    const order = await getOrder(id);
+    if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
 
-  const existingLabels = getExistingLabels(order as Record<string, unknown>);
+    const existingLabels = getExistingLabels(order as Record<string, unknown>);
 
-  const addr = order.shipping_address as ShippingAddress | null;
-  if (!addr?.street1) return Response.json({ error: "No shipping address on file" }, { status: 400 });
+    const addr = order.shipping_address as ShippingAddress | null;
+    if (!addr?.street1) return Response.json({ error: "No shipping address on file" }, { status: 400 });
 
-  const shipment = await shippo.shipments.create({
-    addressFrom: businessAddress,
-    addressTo: {
-      name: order.customer_name ?? "",
-      street1: addr.street1,
-      street2: addr.street2 ?? "",
-      city: addr.city,
-      state: addr.state,
-      zip: addr.zip,
-      country: addr.country ?? "US",
-      phone: order.customer_phone ?? "",
-      email: order.customer_email ?? "",
-    },
-    parcels: [getParcel(order.items as { product_name: string }[] | null)],
-    async: false,
-  });
+    const shipment = await shippo.shipments.create({
+      addressFrom: businessAddress,
+      addressTo: {
+        name: order.customer_name ?? "",
+        street1: addr.street1,
+        street2: addr.street2 ?? "",
+        city: addr.city,
+        state: addr.state,
+        zip: addr.zip,
+        country: addr.country ?? "US",
+        phone: order.customer_phone ?? "",
+        email: order.customer_email ?? "",
+      },
+      parcels: [getParcel(order.items as { product_name: string }[] | null)],
+      async: false,
+    });
 
-  const rates = [...(shipment.rates ?? [])]
-    .sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))
-    .slice(0, 5)
-    .map((r) => ({
-      objectId: r.objectId,
-      provider: r.provider,
-      service: r.servicelevel?.name ?? "",
-      amount: r.amount,
-      currency: r.currency,
-      days: r.estimatedDays ?? null,
-    }));
+    const rates = [...(shipment.rates ?? [])]
+      .sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))
+      .slice(0, 5)
+      .map((r) => ({
+        objectId: r.objectId,
+        provider: r.provider,
+        service: r.servicelevel?.name ?? "",
+        amount: r.amount,
+        currency: r.currency,
+        days: r.estimatedDays ?? null,
+      }));
 
-  if (rates.length === 0) return Response.json({ error: "No rates available" }, { status: 500 });
+    if (rates.length === 0) return Response.json({ error: "No shipping rates available for this address. Check that the address is complete." }, { status: 422 });
 
-  return Response.json({ rates, existingLabels });
+    return Response.json({ rates, existingLabels });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[return-label GET]", msg);
+    return Response.json({ error: `Failed to get rates: ${msg}` }, { status: 500 });
+  }
 }
 
 // POST — purchase the chosen rate and append to the labels list
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
   if (!await authed()) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const order = await getOrder(id);
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
 
-  const { rateObjectId } = await req.json();
+  const body = await req.json().catch(() => ({}));
+  const { rateObjectId, insuranceDeclaredValueCents } = body;
   if (!rateObjectId) return Response.json({ error: "Missing rateObjectId" }, { status: 400 });
 
-  const transaction = await shippo.transactions.create({
-    rate: rateObjectId,
-    labelFileType: "PDF",
-    async: false,
-  });
+  const hasInsurance = typeof insuranceDeclaredValueCents === "number" && insuranceDeclaredValueCents > 0;
 
-  if (transaction.status !== "SUCCESS" || !transaction.labelUrl) {
-    return Response.json({ error: "Label purchase failed" }, { status: 500 });
+  // Use direct REST API — Shippo SDK's TransactionCreateRequest has no `extra` field and strips it silently
+  const txBody: Record<string, unknown> = {
+    rate: rateObjectId,
+    label_file_type: "PDF_4x6",
+    async: false,
+  };
+  if (hasInsurance) {
+    txBody.extra = {
+      insurance: {
+        amount: (insuranceDeclaredValueCents / 100).toFixed(2),
+        currency: "USD",
+        provider: "SHIPPO",
+        content: "Trading cards",
+      },
+    };
+  }
+  const txRes = await fetch("https://api.goshippo.com/transactions/", {
+    method: "POST",
+    headers: {
+      "Authorization": `ShippoToken ${process.env.SHIPPO_API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(txBody),
+  });
+  const transaction = await txRes.json() as Record<string, unknown>;
+
+  if (transaction.status !== "SUCCESS" || !transaction.label_url) {
+    const messages = (transaction.messages as {text:string}[] | undefined) ?? [];
+    const detail = messages.map((m) => m.text).join("; ") || JSON.stringify(transaction);
+    return Response.json({ error: `Label purchase failed: ${detail}` }, { status: 500 });
   }
 
-  const trackingNumber = transaction.trackingNumber ?? null;
-  const trackingUrl = transaction.trackingUrlProvider ?? null;
+  const zplContent: null = null;
+
+  const trackingNumber = (transaction.tracking_number as string) ?? null;
+  const trackingUrl = (transaction.tracking_url_provider as string) ?? null;
 
   const newLabel: SavedLabel = {
-    labelUrl: transaction.labelUrl,
+    labelUrl: transaction.label_url as string,
     trackingNumber,
     createdAt: new Date().toISOString(),
   };
@@ -137,7 +171,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .from("shop_orders")
     .update({
       labels: allLabels,
-      return_label_url: transaction.labelUrl,
+      return_label_url: transaction.label_url as string,
       tracking_number: trackingNumber,
       status: "shipped",
     })
@@ -148,7 +182,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     await admin
       .from("shop_orders")
       .update({
-        return_label_url: transaction.labelUrl,
+        return_label_url: transaction.label_url as string,
         tracking_number: trackingNumber,
         status: "shipped",
       })
@@ -188,5 +222,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  return Response.json({ newLabel, allLabels });
+  return Response.json({ newLabel, allLabels, zplContent });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[return-label POST]", msg);
+    return Response.json({ error: `Failed to purchase label: ${msg}` }, { status: 500 });
+  }
 }

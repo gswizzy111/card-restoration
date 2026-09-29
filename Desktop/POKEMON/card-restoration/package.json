@@ -20,6 +20,7 @@
     "date-fns": "^4.1.0",
     "lucide-react": "^1.14.0",
     "next": "16.2.4",
+    "qz-tray": "^2.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.75.0",
@@ -36,6 +37,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/qz-tray": "^2.2.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

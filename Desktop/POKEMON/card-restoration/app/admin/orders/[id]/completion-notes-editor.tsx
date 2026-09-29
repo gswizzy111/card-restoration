@@ -131,7 +131,7 @@ export function CompletionNotesEditor({
         {genError && <span className="text-xs text-red-600">{genError}</span>}
       </div>
       {generating && (
-        <p className="text-xs text-muted-foreground">Claude is writing grader notes based on the customer's card info…</p>
+        <p className="text-xs text-muted-foreground">Claude is writing restorer notes based on the customer's card info…</p>
       )}
       {notes && notes !== existingNotes && !saved && (
         <p className="text-xs text-amber-600 font-medium">Unsaved changes — click Save Notes to keep these.</p>

@@ -79,7 +79,7 @@ export async function POST(request: Request) {
         contentsType: "RETURN_MERCHANDISE" as const,
         nonDeliveryOption: "RETURN" as const,
         certify: true,
-        certifySigner: "The Card Doc",
+        certifySigner: "TCD",
         items: [{
           description: "Sports trading cards — restored",
           massUnit: "oz" as const,

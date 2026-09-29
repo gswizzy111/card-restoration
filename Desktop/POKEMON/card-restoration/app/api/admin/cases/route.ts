@@ -33,6 +33,10 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid data" }, { status: 400 });
 
   const d = parsed.data;
+  const token = d.type === "support"
+    ? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`.toUpperCase()
+    : null;
+
   const admin = createAdminClient();
   const { data, error } = await admin.from("cases").insert({
     type: d.type,
@@ -44,8 +48,9 @@ export async function POST(request: Request) {
     customer_email: d.customer_email || null,
     customer_phone: d.customer_phone || null,
     order_ref: d.order_ref || null,
-  }).select("id").single();
+    token,
+  }).select("id, token").single();
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json({ id: data.id });
+  return Response.json({ id: data.id, token: data.token });
 }

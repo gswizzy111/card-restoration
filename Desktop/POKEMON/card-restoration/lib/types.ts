@@ -21,6 +21,7 @@ export interface CardEntry {
   service_ids: string[];
   tier?: import("@/lib/restoration-tiers").RestorationTierId;
   needs_slab_crack?: boolean;
+  needs_pregrade?: boolean;
 }
 
 export interface CustomerInfo {

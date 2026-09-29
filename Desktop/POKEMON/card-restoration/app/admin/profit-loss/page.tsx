@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { requireAdminOrAccountant } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductCosts } from "@/lib/product-costs";
 import { formatCurrency } from "@/lib/utils";
@@ -23,8 +22,7 @@ function periodStart(period: Period): string | null {
 }
 
 export default async function ProfitLossPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) redirect("/admin/login");
+  await requireAdminOrAccountant();
 
   const sp = await searchParams;
   const period = (["today", "week", "month", "all"].includes(sp.period ?? "") ? sp.period : "month") as Period;

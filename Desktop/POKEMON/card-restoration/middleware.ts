@@ -13,7 +13,8 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/admin")) {
     if (pathname.startsWith("/admin/login")) return NextResponse.next();
     const auth = request.cookies.get("admin_auth")?.value;
-    if (auth !== process.env.ADMIN_PASSWORD) {
+    // Full admin: exact password match. Accountant: act_<uuid> prefix (DB verified at page level).
+    if (auth !== process.env.ADMIN_PASSWORD && !auth?.startsWith("act_")) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
     return NextResponse.next();
@@ -53,8 +54,9 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // Coming soon — rewrite all public pages to homepage
-  if (COMING_SOON && pathname !== "/") {
+  // Coming soon — rewrite all public pages to homepage.
+  // /privacy must always be accessible (Meta Platform Terms require it to be public).
+  if (COMING_SOON && pathname !== "/" && pathname !== "/privacy" && !pathname.startsWith("/privacy/")) {
     return NextResponse.rewrite(new URL("/", request.url));
   }
 

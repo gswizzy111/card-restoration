@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { requireAdminOrAccountant } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ExportButton } from "./export-button";
 
@@ -15,8 +14,7 @@ type Customer = {
 };
 
 export default async function CustomersPage() {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) redirect("/admin/login");
+  await requireAdminOrAccountant();
 
   const admin = createAdminClient();
 

@@ -1,0 +1,22 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /admin
+Disallow: /api/
+Allow: /privacy
+Allow: /privacy/
+Allow: /
+
+# Meta crawlers — privacy policy must be accessible
+User-agent: facebookexternalhit/1.1
+Allow: /
+Disallow:
+
+User-agent: Facebot
+Allow: /
+Disallow:
+
+User-agent: meta-externalagent
+Allow: /
+Disallow:
+
+Sitemap: https://thecarddoc1.com/sitemap.xml

@@ -13,22 +13,32 @@ export async function POST(
   const { id } = await params;
   const admin = createAdminClient();
 
-  const { data: card, error: fetchErr } = await admin.from("cards").select("completed").eq("id", id).single();
+  // Read current value
+  const { data: card, error: fetchErr } = await admin
+    .from("cards")
+    .select("completed")
+    .eq("id", id)
+    .single();
 
-  if (fetchErr) {
-    // Column doesn't exist yet — return a no-op
-    if (fetchErr.code === "42703" || fetchErr.message.includes("completed")) {
-      return Response.json({ completed: false, migration_needed: true });
-    }
-    return Response.json({ error: fetchErr.message }, { status: 500 });
+  if (fetchErr || !card) {
+    console.error("[card complete] fetch error:", fetchErr);
+    return Response.json({ error: fetchErr?.message ?? "Card not found" }, { status: fetchErr ? 500 : 404 });
   }
-  if (!card) return Response.json({ error: "Card not found" }, { status: 404 });
 
   const newState = !card.completed;
-  const { error: updateErr } = await admin.from("cards").update({ completed: newState }).eq("id", id);
-  if (updateErr && (updateErr.code === "42703" || updateErr.message.includes("completed"))) {
-    return Response.json({ completed: false, migration_needed: true });
+
+  // Update and read back the actual persisted value
+  const { data: updated, error: updateErr } = await admin
+    .from("cards")
+    .update({ completed: newState })
+    .eq("id", id)
+    .select("completed")
+    .single();
+
+  if (updateErr || !updated) {
+    console.error("[card complete] update error:", updateErr);
+    return Response.json({ error: updateErr?.message ?? "Update failed" }, { status: 500 });
   }
 
-  return Response.json({ completed: newState });
+  return Response.json({ completed: updated.completed });
 }

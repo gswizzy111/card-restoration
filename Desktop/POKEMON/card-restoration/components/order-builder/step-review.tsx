@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
@@ -38,6 +38,8 @@ interface StepReviewProps {
   onInsuranceChange: (ins: InsuranceSelection) => void;
   addSignatureConfirmation: boolean;
   onSignatureConfirmationChange: (v: boolean) => void;
+  loyaltyDiscountPercent: number;
+  onLoyaltyDiscountChange: (pct: number) => void;
 }
 
 export function StepReview({
@@ -66,7 +68,10 @@ export function StepReview({
   onInsuranceChange,
   addSignatureConfirmation,
   onSignatureConfirmationChange,
+  loyaltyDiscountPercent,
+  onLoyaltyDiscountChange,
 }: StepReviewProps) {
+  const [loyaltyOrderCount, setLoyaltyOrderCount] = useState(0);
   const [codeStatus, setCodeStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [codeName, setCodeName] = useState("");
   const [gcStatus, setGcStatus] = useState<"idle" | "valid" | "invalid">("idle");
@@ -75,6 +80,20 @@ export function StepReview({
   const [insuranceDollars, setInsuranceDollars] = useState(
     insurance.declaredValueCents > 0 ? String(insurance.declaredValueCents / 100) : ""
   );
+
+  // Auto-detect loyalty discount when review step loads
+  useEffect(() => {
+    if (!customer.email) return;
+    fetch(`/api/loyalty?email=${encodeURIComponent(customer.email)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.discountPercent > 0) {
+          setLoyaltyOrderCount(data.orderCount);
+          onLoyaltyDiscountChange(data.discountPercent);
+        }
+      })
+      .catch(() => {});
+  }, [customer.email]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchInsuranceQuote(declaredValueCents: number) {
     if (declaredValueCents < 100) { setInsuranceQuote(null); return; }
@@ -176,7 +195,8 @@ export function StepReview({
   }
 
   const TAX_RATE = 0.06625;
-  const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
+  const effectiveDiscountPct = Math.max(discountPercent, loyaltyDiscountPercent);
+  const discountCents = effectiveDiscountPct > 0 ? Math.round(subtotal * effectiveDiscountPct / 100) : 0;
   const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
   const signatureCents = addSignatureConfirmation && shippingMethod === "buy_label" ? SIGNATURE_FEE_CENTS : 0;
@@ -190,6 +210,23 @@ export function StepReview({
       <div>
         <h2 className="font-serif text-2xl font-medium text-foreground mb-1">Review your order.</h2>
       </div>
+
+      {/* Loyalty discount banner */}
+      {loyaltyDiscountPercent > 0 && (
+        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-xl p-4 flex items-center gap-3">
+          <span className="text-2xl shrink-0">🏆</span>
+          <div>
+            <p className="font-bold text-amber-900 text-sm">
+              {loyaltyDiscountPercent}% loyalty discount applied!
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              {loyaltyOrderCount === 1
+                ? "Welcome back — this is your 2nd order with us."
+                : `You're a loyal customer (${loyaltyOrderCount + 1} orders). Thank you!`}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Cards & Services/Tier */}
       <div className="flex flex-col gap-3">
@@ -406,7 +443,11 @@ export function StepReview({
         </div>
         {discountCents > 0 && (
           <div className="flex justify-between text-sm text-green-600 font-medium">
-            <span>Discount ({discountPercent}% off)</span>
+            <span>
+              {loyaltyDiscountPercent >= discountPercent
+                ? `Loyalty Discount (${effectiveDiscountPct}% off)`
+                : `Discount (${effectiveDiscountPct}% off)`}
+            </span>
             <span>−{formatCurrency(discountCents)}</span>
           </div>
         )}

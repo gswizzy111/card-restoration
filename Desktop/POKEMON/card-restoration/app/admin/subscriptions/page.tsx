@@ -215,17 +215,18 @@ export default async function AdminSubscriptionsPage() {
                       <span className="text-foreground font-medium">{formatDate(sub.cancelled_at)}</span>
                     </p>
                   )}
-                  {pendingOrders.length > 0 && (
-                    <Link
-                      href="/admin/ship-queue"
-                      className="mt-2 text-xs font-bold text-orange-600 hover:text-orange-700 underline"
-                    >
-                      Ship kit →
-                    </Link>
-                  )}
-                  {pendingOrders.length === 0 && sub.status === "active" && (
+                  {sub.status === "active" && (
                     <div className="mt-2 flex flex-col items-end gap-2">
-                      <CreateKitOrderButton subscriptionId={sub.id} />
+                      {pendingOrders.length > 0 ? (
+                        <Link
+                          href="/admin/ship-queue"
+                          className="text-xs font-bold text-orange-600 hover:text-orange-700 underline"
+                        >
+                          Ship kit →
+                        </Link>
+                      ) : (
+                        <CreateKitOrderButton subscriptionId={sub.id} />
+                      )}
                       <CancelSubscriptionButton
                         subscriptionId={sub.id}
                         customerName={sub.customer_name}

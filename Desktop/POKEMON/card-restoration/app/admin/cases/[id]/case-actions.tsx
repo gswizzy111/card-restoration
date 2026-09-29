@@ -3,6 +3,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+export function CopyLinkButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <button
+      onClick={copy}
+      className="text-xs font-bold px-3 py-1 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
 type Status = "open" | "in_progress" | "resolved" | "closed";
 
 const STATUS_LABELS: Record<Status, string> = {

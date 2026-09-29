@@ -66,7 +66,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     parcels: [parcel],
     customsDeclaration: {
       certify: true,
-      certifySigner: businessAddress.name || "The Card Doc",
+      certifySigner: businessAddress.name || "TCD",
       contentsType: CustomsDeclarationContentsTypeEnum.Merchandise,
       nonDeliveryOption: CustomsDeclarationNonDeliveryOptionEnum.Return,
       eelPfc: CustomsDeclarationEelPfcEnum.NOEEI3037A,

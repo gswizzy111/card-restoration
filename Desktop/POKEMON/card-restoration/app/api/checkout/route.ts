@@ -7,6 +7,7 @@ import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
 import { isSoldOut, INSURANCE_ENABLED, SIGNATURE_FEE_CENTS, TIER_MAX_SLOTS } from "@/lib/site-config";
 import { getSlotsOpenedAt, getRestorationsOpen } from "@/lib/store-config";
+import { logCheckoutError } from "@/lib/checkout-error-log";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -55,30 +56,42 @@ const BodySchema = z.object({
   insurance_declared_value_cents: z.number().int().min(0).max(1_000_000).optional(),
   insurance_type: z.enum(["inbound", "round_trip"]).optional(),
   slab_crack_count: z.number().int().min(0).max(100).optional(),
+  pregrade_count: z.number().int().min(0).max(100).optional(),
   signature_path: z.string().optional(),
   add_signature_confirmation: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
+  const userAgent = request.headers.get("user-agent") ?? "";
+
   if (isSoldOut()) {
-    return Response.json({ error: "Restoration services are currently unavailable. Please check back soon." }, { status: 503 });
+    return Response.json({ error: "Restoration services are currently unavailable. Please check back soon.", code: "SHOP_CLOSED" }, { status: 503 });
   }
 
   // Enforce master restorations toggle — blocks API-level submissions when shop is closed
   const restorationsOpen = await getRestorationsOpen();
   if (!restorationsOpen) {
-    return Response.json({ error: "We're not accepting new restoration orders right now. Check back soon!" }, { status: 503 });
+    return Response.json({ error: "We're not accepting new restoration orders right now. Check back soon!", code: "SHOP_CLOSED" }, { status: 503 });
   }
 
   const body = await request.json();
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {
     console.error("Checkout validation failed:", JSON.stringify(parsed.error.flatten()));
-    return Response.json({ error: "Invalid order data. Please go back and check your information." }, { status: 400 });
+    return Response.json({ error: "Invalid order data. Please go back and check your information.", code: "VALIDATION_ERROR" }, { status: 400 });
   }
 
   const data = parsed.data;
   const admin = createAdminClient();
+
+  // Diamond (elite) tier: enforce $5,000 minimum total declared value
+  const isEliteOrder = data.restoration_tier === "elite" || data.cards.some((c) => c.tier === "elite");
+  if (isEliteOrder) {
+    const totalValueCents = data.cards.reduce((s, c) => s + (c.estimated_value_cents ?? 0), 0);
+    if (totalValueCents < 500_000) {
+      return Response.json({ error: "Diamond tier requires a minimum total card value of $5,000." }, { status: 400 });
+    }
+  }
 
   // Determine tiers — either a single order-level tier, or per-card tiers
   let subtotalCents: number;
@@ -113,7 +126,7 @@ export async function POST(request: Request) {
     for (const tierId of uniqueTiers) {
       const s = settingsMap[tierId];
       if (s && s.is_open === false) {
-        return Response.json({ error: `The ${getTierById(tierId).name} tier is currently closed.` }, { status: 409 });
+        return Response.json({ error: `The ${getTierById(tierId).name} tier is currently closed.`, code: "TIER_CLOSED" }, { status: 409 });
       }
 
       // Use DB max_slots if set, otherwise fall back to site-config TIER_MAX_SLOTS constant
@@ -131,14 +144,13 @@ export async function POST(request: Request) {
         if (slotsOpenedAt) paidQuery = paidQuery.gte("created_at", slotsOpenedAt);
         const { count: paidCount } = await paidQuery;
 
-        // Count recent in-progress checkouts (pending + has Stripe session = customer is on payment page)
-        // These act as temporary slot reservations to prevent overselling during concurrent checkouts
+        // Count recent in-progress checkouts (pending, < 30 min old = active reservation)
+        // stripe_session_id filter removed — that column may not exist yet in the DB.
         let pendingQuery = admin
           .from("orders")
           .select("id", { count: "exact", head: true })
           .eq("restoration_tier", tierId)
           .eq("payment_status", "pending")
-          .not("stripe_session_id", "is", null)
           .gte("created_at", thirtyMinAgo);
         if (slotsOpenedAt) pendingQuery = pendingQuery.gte("created_at", slotsOpenedAt);
         const { count: pendingCount } = await pendingQuery;
@@ -147,6 +159,7 @@ export async function POST(request: Request) {
         if (occupied + cardCount > effectiveMaxSlots) {
           return Response.json({
             error: `Sorry, the ${getTierById(tierId).name} tier is sold out. Please choose a different tier or join the waitlist.`,
+            code: "TIER_SOLD_OUT",
           }, { status: 409 });
         }
       }
@@ -170,7 +183,7 @@ export async function POST(request: Request) {
   } else {
     // Fallback: volume-based pricing (legacy, no tier selected)
     if (!data.services || data.services.length === 0) {
-      return Response.json({ error: "Invalid order data. Please select a service." }, { status: 400 });
+      return Response.json({ error: "Invalid order data. Please select a service.", code: "VALIDATION_ERROR" }, { status: 400 });
     }
 
     const serviceIds = data.services.map((s) => s.id);
@@ -180,7 +193,7 @@ export async function POST(request: Request) {
       .in("id", serviceIds);
     if (svcErr || !dbServices) {
       console.error("Failed to load services:", svcErr);
-      return Response.json({ error: "Failed to load services. Please try again." }, { status: 500 });
+      return Response.json({ error: "Failed to load services. Please try again.", code: "SERVICE_LOAD_FAILED" }, { status: 500 });
     }
 
     const firstService = dbServices[0];
@@ -192,6 +205,7 @@ export async function POST(request: Request) {
   // Look up discount from DB using the affiliate code (never trust client-sent discount)
   let discountPercent = 0;
   let discountCents = 0;
+  let discountLabel = data.affiliate_code?.trim() ?? "discount";
   if (data.affiliate_code) {
     const { data: affiliate } = await admin
       .from("affiliates")
@@ -202,6 +216,25 @@ export async function POST(request: Request) {
     if (discountPercent > 0) {
       discountCents = Math.round(subtotalCents * discountPercent / 100);
     }
+  }
+
+  // Loyalty discount — count this customer's completed paid orders
+  const { count: completedOrderCount } = await admin
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .ilike("customer_email", data.customer.email)
+    .eq("payment_status", "paid")
+    .neq("status", "awaiting_payment");
+  const completedOrders = completedOrderCount ?? 0;
+  let loyaltyDiscountPercent = 0;
+  if (completedOrders === 1) loyaltyDiscountPercent = 5;
+  else if (completedOrders >= 2) loyaltyDiscountPercent = 10;
+
+  // Use whichever discount is higher
+  if (loyaltyDiscountPercent > discountPercent) {
+    discountPercent = loyaltyDiscountPercent;
+    discountCents = Math.round(subtotalCents * discountPercent / 100);
+    discountLabel = completedOrders === 1 ? "Loyalty — 2nd order" : "Loyalty — returning customer";
   }
 
   const isInternational = data.customer.address.country !== "US";
@@ -218,6 +251,10 @@ export async function POST(request: Request) {
   // Slab cracking — $7/slab, server-side, capped at card count
   const slabCrackCount = Math.min(data.slab_crack_count ?? 0, data.cards.length);
   const slabCrackCents = slabCrackCount * 700;
+
+  // Pregrade — $25/card, server-side, capped at card count
+  const pregradeCount = Math.min(data.pregrade_count ?? 0, data.cards.length);
+  const pregradeCents = pregradeCount * 2500;
 
   // Compute insurance server-side — never trust client price
   const SHIPPO_RATE = 0.015;
@@ -245,12 +282,12 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (gc && gc.status === "active" && gc.remaining_cents > 0) {
       giftCardId = gc.id;
-      const preTaxTotal = subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents;
+      const preTaxTotal = subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents + pregradeCents;
       giftCardDiscountCents = Math.min(gc.remaining_cents, preTaxTotal);
     }
   }
 
-  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents + instagramFeeCents + signatureFeeCents - giftCardDiscountCents);
+  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents + pregradeCents + instagramFeeCents + signatureFeeCents - giftCardDiscountCents);
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -262,7 +299,7 @@ export async function POST(request: Request) {
     country: data.customer.address.country,
   };
   const shipToAddress = {
-    name: process.env.BUSINESS_SHIPPING_NAME ?? "The Card Doc",
+    name: process.env.BUSINESS_SHIPPING_NAME ?? "TCD",
     street1: process.env.BUSINESS_SHIPPING_STREET1 ?? "",
     city: process.env.BUSINESS_SHIPPING_CITY ?? "",
     state: process.env.BUSINESS_SHIPPING_STATE ?? "",
@@ -270,8 +307,11 @@ export async function POST(request: Request) {
     country: "US",
   };
 
-  // Build insert — only include optional columns when they have values so missing
-  // DB columns (not yet migrated) don't cause every order to fail.
+  // Only include columns guaranteed to exist in the DB.
+  // Optional columns (inbound_carrier, discount_cents, insurance, etc.) require
+  // migrations that may not have run yet — omit them to prevent insert failures.
+  // Insurance and signature confirmation are passed through Stripe metadata so the
+  // webhook can still act on them without needing DB columns.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orderPayload: Record<string, any> = {
     customer_email: data.customer.email,
@@ -287,18 +327,14 @@ export async function POST(request: Request) {
     restoration_tier: restorationTier ?? null,
     status: "awaiting_payment",
     payment_status: "pending",
+    slab_crack_count: slabCrackCount,
+    instagram_feature: data.instagram_feature ?? false,
+    ...(giftCardDiscountCents > 0 ? {
+      gift_card_code: data.gift_card_code?.trim().toUpperCase() ?? null,
+      gift_card_discount_cents: giftCardDiscountCents,
+    } : {}),
+    ...(loyaltyDiscountPercent > 0 ? { loyalty_discount_percent: loyaltyDiscountPercent } : {}),
   };
-  // Conditionally include columns that may not exist in older DB schemas
-  if (data.shipping_rate?.carrier) orderPayload.inbound_carrier = data.shipping_rate.carrier;
-  if (data.shipping_rate?.service_level) orderPayload.inbound_service_level = data.shipping_rate.service_level;
-  if (discountCents > 0) orderPayload.discount_cents = discountCents;
-  if (discountPercent > 0) orderPayload.discount_percent = discountPercent;
-  if (data.affiliate_code) orderPayload.affiliate_code = data.affiliate_code;
-  if (INSURANCE_ENABLED && data.insurance_declared_value_cents) {
-    orderPayload.insurance_declared_value_cents = data.insurance_declared_value_cents;
-    orderPayload.insurance_type = data.insurance_type ?? null;
-  }
-  if (data.add_signature_confirmation) orderPayload.add_signature_confirmation = true;
 
   // Create order in DB
   const { data: order, error: orderErr } = await admin
@@ -309,7 +345,28 @@ export async function POST(request: Request) {
   if (orderErr || !order) {
     console.error("Failed to create order — Supabase error:", JSON.stringify(orderErr));
     console.error("Payload keys attempted:", Object.keys(orderPayload).join(", "));
-    return Response.json({ error: "Failed to save order. Please try again." }, { status: 500 });
+    const ref = `ORDER_SAVE_FAILED-${Date.now().toString(36).toUpperCase()}`;
+    const actualError = orderErr
+      ? `${orderErr.message}${orderErr.details ? ` | ${orderErr.details}` : ""}${orderErr.hint ? ` | Hint: ${orderErr.hint}` : ""} | Code: ${orderErr.code ?? "unknown"}`
+      : "No order returned from insert";
+    logCheckoutError({
+      ref,
+      timestamp: new Date().toISOString(),
+      code: "ORDER_SAVE_FAILED",
+      actual_error: actualError,
+      customer_name: data.customer.name,
+      customer_email: data.customer.email,
+      customer_phone: data.customer.phone,
+      tier: restorationTier ?? uniqueTiers.join("+") ?? undefined,
+      card_count: data.cards.length,
+      shipping_method: data.shipping_method,
+      user_agent: userAgent,
+    }).catch(() => {});
+    return Response.json({
+      error: "Failed to save your order. Please try again or DM @the_card_doc on Instagram.",
+      code: "ORDER_SAVE_FAILED",
+      ref,
+    }, { status: 500 });
   }
 
   // Insert order_services
@@ -454,6 +511,12 @@ export async function POST(request: Request) {
       quantity: slabCrackCount,
     });
   }
+  if (pregradeCents > 0) {
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: "Pregrade" }, unit_amount: 2500 },
+      quantity: pregradeCount,
+    });
+  }
   if (instagramFeeCents > 0) {
     lineItems.push({
       price_data: { currency: "usd", product_data: { name: "Instagram Feature — Card in a Video" }, unit_amount: 10000 },
@@ -480,7 +543,7 @@ export async function POST(request: Request) {
       const coupon = await stripe.coupons.create({
         percent_off: discountPercent,
         duration: "once",
-        name: `${discountPercent}% Off — ${data.affiliate_code ?? "coupon"}`,
+        name: `${discountPercent}% Off — ${discountLabel}`,
       });
       stripeDiscounts = [{ coupon: coupon.id }];
     } catch (err) {
@@ -508,11 +571,42 @@ export async function POST(request: Request) {
         is_international: isInternational ? "true" : "",
         gift_card_id: giftCardId ?? "",
         gift_card_discount_cents: giftCardDiscountCents > 0 ? String(giftCardDiscountCents) : "",
+        // Insurance, signature, slab crack — passed via metadata so the webhook can save them
+        insurance_declared_value_cents: (INSURANCE_ENABLED && insuranceChargeCents > 0 && data.insurance_declared_value_cents)
+          ? String(data.insurance_declared_value_cents)
+          : "",
+        insurance_type: (INSURANCE_ENABLED && insuranceChargeCents > 0 && data.insurance_type)
+          ? data.insurance_type
+          : "",
+        add_signature_confirmation: data.add_signature_confirmation ? "true" : "",
+        slab_crack_count: slabCrackCount > 0 ? String(slabCrackCount) : "",
+        pregrade_count: pregradeCount > 0 ? String(pregradeCount) : "",
+        instagram_feature: data.instagram_feature ? "true" : "",
+        loyalty_discount_percent: loyaltyDiscountPercent > 0 ? String(loyaltyDiscountPercent) : "",
       },
     });
   } catch (err) {
     console.error("Stripe session creation failed:", err);
-    return Response.json({ error: "Payment provider error. Please try again." }, { status: 500 });
+    const ref = `PAYMENT_SETUP_FAILED-${Date.now().toString(36).toUpperCase()}`;
+    const stripeMsg = err instanceof Error ? err.message : String(err);
+    logCheckoutError({
+      ref,
+      timestamp: new Date().toISOString(),
+      code: "PAYMENT_SETUP_FAILED",
+      actual_error: stripeMsg,
+      customer_name: data.customer.name,
+      customer_email: data.customer.email,
+      customer_phone: data.customer.phone,
+      tier: restorationTier ?? uniqueTiers.join("+") ?? undefined,
+      card_count: data.cards.length,
+      shipping_method: data.shipping_method,
+      user_agent: userAgent,
+    }).catch(() => {});
+    return Response.json({
+      error: "Payment setup failed. Please try again. If this keeps happening, DM @the_card_doc on Instagram.",
+      code: "PAYMENT_SETUP_FAILED",
+      ref,
+    }, { status: 500 });
   }
 
   // Save Stripe session ID

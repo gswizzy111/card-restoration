@@ -287,7 +287,7 @@ export function TierRow({
                       onChange={(e) => setNotes(e.target.checked)}
                       className="w-4 h-4 accent-primary"
                     />
-                    <span className="text-sm">Grader notes</span>
+                    <span className="text-sm">Restorer notes</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input

@@ -251,7 +251,6 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                 <div className="flex items-center justify-between">
                   <Label>
                     Photos <span className="text-red-500 font-bold">*</span>
-                    <span className="ml-1 text-xs font-normal text-muted-foreground">Required</span>
                   </Label>
                   {card.photo_urls.length > 0 && (
                     <span className="text-xs text-green-600 font-semibold">✓ {card.photo_urls.length} photo{card.photo_urls.length !== 1 ? "s" : ""} added</span>
@@ -262,7 +261,7 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                   onChange={(urls) => updateCard(card.id, { photo_urls: urls })}
                 />
                 {card.photo_urls.length === 0 && (
-                  <p className="text-xs text-red-500">Please upload at least one photo of your card before continuing.</p>
+                  <p className="text-xs text-red-500 font-medium">Upload at least one photo to continue.</p>
                 )}
               </div>
 
@@ -279,6 +278,23 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                   <span className="font-semibold text-amber-900">Need your slab cracked? +$7</span>
                   <span className="block text-amber-700 text-xs mt-0.5">
                     Check this if your card is currently in a PSA, BGS, or other graded slab and needs to be removed before restoration.
+                  </span>
+                </label>
+              </div>
+
+              {/* Pregrade */}
+              <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                <input
+                  type="checkbox"
+                  id={`pregrade-${card.id}`}
+                  checked={card.needs_pregrade ?? false}
+                  onChange={(e) => updateCard(card.id, { needs_pregrade: e.target.checked })}
+                  className="w-4 h-4 mt-0.5 accent-green-600 flex-shrink-0"
+                />
+                <label htmlFor={`pregrade-${card.id}`} className="text-sm cursor-pointer">
+                  <span className="font-semibold text-green-900">Add Pregrade? +$25</span>
+                  <span className="block text-green-700 text-xs mt-0.5">
+                    We'll pregrade your card before submitting so you know what grade to expect — helping you decide whether to send it off.
                   </span>
                 </label>
               </div>

@@ -18,7 +18,7 @@ const BodySchema = z.object({
   admin_context: z.string().nullable().optional(),
 });
 
-const SYSTEM_PROMPT = `You write professional grader notes for The Card Doc, a card restoration service.
+const SYSTEM_PROMPT = `You write professional restorer notes for The Card Doc, a card restoration service.
 You are given information about one or more cards a customer submitted for restoration, including the card name, set, number, estimated value, tier, and the customer's description of the damage or request.
 
 Output rules:

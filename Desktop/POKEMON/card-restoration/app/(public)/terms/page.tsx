@@ -39,10 +39,10 @@ export default function TermsPage() {
               The Card Doc offers four service tiers with different turnaround times and pricing:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-sm">
-              <li><strong>Regular:</strong> $75 per card, 12-15 business days, includes grader notes</li>
-              <li><strong>Expedited:</strong> $89.99 per card, 7-10 business days, includes grader notes</li>
-              <li><strong>Premium:</strong> $99.99 per card, 5-7 business days, includes grader notes</li>
-              <li><strong>Ultra Premium:</strong> $150 per card, 3-5 business days, includes grader notes</li>
+              <li><strong>Regular:</strong> $75 per card, 12-15 business days</li>
+              <li><strong>Expedited:</strong> $89.99 per card, 7-10 business days</li>
+              <li><strong>Premium:</strong> $99.99 per card, 5-7 business days</li>
+              <li><strong>Ultra Premium:</strong> $150 per card, 3-5 business days</li>
             </ul>
             <p>
               <strong>IMPORTANT:</strong> All turnaround times are estimates only and are NOT guaranteed. Turnaround times may be affected by submission volume, capacity, payment issues, shipping delays, or any other circumstance beyond our control. We make no warranty, representation, or guarantee regarding completion within any stated timeframe. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE CARD DOC SHALL HAVE NO LIABILITY WHATSOEVER FOR ANY DELAY IN PROVIDING SERVICES OR FAILURE TO COMPLETE SERVICES WITHIN ANY ESTIMATED TIMEFRAME.
@@ -138,7 +138,7 @@ export default function TermsPage() {
               <li>The accuracy of any grade or assessment provided</li>
               <li>The authenticity of any item</li>
               <li>The condition of any item after assessment</li>
-              <li>Any grader notes or documentation provided</li>
+              <li>Any documentation provided</li>
             </ul>
             <p>
               If you disagree with any assessment provided by The Card Doc, your recourse is limited to resubmission of the item for

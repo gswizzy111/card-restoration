@@ -106,11 +106,11 @@ const TIER_TURNAROUND_DAYS: Record<string, number> = {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tab?: string; tier?: string; period?: string; notes?: string; sort?: string }>;
+  searchParams: Promise<{ q?: string; tab?: string; tier?: string; period?: string; notes?: string; sort?: string; method?: string }>;
 }) {
-  const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter, sort: sortMode } = await searchParams;
+  const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter, sort: sortMode, method: methodFilter } = await searchParams;
   const query = q?.trim() ?? "";
-  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : "orders";
+  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : tab === "gift-cards" ? "gift-cards" : "orders";
   const activePeriod = shippedPeriod === "week" ? "week" : shippedPeriod === "month" ? "month" : shippedPeriod === "all" ? "all" : "today";
 
   const admin = createAdminClient();
@@ -226,11 +226,12 @@ export default async function AdminPage({
     { data: shippedRaw },
     { data: awaitingOrders },
     { data: insuredOrders },
-    { data: videoServiceRows },
+    { data: videoOrders },
+    { data: giftCards },
   ] = await Promise.all([
     admin
       .from("orders")
-      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier, admin_notes, insurance_declared_value_cents, insurance_type")
+      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier, admin_notes, payment_method, instagram_feature")
       .neq("status", "awaiting_payment")
       .order("created_at", { ascending: false }),
     admin
@@ -239,7 +240,7 @@ export default async function AdminPage({
       .order("created_at", { ascending: false }),
     admin
       .from("orders")
-      .select("id, order_number, customer_name, customer_email, created_at, status, restoration_tier, total_cents")
+      .select("id, order_number, customer_name, customer_email, created_at, status, restoration_tier, total_cents, instagram_feature")
       .in("status", ["received", "in_progress"])
       .eq("payment_status", "paid")
       .order("created_at", { ascending: true }),
@@ -262,21 +263,19 @@ export default async function AdminPage({
       .neq("status", "awaiting_payment")
       .order("created_at", { ascending: false }),
     admin
-      .from("order_services")
-      .select("order_id")
-      .eq("service_id", "instagram_feature"),
+      .from("orders")
+      .select("id, order_number, customer_name, customer_email, status, created_at, total_cents, restoration_tier")
+      .eq("instagram_feature", true)
+      .neq("status", "awaiting_payment")
+      .order("created_at", { ascending: false }),
+    admin
+      .from("gift_cards")
+      .select("*")
+      .order("created_at", { ascending: false }),
   ]);
 
-  // Fetch full video orders from their service rows
-  const videoOrderIds = [...new Set((videoServiceRows ?? []).map((r) => r.order_id))];
-  const { data: videoOrders } = videoOrderIds.length > 0
-    ? await admin
-        .from("orders")
-        .select("id, order_number, customer_name, customer_email, status, created_at, total_cents, restoration_tier")
-        .in("id", videoOrderIds)
-        .neq("status", "awaiting_payment")
-        .order("created_at", { ascending: false })
-    : { data: [] as { id: string; order_number: string | number; customer_name: string; customer_email: string; status: string; created_at: string; total_cents: number; restoration_tier: string | null }[] };
+  // videoOrders comes directly from the parallel fetch above (instagram_feature = true)
+  const videoOrderIds = (videoOrders ?? []).map((o) => o.id);
 
   // Cards for video orders (need to know which cards to film)
   const { data: videoCards } = videoOrderIds.length > 0
@@ -409,13 +408,18 @@ export default async function AdminPage({
   // Orders we consider "done" for grader-notes purposes
   const DONE_STATUSES = ["completed", "shipped_back", "delivered"];
   const tierMatchFn = (tier: string | null) => !tierFilter || tierFilter === "all" || tier === tierFilter;
+  const methodMatchFn = (o: Record<string, unknown>) => {
+    if (!methodFilter || methodFilter === "all") return true;
+    if (methodFilter === "unset") return !(o as any).payment_method;
+    return (o as any).payment_method === methodFilter;
+  };
   // When the missing-notes filter is on: only surface done orders that have no notes
   const notesMatchFn = (status: string, notes: string | null | undefined) => {
     if (notesFilter !== "missing") return true;
     return DONE_STATUSES.includes(status) && (!notes || notes.trim() === "");
   };
-  const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && notesMatchFn(o.status, (o as any).admin_notes));
-  const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && notesMatchFn(o.status, (o as any).admin_notes));
+  const activeOrders = (orders ?? []).filter((o) => !PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && methodMatchFn(o as any) && notesMatchFn(o.status, (o as any).admin_notes));
+  const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && methodMatchFn(o as any) && notesMatchFn(o.status, (o as any).admin_notes));
 
   const allRevenue = [
     ...(orders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, created_at: o.created_at })),
@@ -566,6 +570,23 @@ export default async function AdminPage({
               </span>
             )}
           </Link>
+          <Link
+            href="/admin?tab=gift-cards"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+              activeTab === "gift-cards"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            🎁 Gift Cards
+            {(giftCards?.length ?? 0) > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeTab === "gift-cards" ? "bg-yellow-100 text-yellow-700" : "bg-yellow-500 text-white"
+              }`}>
+                {giftCards?.length}
+              </span>
+            )}
+          </Link>
         </div>
 
         {/* ── ORDERS TAB ── */}
@@ -590,52 +611,61 @@ export default async function AdminPage({
             </div>
 
             {/* Tier filter + Missing Notes toggle */}
-            <div className="flex gap-2 flex-wrap mb-3">
-              {[["all", "All Tiers"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"]].map(([val, label]) => {
-                const notesSuffix = notesFilter === "missing" ? "&notes=missing" : "";
-                const href = val === "all"
-                  ? `/admin${notesFilter === "missing" ? "?notes=missing" : ""}`
-                  : `/admin?tier=${val}${notesSuffix}`;
-                return (
-                  <Link
-                    key={val}
-                    href={href}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
-                      (tierFilter ?? "all") === val
-                        ? "bg-foreground text-background border-foreground"
-                        : "bg-white text-muted-foreground border-border hover:border-foreground"
-                    }`}
-                  >
-                    {label}
-                  </Link>
-                );
-              })}
-              <div className="h-px w-px" />
-              {(() => {
-                const tierSuffix = tierFilter && tierFilter !== "all" ? `?tier=${tierFilter}` : "";
-                const noteHref = notesFilter === "missing"
-                  ? `/admin${tierSuffix}`
-                  : `/admin${tierSuffix}${tierSuffix ? "&" : "?"}notes=missing`;
-                return (
-                  <Link
-                    href={noteHref}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
-                      notesFilter === "missing"
-                        ? "bg-red-600 text-white border-red-600"
-                        : "bg-white text-muted-foreground border-border hover:border-foreground"
-                    }`}
-                  >
-                    {notesFilter === "missing" ? "★ Missing Notes" : "Missing Notes"}
-                  </Link>
-                );
-              })()}
-            </div>
+            {(() => {
+              function ordersHref(overrides: Record<string, string | undefined>) {
+                const p = new URLSearchParams();
+                const merged = { tier: tierFilter, notes: notesFilter, method: methodFilter, ...overrides };
+                for (const [k, v] of Object.entries(merged)) {
+                  if (v && v !== "all") p.set(k, v);
+                }
+                const qs = p.toString();
+                return `/admin${qs ? `?${qs}` : ""}`;
+              }
+              return (
+                <>
+                  <div className="flex gap-2 flex-wrap mb-2">
+                    {[["all", "All Tiers"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"]].map(([val, label]) => (
+                      <Link key={val} href={ordersHref({ tier: val })}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                          (tierFilter ?? "all") === val
+                            ? "bg-foreground text-background border-foreground"
+                            : "bg-white text-muted-foreground border-border hover:border-foreground"
+                        }`}
+                      >{label}</Link>
+                    ))}
+                    <div className="h-px w-px" />
+                    <Link
+                      href={ordersHref({ notes: notesFilter === "missing" ? undefined : "missing" })}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                        notesFilter === "missing"
+                          ? "bg-red-600 text-white border-red-600"
+                          : "bg-white text-muted-foreground border-border hover:border-foreground"
+                      }`}
+                    >
+                      {notesFilter === "missing" ? "★ Missing Notes" : "Missing Notes"}
+                    </Link>
+                  </div>
+                  <div className="flex gap-2 flex-wrap mb-3 items-center">
+                    <span className="text-xs text-muted-foreground font-semibold">Paid via:</span>
+                    {[["all", "All"], ["card", "Card"], ["gift_card", "Gift Card"], ["cash", "Cash"], ["venmo", "Venmo"], ["zelle", "Zelle"], ["check", "Check"], ["other", "Other"], ["unset", "Not Set"]].map(([val, label]) => (
+                      <Link key={val} href={ordersHref({ method: val })}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                          (methodFilter ?? "all") === val
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-white text-muted-foreground border-border hover:border-primary/40"
+                        }`}
+                      >{label}</Link>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Active orders */}
             {activeOrders.length === 0 ? (
               <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
                 {notesFilter === "missing"
-                  ? "No completed orders with missing grader notes."
+                  ? "No completed orders with missing restorer notes."
                   : tierFilter && tierFilter !== "all"
                   ? `No active ${TIER_STYLES[tierFilter]?.label ?? tierFilter} orders.`
                   : "No active orders."}
@@ -664,9 +694,14 @@ export default async function AdminPage({
                             Insured ${((order as any).insurance_declared_value_cents / 100).toFixed(0)}
                           </span>
                         )}
-                        {videoOrderIds.includes(order.id) && (
+                        {(order as any).instagram_feature && (
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">
-                            Video
+                            🎬 Video
+                          </span>
+                        )}
+                        {(order as any).payment_method && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {({ card: "💳 Card", gift_card: "🎁 Gift Card", cash: "💵 Cash", venmo: "Venmo", zelle: "Zelle", check: "Check", other: "Other" } as Record<string, string>)[(order as any).payment_method] ?? (order as any).payment_method}
                           </span>
                         )}
                       </div>
@@ -732,6 +767,11 @@ export default async function AdminPage({
                           {videoOrderIds.includes(order.id) && (
                             <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">
                               Video
+                            </span>
+                          )}
+                          {(order as any).payment_method && (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                              {({ card: "💳 Card", gift_card: "🎁 Gift Card", cash: "💵 Cash", venmo: "Venmo", zelle: "Zelle", check: "Check", other: "Other" } as Record<string, string>)[(order as any).payment_method] ?? (order as any).payment_method}
                             </span>
                           )}
                         </div>
@@ -924,13 +964,18 @@ export default async function AdminPage({
                             <p className="text-xs text-muted-foreground">{order.customer_email}</p>
                           </td>
                           <td className="px-4 py-3">
-                            {tierStyle ? (
-                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tierStyle.cls}`}>
-                                {tierStyle.label}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {tierStyle ? (
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tierStyle.cls}`}>
+                                  {tierStyle.label}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                              {(order as any).instagram_feature && (
+                                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">🎬</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-center">
                             {(() => {
@@ -1043,7 +1088,7 @@ export default async function AdminPage({
                   {filteredShippedOrders.length} order{filteredShippedOrders.length !== 1 ? "s" : ""}
                 </span>
                 <span className="text-xs text-red-500 font-semibold ml-1 flex items-center gap-1">
-                  <span className="text-red-500 font-black">*</span> = grader notes missing
+                  <span className="text-red-500 font-black">*</span> = restorer notes missing
                 </span>
               </div>
 
@@ -1090,7 +1135,7 @@ export default async function AdminPage({
                                   {/^\d+$/.test(String(order.order_number)) ? `R${order.order_number}` : order.order_number}
                                 </Link>
                                 {missingNotes && (
-                                  <span className="text-red-500 font-black text-base leading-none" title="Grader notes missing">*</span>
+                                  <span className="text-red-500 font-black text-base leading-none" title="Restorer notes missing">*</span>
                                 )}
                               </div>
                             </td>
@@ -1211,6 +1256,101 @@ export default async function AdminPage({
             )}
           </>
         )}
+
+        {/* ── GIFT CARDS TAB ── */}
+        {activeTab === "gift-cards" && (() => {
+          const gc = giftCards ?? [];
+          const active = gc.filter((c) => c.status === "active");
+          const totalValueCents = gc.reduce((s, c) => s + (c.value_cents ?? 0), 0);
+          const totalRemainingCents = gc.reduce((s, c) => s + (c.remaining_cents ?? 0), 0);
+          return (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-white rounded-xl border border-border p-5">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Issued</p>
+                  <p className="font-heading font-black text-3xl text-foreground">{gc.length}</p>
+                </div>
+                <div className="bg-white rounded-xl border border-border p-5">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Active</p>
+                  <p className="font-heading font-black text-3xl text-green-600">{active.length}</p>
+                </div>
+                <div className="bg-white rounded-xl border border-border p-5">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Sold</p>
+                  <p className="font-heading font-black text-3xl text-foreground">{formatCurrency(totalValueCents)}</p>
+                </div>
+                <div className="bg-white rounded-xl border border-border p-5">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Outstanding</p>
+                  <p className="font-heading font-black text-3xl text-blue-600">{formatCurrency(totalRemainingCents)}</p>
+                </div>
+              </div>
+
+              {gc.length === 0 ? (
+                <div className="bg-white rounded-xl border border-border p-16 text-center">
+                  <p className="text-3xl mb-2">🎁</p>
+                  <p className="font-heading font-black text-lg text-foreground">No gift cards yet</p>
+                  <p className="text-sm text-muted-foreground mt-1">Gift card purchases will appear here.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-border overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-secondary/40">
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Code</th>
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
+                        <th className="text-right px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Value</th>
+                        <th className="text-right px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Remaining</th>
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Purchaser</th>
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Recipient</th>
+                        <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gc.map((card) => (
+                        <tr key={card.id} className="border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
+                          <td className="px-4 py-3 font-mono font-bold text-xs text-foreground">{card.code}</td>
+                          <td className="px-4 py-3">
+                            {card.status === "active" ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">Active</span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500">Used</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium">{formatCurrency(card.value_cents ?? 0)}</td>
+                          <td className="px-4 py-3 text-right font-bold">
+                            {(card.remaining_cents ?? 0) === (card.value_cents ?? 0) ? (
+                              <span className="text-blue-600">{formatCurrency(card.remaining_cents ?? 0)}</span>
+                            ) : (card.remaining_cents ?? 0) === 0 ? (
+                              <span className="text-gray-400">$0.00</span>
+                            ) : (
+                              <span className="text-amber-600">{formatCurrency(card.remaining_cents ?? 0)}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-foreground">{card.purchaser_name ?? "—"}</p>
+                            <p className="text-xs text-muted-foreground">{card.purchaser_email ?? ""}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            {card.recipient_name ? (
+                              <>
+                                <p className="font-medium text-foreground">{card.recipient_name}</p>
+                                <p className="text-xs text-muted-foreground">{card.recipient_email ?? ""}</p>
+                              </>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Self</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {new Date(card.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* ── VIDEOS TAB ── */}
         {activeTab === "videos" && (

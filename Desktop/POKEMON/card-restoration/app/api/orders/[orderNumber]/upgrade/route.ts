@@ -99,7 +99,7 @@ export async function POST(
       {
         price_data: {
           currency: "usd",
-          product_data: { name: "Sales Tax (6.5%)" },
+          product_data: { name: "Sales Tax (6.625%)" },
           unit_amount: taxCents,
         },
         quantity: 1,

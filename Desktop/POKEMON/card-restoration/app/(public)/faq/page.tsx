@@ -7,7 +7,6 @@ import {
 
 const canFix = [
   "Surface dirt, dust, and fingerprints",
-  "Edge whitening and silvering",
   "Soft or dinged corners",
   "Light surface scratches and scuffs",
   "Dull or hazy surfaces",
@@ -37,7 +36,7 @@ const sections = [
       },
       {
         q: "How do I know which service to pick?",
-        a: "If your card has surface dirt or fingerprints but is structurally sound, Surface Clean is enough. If corners are soft or edges are whitened, Edge & Corner Restoration is the right call. For creases, choose Crease Reduction. For cards with multiple issues, Full Restoration covers it all. Premium Restoration is reserved for cards with significant value where extra care and detailed documentation are warranted.",
+        a: "If your card has surface dirt or fingerprints but is structurally sound, Surface Clean is enough. If corners are soft or dinged, Edge & Corner Restoration is the right call. For creases, choose Crease Reduction. For cards with multiple issues, Full Restoration covers it all. Premium Restoration is reserved for cards with significant value where extra care and detailed documentation are warranted.",
       },
       {
         q: "Will restoration affect my card's grade if I send it to PSA/BGS later?",

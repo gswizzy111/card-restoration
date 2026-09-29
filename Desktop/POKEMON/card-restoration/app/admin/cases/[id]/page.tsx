@@ -1,8 +1,8 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
-import { StatusUpdater, AddNoteForm } from "./case-actions";
+import { StatusUpdater, AddNoteForm, CopyLinkButton } from "./case-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +26,11 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
 
   const { id } = await params;
   const admin = createAdminClient();
+
+  const hdrs = await headers();
+  const host = hdrs.get("host") ?? "thecarddoc1.com";
+  const proto = host.startsWith("localhost") ? "http" : "https";
+  const appUrl = `${proto}://${host}`;
 
   const [{ data: c }, { data: notes }] = await Promise.all([
     admin.from("cases").select("*").eq("id", id).single(),
@@ -71,15 +76,43 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           <StatusUpdater caseId={c.id} currentStatus={c.status} />
         </div>
 
-        {/* Customer info — support only */}
-        {isSupport && (c.customer_name || c.customer_email || c.customer_phone) && (
-          <div className="bg-white rounded-xl border border-border p-6 mb-5">
-            <h2 className="font-heading font-black text-base mb-3">Customer</h2>
-            <div className="flex flex-col gap-1 text-sm">
-              {c.customer_name && <p className="font-medium text-foreground">{c.customer_name}</p>}
-              {c.customer_email && <p className="text-muted-foreground">{c.customer_email}</p>}
-              {c.customer_phone && <p className="text-muted-foreground">{c.customer_phone}</p>}
-            </div>
+        {/* Customer info + complaint link — support only */}
+        {isSupport && (
+          <div className="bg-white rounded-xl border border-border p-6 mb-5 flex flex-col gap-4">
+            {(c.customer_name || c.customer_email || c.customer_phone) && (
+              <div>
+                <h2 className="font-heading font-black text-base mb-2">Customer</h2>
+                <div className="flex flex-col gap-1 text-sm">
+                  {c.customer_name && <p className="font-medium text-foreground">{c.customer_name}</p>}
+                  {c.customer_email && <p className="text-muted-foreground">{c.customer_email}</p>}
+                  {c.customer_phone && <p className="text-muted-foreground">{c.customer_phone}</p>}
+                </div>
+              </div>
+            )}
+
+            {c.token && (
+              <div>
+                <h2 className="font-heading font-black text-base mb-2">Complaint Link</h2>
+                <p className="text-xs text-muted-foreground mb-2">Send this link to the customer so they can submit their complaint.</p>
+                <div className="flex items-center gap-2 bg-secondary/40 rounded-lg px-3 py-2 border border-border">
+                  <span className="text-xs font-mono text-foreground truncate flex-1">{appUrl}/cases/{c.token}</span>
+                  <CopyLinkButton url={`${appUrl}/cases/${c.token}`} />
+                </div>
+                {c.complaint_submitted_at && (
+                  <p className="text-xs text-green-700 font-semibold mt-2">
+                    ✅ Complaint received {new Date(c.complaint_submitted_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Customer complaint — shown when submitted */}
+        {isSupport && c.customer_complaint && (
+          <div className="bg-amber-50 rounded-xl border border-amber-200 p-6 mb-5">
+            <h2 className="font-heading font-black text-base mb-3 text-amber-900">Customer Complaint</h2>
+            <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">{c.customer_complaint}</p>
           </div>
         )}
 

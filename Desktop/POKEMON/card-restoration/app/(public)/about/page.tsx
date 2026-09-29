@@ -8,7 +8,6 @@ export const metadata: Metadata = {
 
 const canFix = [
   "Surface dirt, dust, and fingerprints",
-  "Edge whitening and silvering",
   "Soft or dinged corners",
   "Light surface scratches and scuffs",
   "Dull or hazy surfaces",

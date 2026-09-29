@@ -40,7 +40,9 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
   const signatureCents = addSignatureConfirmation && shippingMethod === "buy_label" && !isInternational ? SIGNATURE_FEE_CENTS : 0;
   const slabCrackCount = cards.filter((c) => c.needs_slab_crack).length;
   const slabCrackCents = slabCrackCount * 700;
-  const total = subtotal - discountCents + taxCents + shipping + insuranceCents + signatureCents + slabCrackCents;
+  const pregradeCount = cards.filter((c) => c.needs_pregrade).length;
+  const pregradeCents = pregradeCount * 2500;
+  const total = subtotal - discountCents + taxCents + shipping + insuranceCents + signatureCents + slabCrackCents + pregradeCents;
 
   const turnaroundText = isMixed
     ? "Turnaround varies by tier"
@@ -115,6 +117,12 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
           <div className="flex justify-between text-amber-700">
             <span>Slab Cracking × {slabCrackCount}</span>
             <span>{formatCurrency(slabCrackCents)}</span>
+          </div>
+        )}
+        {pregradeCents > 0 && (
+          <div className="flex justify-between text-green-700">
+            <span>Pregrade × {pregradeCount}</span>
+            <span>{formatCurrency(pregradeCents)}</span>
           </div>
         )}
         <div className="flex justify-between font-bold text-foreground pt-1 border-t border-border text-base">

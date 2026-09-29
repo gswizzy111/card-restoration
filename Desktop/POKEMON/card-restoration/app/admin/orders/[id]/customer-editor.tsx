@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 interface Props {
   orderId: string;
@@ -23,8 +24,12 @@ export function CustomerEditor({ orderId, name, email, phone, street1 = "", stre
 
   const [form, setForm] = useState({ name, email, phone, street1, street2, city, state, zip });
 
+  function set(field: string, value: string) {
+    setForm((p) => ({ ...p, [field]: value }));
+  }
+
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+    set(e.target.name, e.target.value);
   }
 
   async function handleSave() {
@@ -38,7 +43,17 @@ export function CustomerEditor({ orderId, name, email, phone, street1 = "", stre
       const res = await fetch(`/api/admin/orders/${orderId}/customer`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        // API expects customer_name / customer_email / customer_phone
+        body: JSON.stringify({
+          customer_name: form.name.trim(),
+          customer_email: form.email.trim(),
+          customer_phone: form.phone.trim(),
+          street1: form.street1,
+          street2: form.street2,
+          city: form.city,
+          state: form.state,
+          zip: form.zip,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Failed to save."); setSaving(false); return; }
@@ -83,22 +98,40 @@ export function CustomerEditor({ orderId, name, email, phone, street1 = "", stre
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between mb-1">
         <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Edit Customer</p>
-        <button onClick={() => { setForm({ name, email, phone, street1, street2, city, state, zip }); setError(""); setOpen(false); }}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+        <button
+          onClick={() => { setForm({ name, email, phone, street1, street2, city, state, zip }); setError(""); setOpen(false); }}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Cancel
+        </button>
       </div>
 
-      <input name="name" placeholder="Full name *" value={form.name} onChange={handleChange} className={inp} />
-      <input name="email" type="email" placeholder="Email *" value={form.email} onChange={handleChange} className={inp} />
-      <input name="phone" placeholder="Phone *" value={form.phone} onChange={handleChange} className={inp} />
+      <input name="name" placeholder="Full name *" value={form.name} onChange={handleChange} className={inp} autoComplete="name" />
+      <input name="email" type="email" placeholder="Email *" value={form.email} onChange={handleChange} className={inp} autoComplete="email" />
+      <input name="phone" placeholder="Phone *" value={form.phone} onChange={handleChange} className={inp} autoComplete="tel" />
 
       <div className="border-t border-border pt-3 flex flex-col gap-2">
         <p className="text-xs text-muted-foreground font-medium">Address</p>
-        <input name="street1" placeholder="Street address" value={form.street1} onChange={handleChange} className={inp} />
-        <input name="street2" placeholder="Apt / Suite (optional)" value={form.street2} onChange={handleChange} className={inp} />
+        <AddressAutocomplete
+          value={form.street1}
+          onChange={(v) => set("street1", v)}
+          onPlaceSelect={(fields) => {
+            setForm((p) => ({
+              ...p,
+              street1: fields.street1,
+              city: fields.city,
+              state: fields.state,
+              zip: fields.zip,
+            }));
+          }}
+          placeholder="Street address"
+          className={inp}
+        />
+        <input name="street2" placeholder="Apt / Suite (optional)" value={form.street2} onChange={handleChange} className={inp} autoComplete="address-line2" />
         <div className="grid grid-cols-3 gap-2">
-          <input name="city" placeholder="City" value={form.city} onChange={handleChange} className={inp} />
-          <input name="state" placeholder="State" value={form.state} onChange={handleChange} className={`${inp} text-center`} />
-          <input name="zip" placeholder="ZIP" value={form.zip} onChange={handleChange} className={inp} />
+          <input name="city" placeholder="City" value={form.city} onChange={handleChange} className={inp} autoComplete="address-level2" />
+          <input name="state" placeholder="State" value={form.state} onChange={handleChange} className={`${inp} text-center uppercase`} autoComplete="address-level1" maxLength={2} />
+          <input name="zip" placeholder="ZIP" value={form.zip} onChange={handleChange} className={inp} autoComplete="postal-code" />
         </div>
       </div>
 
@@ -109,7 +142,7 @@ export function CustomerEditor({ orderId, name, email, phone, street1 = "", stre
         disabled={saving}
         className="h-9 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
       >
-        {saving ? "Saving…" : "Save"}
+        {saving ? "Saving…" : "Save Changes"}
       </button>
     </div>
   );

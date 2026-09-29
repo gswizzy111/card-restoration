@@ -9,7 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import type { ProductCostsConfig, ComponentPreset } from "@/lib/product-costs";
 
-const CATEGORIES = ["Cleaning", "Tools", "Storage", "Kits"];
+const CATEGORIES = ["Kits", "Tools", "Supplies"];
+
+function normalizeCategory(cat: string | undefined): string {
+  if (!cat) return "Kits";
+  if (cat === "Cleaning" || cat === "Storage") return "Supplies";
+  return CATEGORIES.includes(cat) ? cat : "Kits";
+}
 
 interface ProductFormProps {
   initial?: {
@@ -34,7 +40,7 @@ export function ProductForm({ initial }: ProductFormProps) {
     slug: initial?.slug ?? "",
     description: initial?.description ?? "",
     price: initial ? (initial.price_cents / 100).toFixed(2) : "",
-    category: initial?.category ?? "Cleaning",
+    category: normalizeCategory(initial?.category),
     inventory: initial?.inventory_count?.toString() ?? "0",
     active: initial?.active ?? true,
     weight_oz: initial?.weight_oz?.toString() ?? "4",
@@ -199,8 +205,22 @@ export function ProductForm({ initial }: ProductFormProps) {
   }
 
   function applyPreset(preset: ComponentPreset) {
-    setComponents(preset.components.map((c) => ({ name: c.name, cost_str: (c.cost_cents / 100).toFixed(2) })));
-    toast.success(`Applied "${preset.name}"`);
+    setComponents((prev) => [
+      ...prev,
+      ...preset.components.map((c) => ({ name: c.name, cost_str: (c.cost_cents / 100).toFixed(2) })),
+    ]);
+    toast.success(`Added "${preset.name}"`);
+  }
+
+  async function saveComponentAsPreset(comp: { name: string; cost_str: string }) {
+    if (!comp.name.trim()) { toast.error("Name the component first."); return; }
+    const cost_cents = Math.round(parseFloat(comp.cost_str || "0") * 100);
+    const config: ProductCostsConfig = await fetch("/api/admin/product-costs").then((r) => r.json()).catch(() => ({ products: {}, restoration: { regular_cents: 0, expedited_cents: 0, premium_cents: 0, ultra_premium_cents: 0 }, presets: [] }));
+    const newPreset: ComponentPreset = { id: crypto.randomUUID(), name: comp.name.trim(), components: [{ name: comp.name.trim(), cost_cents }] };
+    config.presets = [...(config.presets ?? []), newPreset];
+    await fetch("/api/admin/product-costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config) });
+    setPresets(config.presets);
+    toast.success(`Saved "${comp.name.trim()}" as preset`);
   }
 
   const totalCogs = components.reduce((s, c) => s + (parseFloat(c.cost_str || "0") || 0), 0);
@@ -320,23 +340,28 @@ export function ProductForm({ initial }: ProductFormProps) {
         {/* Presets */}
         {presets.length > 0 && (
           <div className="mb-4 p-3 bg-muted/40 rounded-lg flex flex-col gap-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Saved Presets</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Saved Items — click to add</p>
             <div className="flex flex-wrap gap-2">
-              {presets.map((preset) => (
-                <div key={preset.id} className="flex items-center gap-1 bg-white border border-border rounded-lg pl-3 pr-1 py-1">
-                  <button
-                    onClick={() => applyPreset(preset)}
-                    className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-                  >
-                    {preset.name}
-                  </button>
-                  <button
-                    onClick={() => deletePreset(preset.id)}
-                    className="w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-destructive rounded transition-colors text-xs"
-                    title="Delete preset"
-                  >×</button>
-                </div>
-              ))}
+              {presets.map((preset) => {
+                const label = preset.components.length === 1
+                  ? `${preset.name} ($${(preset.components[0].cost_cents / 100).toFixed(2)})`
+                  : `${preset.name} (${preset.components.length} items)`;
+                return (
+                  <div key={preset.id} className="flex items-center gap-1 bg-white border border-border rounded-lg pl-3 pr-1 py-1">
+                    <button
+                      onClick={() => applyPreset(preset)}
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      {label}
+                    </button>
+                    <button
+                      onClick={() => deletePreset(preset.id)}
+                      className="w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-destructive rounded transition-colors text-xs"
+                      title="Delete preset"
+                    >×</button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -363,6 +388,11 @@ export function ProductForm({ initial }: ProductFormProps) {
                 />
               </div>
               <button
+                onClick={() => saveComponentAsPreset(comp)}
+                className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-primary rounded-lg hover:bg-muted transition-colors flex-shrink-0 text-base"
+                title="Save this item as a preset"
+              >☆</button>
+              <button
                 onClick={() => setComponents((prev) => prev.filter((_, j) => j !== i))}
                 className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-destructive rounded-lg hover:bg-muted transition-colors flex-shrink-0"
               >×</button>
@@ -382,7 +412,7 @@ export function ProductForm({ initial }: ProductFormProps) {
               onClick={() => setShowPresetInput((v) => !v)}
               className="text-sm text-muted-foreground font-medium hover:text-foreground hover:underline"
             >
-              {showPresetInput ? "Cancel" : "Save as preset"}
+              {showPresetInput ? "Cancel" : "Save list as preset"}
             </button>
           )}
         </div>

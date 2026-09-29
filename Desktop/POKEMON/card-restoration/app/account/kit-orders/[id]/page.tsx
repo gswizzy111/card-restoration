@@ -4,7 +4,7 @@ import { redirect, notFound } from "next/navigation";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { LogoutButton } from "../../logout-button";
-import { CancelButton } from "./cancel-button";
+import { SubscriptionCancelButton } from "./subscription-cancel-button";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +58,15 @@ export default async function KitOrderPage({
 
   const items = (order.items ?? []) as ShopItem[];
   const isSubscription = items.some((i: ShopItem) => i.product_name?.toLowerCase().includes("subscription"));
-  const canCancel = !["cancelled", "delivered"].includes(order.status);
+
+  // Check if customer has an active subscription (independent of kit order status)
+  const { data: activeSub } = await admin
+    .from("subscriptions")
+    .select("id")
+    .ilike("customer_email", user.email!)
+    .eq("status", "active")
+    .maybeSingle();
+  const hasActiveSub = !!activeSub;
 
   const currentIdx = STATUS_TIMELINE.indexOf(order.status);
   const trackUrl = order.tracking_number
@@ -160,13 +168,13 @@ export default async function KitOrderPage({
         </div>
 
         {/* Subscription cancel */}
-        {isSubscription && canCancel && (
+        {isSubscription && hasActiveSub && (
           <div className="bg-white rounded-xl border border-border p-5">
             <h2 className="font-heading font-black text-lg text-foreground mb-2">Manage Subscription</h2>
             <p className="text-sm text-muted-foreground mb-4">
-              Want to cancel your subscription? Click below and we&apos;ll process it right away.
+              Need to cancel your Monthly Kit Club subscription? This will stop future billing immediately.
             </p>
-            <CancelButton orderId={order.id} />
+            <SubscriptionCancelButton />
           </div>
         )}
 
