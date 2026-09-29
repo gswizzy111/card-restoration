@@ -200,7 +200,7 @@ export function StepReview({
   const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
   const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
   const signatureCents = addSignatureConfirmation && shippingMethod === "buy_label" ? SIGNATURE_FEE_CENTS : 0;
-  const instagramFeeCents = instagramFeature ? 10000 : 0;
+  const instagramFeeCents = instagramFeature ? 25000 : 0;
   const preTaxTotal = subtotal - discountCents + taxCents + shipping + signatureCents + (INSURANCE_ENABLED ? insurance.chargeCents : 0) + instagramFeeCents;
   const gcApplied = Math.min(giftCardAmountCents, preTaxTotal);
   const total = Math.max(0, preTaxTotal - gcApplied);
@@ -474,7 +474,7 @@ export function StepReview({
         {instagramFeature && (
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>Instagram Feature</span>
-            <span>{formatCurrency(10000)}</span>
+            <span>{formatCurrency(25000)}</span>
           </div>
         )}
         {gcApplied > 0 && (

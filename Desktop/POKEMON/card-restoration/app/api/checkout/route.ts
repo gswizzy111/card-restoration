@@ -267,8 +267,8 @@ export async function POST(request: Request) {
     insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;
   }
 
-  // Instagram feature add-on — $100 flat
-  const instagramFeeCents = data.instagram_feature ? 10000 : 0;
+  // Instagram feature add-on — $250 flat
+  const instagramFeeCents = data.instagram_feature ? 25000 : 0;
 
   // Gift card — look up and apply up to order total
   let giftCardDiscountCents = 0;
@@ -382,7 +382,7 @@ export async function POST(request: Request) {
       order_id: order.id,
       service_id: "instagram_feature",
       service_name: "Instagram Feature — Card in a Video",
-      price_cents: 10000,
+      price_cents: 25000,
       quantity: 1,
     });
   }
@@ -519,7 +519,7 @@ export async function POST(request: Request) {
   }
   if (instagramFeeCents > 0) {
     lineItems.push({
-      price_data: { currency: "usd", product_data: { name: "Instagram Feature — Card in a Video" }, unit_amount: 10000 },
+      price_data: { currency: "usd", product_data: { name: "Instagram Feature — Card in a Video" }, unit_amount: 25000 },
       quantity: 1,
     });
   }
