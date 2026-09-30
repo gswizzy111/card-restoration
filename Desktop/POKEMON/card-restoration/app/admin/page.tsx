@@ -94,13 +94,16 @@ function businessDaysUntil(target: Date): number {
   return overdue ? -count : count;
 }
 
+// Max business days per tier (used to compute due date from cards-received timestamp).
+// regular/expedited promise "months" of calendar time; converted here to approx business days
+// (22 business days ≈ 1 calendar month): regular = 3 months → 65 bd, expedited = 1.5 months → 33 bd.
 const TIER_TURNAROUND_DAYS: Record<string, number> = {
-  regular:       90,
-  expedited:     45,
-  premium:       20,
-  ultra_premium: 15,
-  elite:         10,
-  fast_pass:     5,
+  regular:       65,   // Bronze  — 2–3 months  (≈ 65 business days)
+  expedited:     33,   // Silver  — 1–1.5 months (≈ 33 business days)
+  premium:       20,   // Gold    — 15–20 business days
+  ultra_premium: 15,   // Platinum — 10–15 business days
+  elite:         10,   // Diamond  — 5–10 business days
+  fast_pass:      7,   // Fast Pass — skip the queue (≤ 7 business days)
 };
 
 export default async function AdminPage({
@@ -240,8 +243,8 @@ export default async function AdminPage({
       .order("created_at", { ascending: false }),
     admin
       .from("orders")
-      .select("id, order_number, customer_name, customer_email, created_at, status, restoration_tier, total_cents, instagram_feature")
-      .in("status", ["received", "in_progress"])
+      .select("id, order_number, customer_name, customer_email, created_at, status, restoration_tier, total_cents, instagram_feature, inbound_method")
+      .in("status", ["received", "in_progress", "awaiting_restoration"])
       .eq("payment_status", "paid")
       .order("created_at", { ascending: true }),
     admin
@@ -938,7 +941,10 @@ export default async function AdminPage({
                       const tier = (order.restoration_tier as RestorationTierId | null) ?? "regular";
                       const tierStyle = TIER_STYLES[tier] ?? null;
                       const statusStyle = FULFILLMENT_STATUS_STYLES[order.status];
-                      const receivedAt = receivedAtByOrder[order.id] ?? null;
+                      // Drop-off orders already have the cards — start the clock at order creation.
+                      // Mail-in orders start the clock when "Cards Received" is pressed.
+                      const isDropoff = (order as Record<string,unknown>).inbound_method === "dropoff";
+                      const receivedAt = receivedAtByOrder[order.id] ?? (isDropoff ? order.created_at : null);
                       const bizDaysIn = receivedAt ? businessDaysSince(receivedAt) : null;
                       const turnaround = TIER_TURNAROUND_DAYS[tier] ?? 20;
                       const dueDate = receivedAt ? addBusinessDays(new Date(receivedAt), turnaround) : null;
