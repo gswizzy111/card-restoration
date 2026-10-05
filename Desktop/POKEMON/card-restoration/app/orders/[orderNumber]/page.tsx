@@ -6,6 +6,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Track } from "shippo/models/components";
 import { UpgradeSection } from "./upgrade-section";
+import { AddCardsSection } from "./add-cards-section";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 function EmailMismatch() {
@@ -178,10 +179,10 @@ export default async function OrderDetailPage({
   searchParams,
 }: {
   params: Promise<{ orderNumber: string }>;
-  searchParams: Promise<{ email?: string }>;
+  searchParams: Promise<{ email?: string; added?: string }>;
 }) {
   const { orderNumber } = await params;
-  const { email: rawEmail } = await searchParams;
+  const { email: rawEmail, added } = await searchParams;
   const email = (rawEmail ?? "").trim().toLowerCase();
 
   // No email in URL — customer likely came from an old confirmation email link.
@@ -284,6 +285,16 @@ export default async function OrderDetailPage({
         </div>
       </div>
 
+      {/* Cards-added success banner */}
+      {added === "1" && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-5 mb-5">
+          <p className="text-sm font-bold text-green-800">Cards added successfully!</p>
+          <p className="text-sm text-green-700 mt-0.5">
+            Your payment was received. The new cards have been added to your order.
+          </p>
+        </div>
+      )}
+
       {/* Upgrade section — only while awaiting cards */}
       {order.status === "awaiting_cards" && (
         <UpgradeSection
@@ -292,6 +303,15 @@ export default async function OrderDetailPage({
           currentTier={(order.restoration_tier as RestorationTierId | null)}
           currentSubtotalCents={order.subtotal_cents ?? 0}
           cardCount={cards?.length ?? 1}
+        />
+      )}
+
+      {/* Add cards section — only while awaiting cards */}
+      {order.status === "awaiting_cards" && (
+        <AddCardsSection
+          orderNumber={String(order.order_number)}
+          customerEmail={order.customer_email}
+          tier={(order.restoration_tier as RestorationTierId) ?? "regular"}
         />
       )}
 

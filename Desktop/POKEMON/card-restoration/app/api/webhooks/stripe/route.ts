@@ -310,6 +310,63 @@ export async function POST(request: Request) {
       return Response.json({ received: true });
     }
 
+    // ── Add cards ─────────────────────────────────────────────────────────
+    if (session.metadata?.type === "add_cards") {
+      const addOrderId = session.metadata.order_id;
+      const cardCount = parseInt(session.metadata.card_count ?? "0", 10);
+      const subtotalPaidCents = parseInt(session.metadata.subtotal_cents ?? "0", 10);
+      const tierName = session.metadata.tier ?? "regular";
+      const paidCents = session.amount_total ?? 0;
+
+      if (addOrderId && cardCount > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const newCardRows: Record<string, any>[] = [];
+        for (let i = 0; i < cardCount; i++) {
+          const raw = session.metadata[`card_${i}`];
+          if (!raw) continue;
+          try {
+            const c = JSON.parse(raw);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const row: Record<string, any> = {
+              order_id: addOrderId,
+              card_name: c.n ?? "",
+              photo_urls: c.p ?? null,
+            };
+            if (c.s) row.card_set = c.s;
+            if (c.y) row.card_year = c.y;
+            if (c.v) row.estimated_value_cents = c.v;
+            newCardRows.push(row);
+          } catch { /* skip malformed card */ }
+        }
+
+        if (newCardRows.length > 0) {
+          await admin.from("cards").insert(newCardRows);
+        }
+
+        const { data: existingOrder } = await admin
+          .from("orders")
+          .select("subtotal_cents, total_cents")
+          .eq("id", addOrderId)
+          .single();
+
+        await admin
+          .from("orders")
+          .update({
+            subtotal_cents: (existingOrder?.subtotal_cents ?? 0) + subtotalPaidCents,
+            total_cents: (existingOrder?.total_cents ?? 0) + paidCents,
+          })
+          .eq("id", addOrderId);
+
+        await admin.from("order_events").insert({
+          order_id: addOrderId,
+          event_type: "cards_added",
+          description: `Customer added ${newCardRows.length} card${newCardRows.length !== 1 ? "s" : ""} — additional payment of $${(paidCents / 100).toFixed(2)} received`,
+          is_customer_visible: true,
+        });
+      }
+      return Response.json({ received: true });
+    }
+
     // ── Tier upgrade ──────────────────────────────────────────────────────
     if (session.metadata?.type === "tier_upgrade") {
       const upgradeOrderId = session.metadata.order_id;
