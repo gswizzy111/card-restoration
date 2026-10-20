@@ -1,6 +1,12 @@
+import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
+  const jar = await cookies();
+  if (!process.env.ADMIN_PASSWORD || jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { orderedIds } = await request.json() as { orderedIds: string[] };
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {

@@ -357,6 +357,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               selectedTier={selectedTier}
               insurance={insurance}
               addSignatureConfirmation={addSignatureConfirmation}
+              instagramFeature={instagramFeature}
+              giftCardAmountCents={giftCardAmountCents}
             />
           </div>
         </div>
