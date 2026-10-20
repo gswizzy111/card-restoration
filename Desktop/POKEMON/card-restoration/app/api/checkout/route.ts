@@ -237,7 +237,14 @@ export async function POST(request: Request) {
     discountLabel = completedOrders === 1 ? "Loyalty — 2nd order" : "Loyalty — returning customer";
   }
 
-  const isInternational = data.customer.address.country !== "US";
+  if (data.customer.address.country && data.customer.address.country !== "US") {
+    return Response.json(
+      { error: "We currently only accept orders from within the United States.", code: "INTERNATIONAL_NOT_ACCEPTED" },
+      { status: 400 }
+    );
+  }
+
+  const isInternational = false;
   const shippingCents = data.shipping_rate
     ? (data.shipping_method === "buy_label" || isInternational ? data.shipping_rate.amount_cents : 0)
     : 0;

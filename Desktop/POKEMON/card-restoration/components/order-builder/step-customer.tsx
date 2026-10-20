@@ -10,9 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
-import { US_STATES, INTERNATIONAL_COUNTRIES } from "@/lib/constants";
+import { US_STATES } from "@/lib/constants";
 import type { CustomerInfo } from "@/lib/types";
-import type { ChangeEvent } from "react";
 
 const INPUT_CN = "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm";
 
@@ -27,10 +26,6 @@ export function StepCustomer({ customer, onChange }: StepCustomerProps) {
 
   function update(patch: Partial<CustomerInfo>) {
     onChange({ ...customer, ...patch });
-  }
-
-  function handleCountryChange(newCountry: string) {
-    update({ country: newCountry, state: "", zip: "" });
   }
 
   return (
@@ -78,19 +73,10 @@ export function StepCustomer({ customer, onChange }: StepCustomerProps) {
         </div>
 
         <div className="sm:col-span-2 flex flex-col gap-1.5">
-          <Label htmlFor="country">Country *</Label>
-          <select
-            id="country"
-            value={customer.country || "US"}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => handleCountryChange(e.target.value)}
-            className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            {INTERNATIONAL_COUNTRIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
+          <Label>Country</Label>
+          <p className="h-8 flex items-center px-2.5 text-sm rounded-lg border border-input bg-muted/40 text-muted-foreground">
+            United States
+          </p>
         </div>
 
         <div className="sm:col-span-2 flex flex-col gap-1.5">
