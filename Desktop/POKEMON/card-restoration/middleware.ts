@@ -9,6 +9,18 @@ const COMING_SOON = false;
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Admin APIs: each route checks its own role too; this backstop keeps a
+  // route that forgets from being open to everyone.
+  if (pathname.startsWith("/api/admin/")) {
+    const auth = request.cookies.get("admin_auth")?.value;
+    const isAuthRoute = pathname === "/api/admin/login" || pathname === "/api/admin/logout";
+    const isAdminSession = (!!process.env.ADMIN_PASSWORD && auth === process.env.ADMIN_PASSWORD) || !!auth?.startsWith("act_");
+    if (!isAuthRoute && !isAdminSession) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.next();
+  }
+
   // Admin auth (always runs)
   if (pathname.startsWith("/admin")) {
     if (pathname.startsWith("/admin/login")) return NextResponse.next();
@@ -65,6 +77,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/api/admin/:path*",
     "/admin/:path*",
     "/((?!api|_next/static|_next/image|favicon.ico|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.svg|.*\\.webp).*)",
   ],

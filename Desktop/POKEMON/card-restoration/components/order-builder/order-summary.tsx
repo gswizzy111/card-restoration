@@ -1,7 +1,8 @@
 import { formatCurrency } from "@/lib/utils";
 import { getTierById, formatCents, RESTORATION_TIERS } from "@/lib/restoration-tiers";
 import type { CardEntry, ShippingRate, InsuranceSelection } from "@/lib/types";
-import { INSURANCE_ENABLED, SIGNATURE_FEE_CENTS } from "@/lib/site-config";
+import { INSURANCE_ENABLED } from "@/lib/site-config";
+import { computeOrderTotals } from "@/lib/order-totals";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 interface OrderSummaryProps {
@@ -13,36 +14,35 @@ interface OrderSummaryProps {
   selectedTier?: RestorationTierId;
   insurance?: InsuranceSelection;
   addSignatureConfirmation?: boolean;
+  instagramFeature?: boolean;
+  giftCardAmountCents?: number;
 }
 
-const TAX_RATE = 0.06625;
-
-export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0, isInternational = false, selectedTier, insurance, addSignatureConfirmation = false }: OrderSummaryProps) {
+export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0, isInternational = false, selectedTier, insurance, addSignatureConfirmation = false, instagramFeature = false, giftCardAmountCents = 0 }: OrderSummaryProps) {
   // Build per-tier breakdown
   const tierCounts: Partial<Record<RestorationTierId, number>> = {};
-  let subtotal = 0;
-
   for (const card of cards) {
     const tierId = card.tier ?? selectedTier;
-    if (tierId) {
-      tierCounts[tierId] = (tierCounts[tierId] ?? 0) + 1;
-      subtotal += getTierById(tierId).price_cents;
-    }
+    if (tierId) tierCounts[tierId] = (tierCounts[tierId] ?? 0) + 1;
   }
 
   const tierEntries = Object.entries(tierCounts) as [RestorationTierId, number][];
   const isMixed = tierEntries.length > 1;
 
-  const discountCents = discountPercent > 0 ? Math.round(subtotal * discountPercent / 100) : 0;
-  const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
-  const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const insuranceCents = INSURANCE_ENABLED ? (insurance?.chargeCents ?? 0) : 0;
-  const signatureCents = addSignatureConfirmation && shippingMethod === "buy_label" && !isInternational ? SIGNATURE_FEE_CENTS : 0;
-  const slabCrackCount = cards.filter((c) => c.needs_slab_crack).length;
-  const slabCrackCents = slabCrackCount * 700;
-  const pregradeCount = cards.filter((c) => c.needs_pregrade).length;
-  const pregradeCents = pregradeCount * 2500;
-  const total = subtotal - discountCents + taxCents + shipping + insuranceCents + signatureCents + slabCrackCents + pregradeCents;
+  const {
+    subtotal, discountCents, taxCents, signatureCents, insuranceCents,
+    slabCrackCount, slabCrackCents, pregradeCount, pregradeCents, instagramCents, giftCardCents, total,
+  } = computeOrderTotals({
+    cards,
+    selectedTier,
+    shippingMethod,
+    selectedRate,
+    discountPercent,
+    insuranceCents: INSURANCE_ENABLED ? (insurance?.chargeCents ?? 0) : 0,
+    addSignatureConfirmation: addSignatureConfirmation && !isInternational,
+    instagramFeature,
+    giftCardAmountCents,
+  });
 
   const turnaroundText = isMixed
     ? "Turnaround varies by tier"
@@ -123,6 +123,18 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
           <div className="flex justify-between text-green-700">
             <span>Pregrade × {pregradeCount}</span>
             <span>{formatCurrency(pregradeCents)}</span>
+          </div>
+        )}
+        {instagramCents > 0 && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>Instagram Feature</span>
+            <span>{formatCurrency(instagramCents)}</span>
+          </div>
+        )}
+        {giftCardCents > 0 && (
+          <div className="flex justify-between text-green-600 font-semibold">
+            <span>Gift Card</span>
+            <span>−{formatCurrency(giftCardCents)}</span>
           </div>
         )}
         <div className="flex justify-between font-bold text-foreground pt-1 border-t border-border text-base">

@@ -4,11 +4,12 @@ import { useState, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
-import { getPriceCents, getRatePerCard } from "@/lib/pricing";
+import { getRatePerCard } from "@/lib/pricing";
+import { computeOrderTotals, INSTAGRAM_FEATURE_CENTS } from "@/lib/order-totals";
 import { getTierById, getCardPriceCents, formatCents } from "@/lib/restoration-tiers";
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
-import { INSURANCE_ENABLED, SIGNATURE_FEE_CENTS } from "@/lib/site-config";
+import { INSURANCE_ENABLED } from "@/lib/site-config";
 import { SignaturePad } from "./signature-pad";
 
 interface StepReviewProps {
@@ -178,32 +179,21 @@ export function StepReview({
 
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
 
-  // Sum per-card tier prices (supports mixed tiers and percentage-based elite tier)
-  let subtotal = 0;
-  for (const card of cards) {
-    const tierId = card.tier ?? selectedTier;
-    if (tierId) {
-      const tier = getTierById(tierId);
-      const valueCents = card.estimated_value
-        ? Math.round(parseFloat(card.estimated_value.replace(/[$,]/g, "")) * 100)
-        : 0;
-      subtotal += getCardPriceCents(tier, valueCents);
-    } else {
-      subtotal = getPriceCents(cards.length);
-      break;
-    }
-  }
-
-  const TAX_RATE = 0.06625;
   const effectiveDiscountPct = Math.max(discountPercent, loyaltyDiscountPercent);
-  const discountCents = effectiveDiscountPct > 0 ? Math.round(subtotal * effectiveDiscountPct / 100) : 0;
-  const taxCents = Math.round((subtotal - discountCents) * TAX_RATE);
-  const shipping = shippingMethod === "buy_label" && selectedRate ? selectedRate.amount_cents : 0;
-  const signatureCents = addSignatureConfirmation && shippingMethod === "buy_label" ? SIGNATURE_FEE_CENTS : 0;
-  const instagramFeeCents = instagramFeature ? 25000 : 0;
-  const preTaxTotal = subtotal - discountCents + taxCents + shipping + signatureCents + (INSURANCE_ENABLED ? insurance.chargeCents : 0) + instagramFeeCents;
-  const gcApplied = Math.min(giftCardAmountCents, preTaxTotal);
-  const total = Math.max(0, preTaxTotal - gcApplied);
+  const totals = computeOrderTotals({
+    cards,
+    selectedTier,
+    shippingMethod,
+    selectedRate,
+    discountPercent: effectiveDiscountPct,
+    insuranceCents: INSURANCE_ENABLED ? insurance.chargeCents : 0,
+    addSignatureConfirmation,
+    instagramFeature,
+    giftCardAmountCents,
+  });
+  const { subtotal, discountCents, taxCents, signatureCents, total } = totals;
+  const shipping = totals.shippingCents;
+  const gcApplied = totals.giftCardCents;
 
   return (
     <div className="flex flex-col gap-8">
@@ -398,7 +388,7 @@ export function StepReview({
           <div>
             <p className="font-medium text-foreground">
               Feature my card in an Instagram video{" "}
-              <span className="text-[#1a8fe0] font-semibold">+$100</span>
+              <span className="text-[#1a8fe0] font-semibold">+{formatCurrency(INSTAGRAM_FEATURE_CENTS)}</span>
             </p>
             <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
               We&apos;ll film your card being restored and post it to{" "}
@@ -471,10 +461,22 @@ export function StepReview({
             <span>{formatCurrency(insurance.chargeCents)}</span>
           </div>
         )}
+        {totals.slabCrackCents > 0 && (
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>Slab Cracking × {totals.slabCrackCount}</span>
+            <span>{formatCurrency(totals.slabCrackCents)}</span>
+          </div>
+        )}
+        {totals.pregradeCents > 0 && (
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>Pregrade × {totals.pregradeCount}</span>
+            <span>{formatCurrency(totals.pregradeCents)}</span>
+          </div>
+        )}
         {instagramFeature && (
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>Instagram Feature</span>
-            <span>{formatCurrency(25000)}</span>
+            <span>{formatCurrency(totals.instagramCents)}</span>
           </div>
         )}
         {gcApplied > 0 && (

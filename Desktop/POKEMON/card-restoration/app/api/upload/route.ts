@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const MAX_BYTES = 20 * 1024 * 1024; // 20 MB server hard cap
+// Stored names only ever get an image extension, so nothing else can be served from the public bucket.
+const IMAGE_EXTS = ["jpg", "jpeg", "png", "webp", "gif", "avif"];
 
 export async function POST(request: Request) {
   const formData = await request.formData().catch(() => null);
@@ -19,9 +21,9 @@ export async function POST(request: Request) {
   }
 
   const rawExt = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-  const ext = (rawExt === "heic" || rawExt === "heif") ? "jpg" : rawExt;
+  const ext = IMAGE_EXTS.includes(rawExt) ? rawExt : "jpg";
   const filename = `${crypto.randomUUID()}.${ext}`;
-  const contentType = (rawExt === "heic" || rawExt === "heif") ? "image/jpeg" : (file.type || "image/jpeg");
+  const contentType = `image/${ext === "jpg" ? "jpeg" : ext}`;
 
   const admin = createAdminClient();
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -47,7 +49,7 @@ export async function PUT(request: Request) {
   }
 
   const rawExt = (body.filename as string).split(".").pop()?.toLowerCase() ?? "jpg";
-  const ext = (rawExt === "heic" || rawExt === "heif") ? "jpg" : rawExt;
+  const ext = IMAGE_EXTS.includes(rawExt) ? rawExt : "jpg";
   const filename = `${crypto.randomUUID()}.${ext}`;
 
   const admin = createAdminClient();

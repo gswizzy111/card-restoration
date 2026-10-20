@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 
@@ -19,6 +20,11 @@ const Body = z.object({
 });
 
 export async function PATCH(request: Request) {
+  const jar = await cookies();
+  if (!process.env.ADMIN_PASSWORD || jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
   const parsed = Body.safeParse(body);
   if (!parsed.success) return Response.json({ error: "Invalid data" }, { status: 400 });
