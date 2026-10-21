@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { NewAffiliateForm } from "./new-affiliate-form";
 import { NewCouponForm } from "./new-coupon-form";
+import { EditAffiliateForm } from "./edit-affiliate-form";
+import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +26,12 @@ type Sale = {
   summary: string;
 };
 
-export default async function AdminAffiliatesPage() {
+export default async function AdminAffiliatesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string }>;
+}) {
+  const { edit: editingId } = await searchParams;
   const jar = await cookies();
   if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
     redirect("/admin/login");
@@ -104,8 +111,17 @@ export default async function AdminAffiliatesPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Created {new Date(affiliate.created_at).toLocaleDateString()}
                     </p>
+                    {editingId !== affiliate.id && (
+                      <Link
+                        href={`/admin/affiliates?edit=${affiliate.id}`}
+                        scroll={false}
+                        className="inline-block mt-2 text-xs font-semibold text-primary hover:underline underline-offset-2"
+                      >
+                        Edit name, code or discount
+                      </Link>
+                    )}
                   </div>
-                  <div className="flex items-center gap-6 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
                     <div className="text-center">
                       <p className="font-mono font-black text-lg text-foreground tracking-widest">{affiliate.code}</p>
                       <p className="text-xs text-muted-foreground">code</p>
@@ -130,6 +146,8 @@ export default async function AdminAffiliatesPage() {
                     </div>
                   </div>
                 </div>
+
+                {editingId === affiliate.id && <EditAffiliateForm affiliate={affiliate} />}
 
                 {sales.length > 0 && (
                   <div className="border-t border-border px-6 py-4">
