@@ -455,10 +455,15 @@ export default async function AdminPage({
             <h1 className="font-heading font-black text-3xl text-foreground">
               {activeTab === "fulfillment" ? "Fulfillment Queue" : "Orders"}
             </h1>
-            <p className="text-muted-foreground text-sm mt-1">
+            <p className="text-muted-foreground text-sm mt-1 flex items-center gap-2">
               {activeTab === "fulfillment"
                 ? "Cards in your hands — sorted oldest first"
                 : `${allRevenue.length} total`}
+              {activeTab !== "fulfillment" && fulfillmentCount > 0 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700">
+                  {fulfillmentCount} in backlog
+                </span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-3">
