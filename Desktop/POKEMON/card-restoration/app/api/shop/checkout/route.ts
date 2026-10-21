@@ -50,7 +50,8 @@ export async function POST(request: Request) {
   if (!isInternational) {
     const rejection = await usAddressRejection(address, data.customer.name);
     if (rejection) {
-      return Response.json({ error: `We couldn't verify that address with USPS: ${rejection} Please check it and try again.` }, { status: 400 });
+      const advice = /please check/i.test(rejection) ? "" : " Please check it and try again.";
+      return Response.json({ error: `We couldn't verify that address with USPS: ${rejection}${advice}` }, { status: 400 });
     }
   }
 
