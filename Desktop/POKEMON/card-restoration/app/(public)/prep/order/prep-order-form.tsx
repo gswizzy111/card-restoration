@@ -191,7 +191,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   const totalEstimate = serviceSubtotal + taxCents + shippingCents + estimatedInsuranceCents;
   const totalDeclaredValueCents = filledCards.reduce((sum, c) => sum + cardValueCents(c), 0);
 
-  const addressFingerprint = [country, street1.trim(), city.trim(), stateCode.trim(), zip.trim()].join("|");
+  const addressFingerprint = [country, street1.trim(), street2.trim(), city.trim(), stateCode.trim(), zip.trim()].join("|");
   const addressComplete = !!(
     street1.trim() && city.trim() && zip.trim() &&
     (isInternational || stateCode) // state required for US, optional for international
@@ -208,6 +208,10 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // The label's sender details (USPS requires an email on the from-address)
+          name: name.trim() || undefined,
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
           street1: street1.trim(),
           street2: street2.trim() || undefined,
           city: city.trim(),

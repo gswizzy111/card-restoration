@@ -457,6 +457,8 @@ export async function POST(request: Request) {
     let inboundTrackingNumber: string | null = null;
     let inboundTrackingUrl: string | null = null;
     let inboundEta: string | null = null;
+    // Why the prepaid label could not be bought, for the admin (order timeline + email)
+    let labelError: string | null = null;
     const rateObjectId = session.metadata?.shipping_rate_object_id;
     const isInternational = session.metadata?.is_international === "true";
     if (rateObjectId) {
@@ -512,9 +514,14 @@ export async function POST(request: Request) {
           }
         } else {
           console.error("Shippo label purchase failed:", transaction.messages ?? transaction);
+          const messages = Array.isArray(transaction.messages) ? (transaction.messages as Array<{ text?: string }>) : [];
+          labelError = messages.map((m) => m.text).filter(Boolean).join("; ")
+            || (typeof transaction.detail === "string" ? transaction.detail : "")
+            || `Shippo status ${String(transaction.status ?? "unknown")}`;
         }
       } catch (err) {
         console.error("Shippo transaction error:", err);
+        labelError = err instanceof Error ? err.message : String(err);
       }
     }
 
@@ -583,6 +590,14 @@ export async function POST(request: Request) {
         : "Payment confirmed via Stripe",
       is_customer_visible: true,
     });
+    if (labelError) {
+      await admin.from("order_events").insert({
+        order_id: orderId,
+        event_type: "label_failed",
+        description: `Prepaid label could not be created: ${labelError.slice(0, 300)}. Use Regenerate label on this order.`,
+        is_customer_visible: false,
+      });
+    }
 
     // Notify admin of new restoration order
     const adminEmail = process.env.ADMIN_NOTIFY_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL ?? "";
@@ -601,6 +616,8 @@ export async function POST(request: Request) {
           ${inboundEta ? `<p style="margin:0 0 4px;font-size:13px;color:#0891b2">Estimated arrival: <strong>${new Date(inboundEta).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</strong></p>` : ""}
           ${inboundTrackingUrl ? `<a href="${inboundTrackingUrl}" style="font-size:13px;color:#0891b2">Track on carrier website →</a>` : ""}
         </div>`
+      : labelError
+      ? `<p style="font-size:14px;color:#b91c1c;"><strong>Prepaid label failed:</strong> ${labelError.slice(0, 300).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c)}. Open the order and use Regenerate label.</p>`
       : `<p style="font-size:14px;color:#666;">Customer is self-shipping — no prepaid label.</p>`;
 
     const isPrep = session.metadata?.service_type === "prep";

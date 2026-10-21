@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 const Body = z.object({
+  // The sender's contact details go on the label: USPS refuses to buy a label
+  // whose from-address has no email ("address_from.email must not be empty").
+  name: z.string().max(200).optional(),
+  email: z.string().max(320).optional(),
+  phone: z.string().max(40).optional(),
   street1: z.string().min(1),
   street2: z.string().optional(),
   city: z.string().min(1),
@@ -36,7 +41,10 @@ export async function POST(request: Request) {
   try {
     // Build the from-address (customer's location)
     const addressFrom: Record<string, unknown> = {
-      name: "Customer",
+      name: d.name?.trim() || "Customer",
+      // Falls back to the shop's own contact details, so the label is never refused
+      email: d.email?.trim() || process.env.BUSINESS_SHIPPING_EMAIL || "",
+      phone: d.phone?.trim() || process.env.BUSINESS_SHIPPING_PHONE || "",
       street1: d.street1,
       city: d.city,
       zip: d.zip,
@@ -55,6 +63,8 @@ export async function POST(request: Request) {
         state: process.env.BUSINESS_SHIPPING_STATE ?? "",
         zip: process.env.BUSINESS_SHIPPING_ZIP ?? "",
         country: "US",
+        ...(process.env.BUSINESS_SHIPPING_PHONE ? { phone: process.env.BUSINESS_SHIPPING_PHONE } : {}),
+        ...(process.env.BUSINESS_SHIPPING_EMAIL ? { email: process.env.BUSINESS_SHIPPING_EMAIL } : {}),
       },
       parcels: [{
         length: "6",
