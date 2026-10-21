@@ -8,9 +8,11 @@ interface Props {
   totalCents: number;
   alreadyRefundedCents: number;
   customerEmail: string;
+  // Kit orders refund through /api/admin/shop-orders/[id]/refund
+  refundUrl?: string;
 }
 
-export function RefundButton({ orderId, totalCents, alreadyRefundedCents, customerEmail }: Props) {
+export function RefundButton({ orderId, totalCents, alreadyRefundedCents, customerEmail, refundUrl }: Props) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"full" | "partial">("full");
   const [partialDollars, setPartialDollars] = useState("");
@@ -54,7 +56,7 @@ export function RefundButton({ orderId, totalCents, alreadyRefundedCents, custom
     setStatus("loading");
     setMessage("");
 
-    const res = await fetch(`/api/admin/orders/${orderId}/refund`, {
+    const res = await fetch(refundUrl ?? `/api/admin/orders/${orderId}/refund`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

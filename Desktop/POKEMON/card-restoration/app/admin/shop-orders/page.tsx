@@ -9,6 +9,7 @@ import { InternationalLabelButton } from "./international-label-button";
 import { KitStatusUpdater } from "./status-updater";
 import { KitCustomerEditor } from "./kit-customer-editor";
 import { KitTrackingEditor } from "./kit-tracking-editor";
+import { RefundButton } from "../orders/[id]/refund-button";
 import { RevenueChart } from "../revenue-chart";
 import { SyncKitOrdersButton } from "./sync-kit-orders-button";
 import { SyncShopDeliveredButton } from "./sync-shop-delivered-button";
@@ -126,6 +127,9 @@ function OrderCard({ order }: { order: Record<string, any> }) {
   const items = (order.items ?? []) as ShopOrderItem[];
   const isSubscription = items.some((i) => i.product_id === "subscription");
   const isInternational = address?.country && address.country !== "US";
+  const refundedCents: number = order.refunded_cents ?? 0;
+  // Manual kit orders (manual_sub_…) have no Stripe payment to refund
+  const hasStripePayment = /^(cs_|in_)/.test(order.stripe_session_id ?? "") && (order.total_cents ?? 0) > 0;
 
   return (
     <div className="bg-white rounded-xl border border-border p-6">
@@ -144,6 +148,11 @@ function OrderCard({ order }: { order: Record<string, any> }) {
             )}
             {isInternational && (
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">🌍 {address?.country}</span>
+            )}
+            {refundedCents > 0 && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                {refundedCents >= (order.total_cents ?? 0) ? "Refunded" : `Partly refunded (${formatCurrency(refundedCents)})`}
+              </span>
             )}
           </div>
           <p className="text-sm text-muted-foreground">{order.customer_email}</p>
@@ -215,6 +224,18 @@ function OrderCard({ order }: { order: Record<string, any> }) {
           />
         </div>
       </div>
+
+      {hasStripePayment && (
+        <div className="border-t border-border pt-4 mt-5">
+          <RefundButton
+            orderId={order.id}
+            totalCents={order.total_cents ?? 0}
+            alreadyRefundedCents={refundedCents}
+            customerEmail={order.customer_email ?? ""}
+            refundUrl={`/api/admin/shop-orders/${order.id}/refund`}
+          />
+        </div>
+      )}
     </div>
   );
 }
