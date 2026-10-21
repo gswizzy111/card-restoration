@@ -219,7 +219,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             {order.status === "in_progress" && (
               <RestorationStageUpdater
                 orderId={order.id}
-                cards={(cards ?? []).map((c) => ({ id: c.id, card_name: c.card_name }))}
+                cards={(cards ?? []).map((c) => ({ id: c.id, card_name: c.card_name, completed: !!c.completed }))}
                 stageByCard={stageByCard}
               />
             )}

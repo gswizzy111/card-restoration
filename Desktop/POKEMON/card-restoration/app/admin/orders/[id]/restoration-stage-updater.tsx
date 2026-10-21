@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CardCompletionToggle } from "./card-completion-toggle";
 
 export const STAGES = [
   "Humidor",
@@ -16,6 +17,7 @@ export const STAGES = [
 interface Card {
   id: string;
   card_name: string;
+  completed: boolean;
 }
 
 export function RestorationStageUpdater({
@@ -55,15 +57,18 @@ export function RestorationStageUpdater({
 
           return (
             <div key={card.id} className="py-4 first:pt-0 last:pb-0">
-              <div className="flex items-center gap-2 mb-3">
-                <p className="text-sm font-bold text-foreground truncate">{card.card_name}</p>
-                {currentStage ? (
-                  <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                    {currentStage}
-                  </span>
-                ) : (
-                  <span className="shrink-0 text-xs text-muted-foreground">Not started</span>
-                )}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <p className="text-sm font-bold text-foreground truncate">{card.card_name}</p>
+                  {currentStage ? (
+                    <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                      {currentStage}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-xs text-muted-foreground">Not started</span>
+                  )}
+                </div>
+                <CardCompletionToggle cardId={card.id} initialCompleted={card.completed} />
               </div>
 
               <div className="flex flex-wrap gap-1.5">
