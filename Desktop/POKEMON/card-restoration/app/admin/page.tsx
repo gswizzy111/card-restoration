@@ -11,6 +11,7 @@ import type { Track } from "shippo/models/components";
 import { SyncTrackingButton } from "./sync-tracking-button";
 import { SyncDeliveredButton } from "./sync-delivered-button";
 import { ResendConfirmationsButton } from "./resend-confirmations-button";
+import { requireAdmin } from "@/lib/admin-auth";
 
 const TIER_BADGES: Record<string, { label: string; color: string }> = {
   regular:       { label: "Bronze",    color: "bg-amber-100 text-amber-700" },
@@ -111,6 +112,7 @@ export default async function AdminPage({
 }: {
   searchParams: Promise<{ q?: string; tab?: string; tier?: string; period?: string; notes?: string; sort?: string; method?: string }>;
 }) {
+  await requireAdmin();
   const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter, sort: sortMode, method: methodFilter } = await searchParams;
   const query = q?.trim() ?? "";
   const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : tab === "gift-cards" ? "gift-cards" : "orders";

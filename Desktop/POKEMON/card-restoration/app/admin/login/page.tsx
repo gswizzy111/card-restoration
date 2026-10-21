@@ -22,7 +22,7 @@ export default function AdminLoginPage() {
       body: JSON.stringify(body),
     });
     if (res.ok) {
-      window.location.href = "/admin";
+      window.location.href = mode === "accountant" ? "/admin/tax" : "/admin";
     } else {
       const data = await res.json().catch(() => ({}));
       setError(data.error ?? "Incorrect credentials.");

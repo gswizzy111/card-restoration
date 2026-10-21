@@ -3,10 +3,12 @@ import { getSubscriptionPriceCents } from "@/lib/store-config";
 import Link from "next/link";
 import { ProductReorderList } from "./product-reorder-list";
 import { SubscriptionPriceEditor } from "./subscription-price-editor";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminProductsPage() {
+  await requireAdmin();
   const admin = createAdminClient();
   const [{ data: products }, subscriptionPriceCents] = await Promise.all([
     admin

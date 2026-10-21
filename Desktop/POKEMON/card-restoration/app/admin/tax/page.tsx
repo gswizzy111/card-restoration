@@ -36,6 +36,7 @@ function getCountry(addr: Record<string, string> | null | undefined): string {
 
 type TxRow = {
   date: string;
+  order_id: string | null;
   order_number: string | number;
   customer_name: string;
   customer_email: string;
@@ -58,7 +59,7 @@ export default async function TaxPage({
 }: {
   searchParams: Promise<{ year?: string; quarter?: string; month?: string; state?: string; type?: string }>;
 }) {
-  await requireAdminOrAccountant();
+  const role = await requireAdminOrAccountant();
 
   const { year, quarter, month: monthParam, state: stateFilter, type: typeFilter } = await searchParams;
   const selectedMonth = monthParam && monthParam !== "all" ? monthParam : null;
@@ -99,6 +100,7 @@ export default async function TaxPage({
     const taxCents = isNJ ? Math.round(subtotal * NJ_TAX_RATE) : 0;
     rows.push({
       date: o.created_at,
+      order_id: o.id,
       order_number: o.order_number,
       customer_name: o.customer_name ?? "",
       customer_email: o.customer_email ?? "",
@@ -124,6 +126,7 @@ export default async function TaxPage({
     const taxCents = isNJ ? Math.round(subtotal * NJ_TAX_RATE) : 0;
     rows.push({
       date: o.created_at,
+      order_id: null,
       order_number: "",
       customer_name: o.customer_name ?? "",
       customer_email: o.customer_email ?? "",
@@ -412,10 +415,12 @@ export default async function TaxPage({
                   >
                     <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(row.date)}</td>
                     <td className="px-4 py-3">
-                      {row.order_number ? (
-                        <Link href={`/admin/orders/${row.order_number}`} className="text-xs font-mono font-semibold text-primary hover:underline">
+                      {row.order_number && role === "admin" && row.order_id ? (
+                        <Link href={`/admin/orders/${row.order_id}`} className="text-xs font-mono font-semibold text-primary hover:underline">
                           #{row.order_number}
                         </Link>
+                      ) : row.order_number ? (
+                        <span className="text-xs font-mono font-semibold text-foreground">#{row.order_number}</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}

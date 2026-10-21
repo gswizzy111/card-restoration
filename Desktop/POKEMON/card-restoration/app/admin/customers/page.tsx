@@ -1,4 +1,4 @@
-import { requireAdminOrAccountant } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ExportButton } from "./export-button";
 
@@ -14,7 +14,7 @@ type Customer = {
 };
 
 export default async function CustomersPage() {
-  await requireAdminOrAccountant();
+  await requireAdmin();
 
   const admin = createAdminClient();
 

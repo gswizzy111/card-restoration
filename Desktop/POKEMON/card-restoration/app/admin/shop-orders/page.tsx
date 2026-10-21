@@ -13,6 +13,7 @@ import { RefundButton } from "../orders/[id]/refund-button";
 import { RevenueChart } from "../revenue-chart";
 import { SyncKitOrdersButton } from "./sync-kit-orders-button";
 import { SyncShopDeliveredButton } from "./sync-shop-delivered-button";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -245,6 +246,7 @@ export default async function ShopOrdersPage({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
+  await requireAdmin();
   const { tab } = await searchParams;
   const activeTab = tab === "not-scanned" ? "not-scanned" : "all";
 

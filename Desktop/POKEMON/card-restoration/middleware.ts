@@ -9,12 +9,29 @@ const COMING_SOON = false;
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  const adminCookie = request.cookies.get("admin_auth")?.value;
+  const isFullAdmin = !!process.env.ADMIN_PASSWORD && adminCookie === process.env.ADMIN_PASSWORD;
+  const isAccountantSession = !isFullAdmin && !!adminCookie?.startsWith("act_");
+
+  // Accountants get the tax reports and nothing else: no orders, customers or
+  // settings. Any other admin page sends them back to the tax reports, and any
+  // other admin API refuses them (the tax page re-checks the account itself).
+  if (isAccountantSession) {
+    const within = (base: string) => pathname === base || pathname.startsWith(base + "/");
+    const isAuthRoute = pathname === "/api/admin/login" || pathname === "/api/admin/logout";
+    if (pathname.startsWith("/api/admin/") && !isAuthRoute && !within("/api/admin/tax/export")) {
+      return NextResponse.json({ error: "Not available to accountants" }, { status: 403 });
+    }
+    if (within("/admin") && !within("/admin/login") && !within("/admin/tax")) {
+      return NextResponse.redirect(new URL("/admin/tax", request.url));
+    }
+  }
+
   // Admin APIs: each route checks its own role too; this backstop keeps a
   // route that forgets from being open to everyone.
   if (pathname.startsWith("/api/admin/")) {
-    const auth = request.cookies.get("admin_auth")?.value;
     const isAuthRoute = pathname === "/api/admin/login" || pathname === "/api/admin/logout";
-    const isAdminSession = (!!process.env.ADMIN_PASSWORD && auth === process.env.ADMIN_PASSWORD) || !!auth?.startsWith("act_");
+    const isAdminSession = isFullAdmin || isAccountantSession;
     if (!isAuthRoute && !isAdminSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -24,9 +41,8 @@ export async function middleware(request: NextRequest) {
   // Admin auth (always runs)
   if (pathname.startsWith("/admin")) {
     if (pathname.startsWith("/admin/login")) return NextResponse.next();
-    const auth = request.cookies.get("admin_auth")?.value;
     // Full admin: exact password match. Accountant: act_<uuid> prefix (DB verified at page level).
-    if (auth !== process.env.ADMIN_PASSWORD && !auth?.startsWith("act_")) {
+    if (!isFullAdmin && !isAccountantSession) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
     return NextResponse.next();

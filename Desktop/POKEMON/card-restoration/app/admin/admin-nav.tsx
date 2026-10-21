@@ -84,12 +84,13 @@ export function AdminNav({ openCaseCount, role }: { openCaseCount?: number; role
   return (
     <>
       {/* ── Desktop sidebar ── */}
-      <aside className="hidden lg:flex w-56 shrink-0 min-h-screen bg-white border-r border-border flex-col">
+      {/* Pinned to the viewport with its own scroll, so Sign out is always on screen */}
+      <aside className="hidden lg:flex w-56 shrink-0 sticky top-0 h-screen bg-white border-r border-border flex-col">
         <div className="px-5 py-6 border-b border-border">
           <p className="font-heading font-black text-lg text-foreground">The Card Doc</p>
           <p className="text-xs text-muted-foreground mt-0.5">Admin</p>
         </div>
-        <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
+        <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 flex flex-col gap-1">
           <NavLinks openCaseCount={openCaseCount} role={role} />
           {role === "accountant" && (
             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest px-3 pt-4">Accountant View</p>
@@ -108,6 +109,12 @@ export function AdminNav({ openCaseCount, role }: { openCaseCount?: number; role
       {/* ── Mobile top bar ── */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-border flex items-center justify-between px-4 h-14">
         <p className="font-heading font-black text-base text-foreground">The Card Doc Admin</p>
+        <div className="flex items-center gap-1">
+        <form action="/api/admin/logout" method="POST">
+          <button className="px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+            Sign out
+          </button>
+        </form>
         <button
           onClick={() => setOpen(!open)}
           className="p-2 rounded-lg text-muted-foreground hover:bg-secondary transition-colors"
@@ -123,6 +130,7 @@ export function AdminNav({ openCaseCount, role }: { openCaseCount?: number; role
             </svg>
           )}
         </button>
+        </div>
       </div>
 
       {/* ── Mobile drawer overlay ── */}
@@ -131,7 +139,7 @@ export function AdminNav({ openCaseCount, role }: { openCaseCount?: number; role
           <div className="absolute inset-0 bg-black/40" />
         </div>
       )}
-      <div className={`lg:hidden fixed top-14 left-0 right-0 z-30 bg-white border-b border-border transition-transform duration-200 ${open ? "translate-y-0" : "-translate-y-full pointer-events-none"}`}>
+      <div className={`lg:hidden fixed top-14 left-0 right-0 z-30 max-h-[calc(100dvh-3.5rem)] overflow-y-auto bg-white border-b border-border transition-transform duration-200 ${open ? "translate-y-0" : "-translate-y-full pointer-events-none"}`}>
         <nav className="px-3 py-3 flex flex-col gap-1">
           <NavLinks onNavigate={() => setOpen(false)} openCaseCount={openCaseCount} role={role} />
         </nav>

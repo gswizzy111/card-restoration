@@ -6,6 +6,7 @@ import { TierRow } from "./tier-row";
 import { RestorationsToggle } from "./restorations-toggle";
 import { WaitlistNotifier } from "./waitlist-notifier";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ const EXTENDED_SELECT = "tier, is_open, max_slots, display_name, price_cents, pr
 const BASIC_SELECT    = "tier, is_open, max_slots";
 
 export default async function StoreSettingsPage() {
+  await requireAdmin();
   const admin = createAdminClient();
 
   // Try full select (all columns including display_slots_remaining)

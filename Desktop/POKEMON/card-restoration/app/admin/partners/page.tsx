@@ -1,12 +1,14 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NewPartnerForm } from "./new-partner-form";
 import { AllocateForm } from "./allocate-form";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
 const PROFIT = { kit: 18.50, polish: 7.75, spray: 8.10 };
 
 export default async function AdminPartnersPage() {
+  await requireAdmin();
   const admin = createAdminClient();
 
   const { data: partners } = await admin

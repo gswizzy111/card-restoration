@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ function formatDate(ts: string) {
 }
 
 export default async function AdminGiftCardsPage() {
+  await requireAdmin();
   const admin = createAdminClient();
   const { data: cards, error } = await admin
     .from("gift_cards")
