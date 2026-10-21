@@ -41,6 +41,8 @@ interface StepReviewProps {
   onSignatureConfirmationChange: (v: boolean) => void;
   loyaltyDiscountPercent: number;
   onLoyaltyDiscountChange: (pct: number) => void;
+  tipCents: number;
+  onTipCentsChange: (cents: number) => void;
 }
 
 export function StepReview({
@@ -71,6 +73,8 @@ export function StepReview({
   onSignatureConfirmationChange,
   loyaltyDiscountPercent,
   onLoyaltyDiscountChange,
+  tipCents,
+  onTipCentsChange,
 }: StepReviewProps) {
   const [loyaltyOrderCount, setLoyaltyOrderCount] = useState(0);
   const [codeStatus, setCodeStatus] = useState<"idle" | "valid" | "invalid">("idle");
@@ -191,9 +195,10 @@ export function StepReview({
     instagramFeature,
     giftCardAmountCents,
   });
-  const { subtotal, discountCents, taxCents, signatureCents, total } = totals;
+  const { subtotal, discountCents, taxCents, signatureCents } = totals;
   const shipping = totals.shippingCents;
   const gcApplied = totals.giftCardCents;
+  const total = totals.total + tipCents;
 
   return (
     <div className="flex flex-col gap-8">
@@ -399,6 +404,43 @@ export function StepReview({
         </label>
       </div>
 
+      {/* Tip */}
+      <div className="border-2 rounded-xl p-5 border-border">
+        <p className="font-medium text-foreground mb-1">Add a tip <span className="text-xs text-muted-foreground font-normal">(optional)</span></p>
+        <p className="text-sm text-muted-foreground mb-3">100% goes to the technician working on your cards. Thank you!</p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {[0, 500, 1000, 2000, 5000].map((cents) => (
+            <button
+              key={cents}
+              type="button"
+              onClick={() => onTipCentsChange(cents)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+                tipCents === cents
+                  ? "bg-amber-500 text-white border-amber-500"
+                  : "bg-white text-foreground border-border hover:border-amber-400"
+              }`}
+            >
+              {cents === 0 ? "No tip" : formatCurrency(cents)}
+            </button>
+          ))}
+        </div>
+        <div className="relative max-w-xs">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            placeholder="Custom amount"
+            value={tipCents > 0 && ![500, 1000, 2000, 5000].includes(tipCents) ? tipCents / 100 : ""}
+            onChange={(e) => {
+              const v = Math.round((parseFloat(e.target.value) || 0) * 100);
+              onTipCentsChange(Math.min(v, 50000));
+            }}
+            className="w-full border border-border rounded-lg pl-6 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+        </div>
+      </div>
+
       {/* Customer info */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -483,6 +525,12 @@ export function StepReview({
           <div className="flex justify-between text-sm text-green-600 font-medium">
             <span>Gift Card</span>
             <span>−{formatCurrency(gcApplied)}</span>
+          </div>
+        )}
+        {tipCents > 0 && (
+          <div className="flex justify-between text-sm text-amber-600 font-medium">
+            <span>Tip</span>
+            <span>{formatCurrency(tipCents)}</span>
           </div>
         )}
         <div className="flex justify-between font-medium text-foreground pt-2 border-t border-border">

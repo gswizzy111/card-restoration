@@ -73,6 +73,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [submitting, setSubmitting] = useState(false);
   const [insurance, setInsurance] = useState<InsuranceSelection>({ declaredValueCents: 0, type: "none", chargeCents: 0 });
   const [addSignatureConfirmation, setAddSignatureConfirmation] = useState(false);
+  const [tipCents, setTipCents] = useState(0);
   const [checkoutError, setCheckoutError] = useState<{ message: string; ref: string } | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
 
@@ -184,6 +185,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           slab_crack_count: cards.filter((c) => c.needs_slab_crack).length || undefined,
           pregrade_count: cards.filter((c) => c.needs_pregrade).length || undefined,
           signature_path: signaturePath,
+          tip_cents: tipCents > 0 ? tipCents : undefined,
         }),
       });
 
@@ -267,6 +269,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               onInstagramFeatureChange={setInstagramFeature}
               loyaltyDiscountPercent={loyaltyDiscountPercent}
               onLoyaltyDiscountChange={setLoyaltyDiscountPercent}
+              tipCents={tipCents}
+              onTipCentsChange={setTipCents}
               onEditStep={(s) => {
                 // remap review edit targets to new step numbers
                 if (s === 2) setStep(1); // cards

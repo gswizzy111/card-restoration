@@ -59,6 +59,7 @@ const BodySchema = z.object({
   pregrade_count: z.number().int().min(0).max(100).optional(),
   signature_path: z.string().optional(),
   add_signature_confirmation: z.boolean().optional(),
+  tip_cents: z.number().int().min(0).max(50000).optional(),
 });
 
 export async function POST(request: Request) {
@@ -296,7 +297,8 @@ export async function POST(request: Request) {
     }
   }
 
-  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents + pregradeCents + instagramFeeCents + signatureFeeCents - giftCardDiscountCents);
+  const tipCents = data.tip_cents ?? 0;
+  const totalCents = Math.max(0, subtotalCents - discountCents + taxCents + shippingCents + insuranceChargeCents + slabCrackCents + pregradeCents + instagramFeeCents + signatureFeeCents - giftCardDiscountCents) + tipCents;
 
   const shipFromAddress = {
     name: data.customer.name,
@@ -575,6 +577,13 @@ export async function POST(request: Request) {
   if (instagramFeeCents > 0) {
     lineItems.push({
       price_data: { currency: "usd", product_data: { name: "Instagram Feature — Card in a Video" }, unit_amount: 25000 },
+      quantity: 1,
+    });
+  }
+
+  if (tipCents > 0) {
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: "Tip — Thank you!" }, unit_amount: tipCents },
       quantity: 1,
     });
   }

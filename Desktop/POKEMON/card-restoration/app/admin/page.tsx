@@ -596,7 +596,7 @@ export default async function AdminPage({
         {activeTab === "orders" && (
           <>
             {/* Stats */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-3 gap-4 mb-6">
               <div className="bg-white rounded-xl border border-border p-5">
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Orders This Month</p>
                 <p className="font-heading font-black text-3xl text-foreground">{thisMonthOrderCount}</p>
@@ -604,6 +604,11 @@ export default async function AdminPage({
               <div className="bg-white rounded-xl border border-border p-5">
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Revenue This Month</p>
                 <p className="font-heading font-black text-3xl text-primary">{formatCurrency(monthRevenue)}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-border p-5">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Active Backlog</p>
+                <p className="font-heading font-black text-3xl text-purple-600">{fulfillmentCount}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">cards in hand</p>
               </div>
             </div>
 
