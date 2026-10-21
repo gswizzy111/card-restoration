@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo, businessAddress } from "@/lib/shippo";
+import { sendOrderConfirmationEmail } from "@/lib/confirmation-email";
 
 export async function POST(
   _req: Request,
@@ -16,7 +17,7 @@ export async function POST(
 
   const { data: order } = await admin
     .from("orders")
-    .select("id, ship_from_address, inbound_method, customer_email, customer_name, customer_phone")
+    .select("id, order_number, ship_from_address, inbound_method, customer_email, customer_name, customer_phone")
     .eq("id", id)
     .single();
 
@@ -122,5 +123,34 @@ export async function POST(
     is_customer_visible: false,
   });
 
-  return Response.json({ ok: true, labelUrl, trackingNumber });
+  // Email the customer the new label straight away (the same confirmation
+  // email "Resend Confirmation" sends, now with the label in it)
+  let emailed = false;
+  let emailError: string | null = null;
+  if (order.customer_email) {
+    try {
+      await sendOrderConfirmationEmail({
+        order_number: order.order_number as string,
+        customer_name: (order.customer_name as string | null) ?? null,
+        customer_email: order.customer_email as string,
+        shipping_label_url: labelUrl,
+      });
+      emailed = true;
+    } catch (e) {
+      emailError = e instanceof Error ? e.message : String(e);
+      console.error("Regenerated label email failed for", order.order_number, emailError);
+    }
+  } else {
+    emailError = "No customer email on this order";
+  }
+  await admin.from("order_events").insert({
+    order_id: id,
+    event_type: emailed ? "label_emailed" : "label_email_failed",
+    description: emailed
+      ? `New shipping label emailed to ${order.customer_email}.`
+      : `New shipping label could not be emailed: ${emailError}`,
+    is_customer_visible: false,
+  });
+
+  return Response.json({ ok: true, labelUrl, trackingNumber, emailed, emailError });
 }

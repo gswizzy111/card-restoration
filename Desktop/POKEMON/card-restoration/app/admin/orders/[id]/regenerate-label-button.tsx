@@ -7,7 +7,7 @@ export function RegenerateLabelButton({ orderId }: { orderId: string }) {
   const [msg, setMsg] = useState("");
 
   async function handle() {
-    if (!confirm("Generate a new inbound shipping label for this order? This will create a new Shippo transaction.")) return;
+    if (!confirm("Generate a new inbound shipping label for this order? This will create a new Shippo transaction and email the label to the customer.")) return;
     setStatus("loading");
     const res = await fetch(`/api/admin/orders/${orderId}/regenerate-label`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
@@ -16,8 +16,10 @@ export function RegenerateLabelButton({ orderId }: { orderId: string }) {
       setMsg(data.error ?? "Failed to regenerate label.");
     } else {
       setStatus("done");
-      setMsg("Label generated! Refreshing…");
-      setTimeout(() => window.location.reload(), 1200);
+      setMsg(data.emailed
+        ? "Label generated and emailed to the customer! Refreshing…"
+        : `Label generated, but the email didn't send (${data.emailError ?? "unknown error"}). Use Resend Confirmation. Refreshing…`);
+      setTimeout(() => window.location.reload(), data.emailed ? 1500 : 6000);
     }
   }
 
