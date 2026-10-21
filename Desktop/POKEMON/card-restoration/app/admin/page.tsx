@@ -441,7 +441,7 @@ export default async function AdminPage({
   const revenueEntries = allRevenue.map((o) => ({ cents: o.total_cents, refundedCents: o.refunded_cents, createdAt: o.created_at }));
   const kitRevenueEntries = (shopOrders ?? []).map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o as any).refunded_cents ?? 0, createdAt: o.created_at }));
 
-  const fulfillmentCount = fulfillmentOrders?.length ?? 0;
+  const fulfillmentCount = fulfillmentCards?.length ?? 0;
   const shippedCount = shippedRaw?.length ?? 0;
   const awaitingCount = awaitingOrders?.length ?? 0;
   const insuredCount = insuredOrders?.length ?? 0;
@@ -463,7 +463,7 @@ export default async function AdminPage({
                 : `${allRevenue.length} total`}
               {activeTab !== "fulfillment" && fulfillmentCount > 0 && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700">
-                  {fulfillmentCount} in backlog
+                  {fulfillmentCount} card{fulfillmentCount !== 1 ? "s" : ""} in backlog
                 </span>
               )}
             </p>
