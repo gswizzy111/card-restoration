@@ -206,12 +206,14 @@ export async function POST(request: Request) {
   let discountPercent = 0;
   let discountCents = 0;
   let discountLabel = data.affiliate_code?.trim() ?? "discount";
+  let validatedAffiliateCode: string | null = null;
   if (data.affiliate_code) {
     const { data: affiliate } = await admin
       .from("affiliates")
       .select("discount_percent")
       .ilike("code", data.affiliate_code.trim())
       .single();
+    if (affiliate) validatedAffiliateCode = data.affiliate_code.trim();
     discountPercent = affiliate?.discount_percent ?? 0;
     if (discountPercent > 0) {
       discountCents = Math.round(subtotalCents * discountPercent / 100);
@@ -314,11 +316,8 @@ export async function POST(request: Request) {
     country: "US",
   };
 
-  // Only include columns guaranteed to exist in the DB.
-  // Optional columns (inbound_carrier, discount_cents, insurance, etc.) require
-  // migrations that may not have run yet — omit them to prevent insert failures.
-  // Insurance and signature confirmation are passed through Stripe metadata so the
-  // webhook can still act on them without needing DB columns.
+  // Insurance and signature confirmation are passed through Stripe metadata and
+  // saved by the webhook once the order is paid.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orderPayload: Record<string, any> = {
     customer_email: data.customer.email,
@@ -336,6 +335,11 @@ export async function POST(request: Request) {
     payment_status: "pending",
     slab_crack_count: slabCrackCount,
     instagram_feature: data.instagram_feature ?? false,
+    // Read by the admin breakdown, the admin new-order email and the affiliate pages.
+    ...(data.shipping_rate?.carrier ? { inbound_carrier: data.shipping_rate.carrier } : {}),
+    ...(data.shipping_rate?.service_level ? { inbound_service_level: data.shipping_rate.service_level } : {}),
+    ...(discountCents > 0 ? { discount_cents: discountCents, discount_percent: discountPercent } : {}),
+    ...(validatedAffiliateCode ? { affiliate_code: validatedAffiliateCode } : {}),
     ...(giftCardDiscountCents > 0 ? {
       gift_card_code: data.gift_card_code?.trim().toUpperCase() ?? null,
       gift_card_discount_cents: giftCardDiscountCents,
@@ -376,14 +380,58 @@ export async function POST(request: Request) {
     }, { status: 500 });
   }
 
-  // Insert order_services
-  const orderServices: { order_id: string; service_id: string; service_name: string; price_cents: number; quantity: number }[] = [{
-    order_id: order.id,
-    service_id: serviceId ?? "",
-    service_name: serviceName,
-    price_cents: subtotalCents,
-    quantity: data.cards.length,
-  }];
+  // Insert order_services: price_cents is the per-card price and quantity the
+  // card count, so price_cents × quantity adds up to the subtotal. Cards are
+  // grouped by tier and price (percentage tiers can price each card differently).
+  const orderServices: { order_id: string; service_id: string; service_name: string; price_cents: number; quantity: number }[] = [];
+  if (uniqueTiers.length > 0) {
+    const groups = new Map<string, { tierId: RestorationTierId; price: number; count: number }>();
+    data.cards.forEach((card, i) => {
+      const tierId = cardTiers[i];
+      if (!tierId) return;
+      const tier = applyDbOverride(getTierById(tierId), settingsMap[tierId] ?? null);
+      const price = getCardPriceCents(tier, card.estimated_value_cents);
+      const key = `${tierId}:${price}`;
+      const group = groups.get(key);
+      if (group) group.count += 1;
+      else groups.set(key, { tierId, price, count: 1 });
+    });
+    for (const { tierId, price, count } of groups.values()) {
+      orderServices.push({
+        order_id: order.id,
+        service_id: tierId,
+        service_name: `${getTierById(tierId).name} - Full Restoration & PSA Prep`,
+        price_cents: price,
+        quantity: count,
+      });
+    }
+  } else {
+    orderServices.push({
+      order_id: order.id,
+      service_id: serviceId ?? "",
+      service_name: serviceName,
+      price_cents: getRatePerCard(data.cards.length),
+      quantity: data.cards.length,
+    });
+  }
+  if (slabCrackCount > 0) {
+    orderServices.push({
+      order_id: order.id,
+      service_id: "slab_crack",
+      service_name: "Slab Cracking",
+      price_cents: 700,
+      quantity: slabCrackCount,
+    });
+  }
+  if (pregradeCount > 0) {
+    orderServices.push({
+      order_id: order.id,
+      service_id: "pregrade",
+      service_name: "Pregrade",
+      price_cents: 2500,
+      quantity: pregradeCount,
+    });
+  }
   if (instagramFeeCents > 0) {
     orderServices.push({
       order_id: order.id,
@@ -531,30 +579,30 @@ export async function POST(request: Request) {
     });
   }
 
-  // Gift card as a negative line item
-  if (giftCardDiscountCents > 0) {
-    lineItems.push({
-      price_data: {
-        currency: "usd",
-        product_data: { name: `Gift Card (${data.gift_card_code?.toUpperCase()})` },
-        unit_amount: -giftCardDiscountCents,
-      },
-      quantity: 1,
-    });
-  }
-
-  // Create a one-time Stripe coupon if there's an affiliate discount
+  // Discount and gift card go to Stripe as one fixed-amount coupon. Stripe refuses
+  // negative line items, and a percent coupon would also take the percentage off
+  // tax and add-ons, so the charge would not match totalCents.
   let stripeDiscounts: Stripe.Checkout.SessionCreateParams["discounts"] = undefined;
-  if (discountPercent > 0) {
+  const couponCents = discountCents + giftCardDiscountCents;
+  if (couponCents > 0) {
+    const couponName = [
+      discountCents > 0 ? `${discountPercent}% Off — ${discountLabel}` : null,
+      giftCardDiscountCents > 0 ? `Gift Card (${data.gift_card_code?.trim().toUpperCase()})` : null,
+    ].filter(Boolean).join(" + ").slice(0, 40);
     try {
       const coupon = await stripe.coupons.create({
-        percent_off: discountPercent,
+        amount_off: couponCents,
+        currency: "usd",
         duration: "once",
-        name: `${discountPercent}% Off — ${discountLabel}`,
+        name: couponName,
       });
       stripeDiscounts = [{ coupon: coupon.id }];
     } catch (err) {
       console.error("Failed to create Stripe coupon:", err);
+      return Response.json({
+        error: "Payment setup failed. Please try again. If this keeps happening, DM @the_card_doc on Instagram.",
+        code: "PAYMENT_SETUP_FAILED",
+      }, { status: 500 });
     }
   }
 

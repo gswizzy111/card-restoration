@@ -1,8 +1,10 @@
 import Stripe from "stripe";
-import { stripe } from "@/lib/stripe";
+import { stripe, invoiceSubscriptionId } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
 import { resend, fromEmail, businessName } from "@/lib/resend";
+import { RESTORATION_TIERS, getCardPriceCents, getTierById } from "@/lib/restoration-tiers";
+import type { RestorationTierId } from "@/lib/restoration-tiers";
 
 export async function POST(request: Request) {
   const body = await request.text();
@@ -134,7 +136,7 @@ export async function POST(request: Request) {
 
       // Shipping address from Stripe (SDK v22: collected_information)
       const addr = session.collected_information?.shipping_details?.address;
-      const shippingAddress = addr ? {
+      let shippingAddress = addr ? {
         street1: addr.line1 ?? "",
         street2: addr.line2 ?? null,
         city: addr.city ?? "",
@@ -143,11 +145,19 @@ export async function POST(request: Request) {
         country: addr.country ?? "US",
       } : null;
 
+      // International orders send their address in metadata (same as the admin sync)
+      const isInternationalShop = session.metadata.is_international === "true";
+      if (!shippingAddress && isInternationalShop && session.metadata.shipping_address_json) {
+        try { shippingAddress = JSON.parse(session.metadata.shipping_address_json); } catch { /* ignore */ }
+      }
+
       const customerName = session.metadata.customer_name ?? session.customer_details?.name ?? "";
       const customerEmail = session.customer_email ?? "";
       const customerPhone = session.metadata.customer_phone ?? "";
       const totalCents = session.amount_total ?? 0;
-      const shippingCents = 599;
+      const shippingCents = isInternationalShop
+        ? totalCents - (session.amount_subtotal ?? totalCents - 599)
+        : 599;
 
       // Save shop order to DB
       await admin.from("shop_orders").insert({
@@ -161,6 +171,7 @@ export async function POST(request: Request) {
         shipping_cents: shippingCents,
         total_cents: totalCents,
         status: "paid",
+        affiliate_code: session.metadata.affiliate_code || null,
       });
 
       // Decrement inventory for each product
@@ -330,7 +341,7 @@ export async function POST(request: Request) {
             const row: Record<string, any> = {
               order_id: addOrderId,
               card_name: c.n ?? "",
-              photo_urls: c.p ?? null,
+              photo_urls: c.p ?? [],
             };
             if (c.s) row.card_set = c.s;
             if (c.y) row.card_year = c.y;
@@ -341,6 +352,23 @@ export async function POST(request: Request) {
 
         if (newCardRows.length > 0) {
           await admin.from("cards").insert(newCardRows);
+
+          // Service lines for the added cards, priced the way the add-cards route charged them
+          const addTier = RESTORATION_TIERS[tierName as RestorationTierId] ?? RESTORATION_TIERS.regular;
+          const priceCounts = new Map<number, number>();
+          for (const row of newCardRows) {
+            const price = getCardPriceCents(addTier, row.estimated_value_cents);
+            priceCounts.set(price, (priceCounts.get(price) ?? 0) + 1);
+          }
+          await admin.from("order_services").insert(
+            [...priceCounts].map(([price, count]) => ({
+              order_id: addOrderId,
+              service_id: addTier.id,
+              service_name: `${addTier.name} - Full Restoration & PSA Prep`,
+              price_cents: price,
+              quantity: count,
+            }))
+          );
         }
 
         const { data: existingOrder } = await admin
@@ -375,19 +403,39 @@ export async function POST(request: Request) {
         // Fetch order to compute new totals
         const { data: upgradeOrder } = await admin
           .from("orders")
-          .select("subtotal_cents, total_cents")
+          .select("subtotal_cents, total_cents, restoration_tier")
           .eq("id", upgradeOrderId)
           .single();
 
         const upgradePaidCents = session.amount_total ?? 0;
+        // Pre-tax part of the upgrade; older sessions only carry the taxed amount.
+        const upgradeSubtotalCents = session.metadata.upgrade_subtotal_cents
+          ? parseInt(session.metadata.upgrade_subtotal_cents, 10)
+          : Math.round(upgradePaidCents / 1.06625);
 
         await admin
           .from("orders")
           .update({
             restoration_tier: newTier,
+            subtotal_cents: (upgradeOrder?.subtotal_cents ?? 0) + upgradeSubtotalCents,
             total_cents: (upgradeOrder?.total_cents ?? 0) + upgradePaidCents,
           })
           .eq("id", upgradeOrderId);
+
+        // Move the order's service line to the new tier
+        const oldTier = upgradeOrder?.restoration_tier as RestorationTierId | null | undefined;
+        if (oldTier && oldTier !== newTier) {
+          const tier = getTierById(newTier as RestorationTierId);
+          await admin
+            .from("order_services")
+            .update({
+              service_id: newTier,
+              service_name: `${tier.name} - Full Restoration & PSA Prep`,
+              price_cents: tier.price_cents,
+            })
+            .eq("order_id", upgradeOrderId)
+            .eq("service_id", oldTier);
+        }
 
         await admin.from("order_events").insert({
           order_id: upgradeOrderId,
@@ -520,16 +568,6 @@ export async function POST(request: Request) {
     if (error) {
       console.error("Supabase update error:", JSON.stringify(error));
       return Response.json({ error: error.message }, { status: 500 });
-    }
-
-    // Save pregrade_count separately — graceful if the DB column doesn't exist yet
-    const metaPrgradeCount = parseInt(session.metadata?.pregrade_count ?? "0", 10);
-    if (metaPrgradeCount > 0) {
-      try {
-        await admin.from("orders").update({ pregrade_count: metaPrgradeCount }).eq("id", orderId);
-      } catch {
-        console.warn("pregrade_count column not yet migrated — skipping DB save");
-      }
     }
 
     if (!updated || updated.length === 0) {
@@ -669,7 +707,7 @@ export async function POST(request: Request) {
     if ((invoice as { billing_reason?: string | null }).billing_reason === "subscription_create") {
       return Response.json({ received: true });
     }
-    const subscriptionId = (invoice as { subscription?: string | null }).subscription;
+    const subscriptionId = invoiceSubscriptionId(invoice);
     if (subscriptionId) {
       const adminInv = createAdminClient();
       const { data: subRecord } = await adminInv

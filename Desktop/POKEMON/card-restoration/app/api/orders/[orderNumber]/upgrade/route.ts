@@ -56,7 +56,7 @@ export async function POST(
   // Check new tier is actually higher
   const currentTierIndex = TIER_ORDER.indexOf((order.restoration_tier ?? "regular") as RestorationTierId);
   const newTierIndex = TIER_ORDER.indexOf(new_tier);
-  if (newTierIndex <= currentTierIndex)
+  if (currentTierIndex === -1 || newTierIndex <= currentTierIndex)
     return Response.json({ error: "You can only upgrade to a higher service level" }, { status: 400 });
 
   // Check slot availability for new tier
@@ -113,6 +113,7 @@ export async function POST(
       order_number: orderNumber,
       new_tier,
       upgrade_amount_cents: String(totalUpgradeCents),
+      upgrade_subtotal_cents: String(diffCents),
     },
   });
 

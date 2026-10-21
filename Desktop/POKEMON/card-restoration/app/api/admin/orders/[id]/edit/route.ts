@@ -58,16 +58,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     quantity: d.cards.length,
   });
 
-  // Replace cards: delete all, re-insert
-  await admin.from("cards").delete().eq("order_id", orderId);
-  await admin.from("cards").insert(
-    d.cards.map((c) => ({
-      order_id: orderId,
-      card_name: c.name,
-      photo_urls: [],
-      service_ids: [],
-    }))
-  );
+  // Sync cards: rename the ones kept (keeping their photos and details), add new
+  // ones, remove the ones taken out of the list
+  const { data: existingCards } = await admin.from("cards").select("id").eq("order_id", orderId);
+  const keptIds = new Set(d.cards.map((c) => c.id).filter((cardId): cardId is string => !!cardId));
+  const removedIds = (existingCards ?? []).map((c) => c.id).filter((cardId) => !keptIds.has(cardId));
+  if (removedIds.length > 0) {
+    await admin.from("cards").delete().in("id", removedIds);
+  }
+  for (const c of d.cards) {
+    if (c.id && keptIds.has(c.id)) {
+      await admin.from("cards").update({ card_name: c.name }).eq("id", c.id).eq("order_id", orderId);
+    }
+  }
+  const newCards = d.cards.filter((c) => !c.id);
+  if (newCards.length > 0) {
+    await admin.from("cards").insert(
+      newCards.map((c) => ({
+        order_id: orderId,
+        card_name: c.name,
+        photo_urls: [],
+        service_ids: [],
+      }))
+    );
+  }
 
   // Log the change
   await admin.from("order_events").insert({

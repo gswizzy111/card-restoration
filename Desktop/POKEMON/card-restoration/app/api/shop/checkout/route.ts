@@ -71,12 +71,29 @@ export async function POST(request: Request) {
     });
   }
 
-  // 6.625% sales tax on product subtotal (not shipping)
   const productSubtotalCents = data.items.reduce(
     (sum, item) => sum + (productMap[baseId(item.id)]?.price_cents ?? 0) * item.quantity,
     0
   );
-  const taxCents = Math.round(productSubtotalCents * 0.06625);
+
+  // Validate affiliate/coupon code and get discount
+  let validatedAffiliateCode: string | null = null;
+  let discountPercent = 0;
+  if (data.affiliate_code) {
+    const { data: affiliate } = await admin
+      .from("affiliates")
+      .select("code, discount_percent")
+      .ilike("code", data.affiliate_code.trim())
+      .single();
+    if (!affiliate) return Response.json({ error: "Invalid creator code." }, { status: 400 });
+    validatedAffiliateCode = affiliate.code;
+    discountPercent = affiliate.discount_percent ?? 0;
+  }
+  // Same math as the cart checkout page: discount on products, tax after discount
+  const discountCents = discountPercent > 0 ? Math.round(productSubtotalCents * discountPercent / 100) : 0;
+
+  // 6.625% sales tax on discounted product subtotal (not shipping)
+  const taxCents = Math.round((productSubtotalCents - discountCents) * 0.06625);
   lineItems.push({
     price_data: { currency: "usd", product_data: { name: "Sales Tax (6.625%)" }, unit_amount: taxCents },
     quantity: 1,
@@ -106,47 +123,31 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (gc && gc.status === "active" && gc.remaining_cents > 0) {
       giftCardId = gc.id;
-      const preTaxTotal = productSubtotalCents + taxCents + (data.international_shipping_cents ?? 0);
+      const preTaxTotal = productSubtotalCents - discountCents + taxCents + (isInternational ? (data.international_shipping_cents ?? 0) : 0);
       giftCardDiscountCents = Math.min(gc.remaining_cents, preTaxTotal);
     }
   }
 
-  // Gift card as negative line item
-  if (giftCardDiscountCents > 0) {
-    lineItems.push({
-      price_data: {
-        currency: "usd",
-        product_data: { name: `Gift Card (${data.gift_card_code?.toUpperCase()})` },
-        unit_amount: -giftCardDiscountCents,
-      },
-      quantity: 1,
-    });
-  }
-
-  // Validate affiliate/coupon code and get discount
-  let validatedAffiliateCode: string | null = null;
-  let discountPercent = 0;
+  // Discount and gift card go to Stripe as one fixed-amount coupon (Stripe
+  // refuses negative line items)
   let stripeDiscounts: Stripe.Checkout.SessionCreateParams["discounts"] = undefined;
-  if (data.affiliate_code) {
-    const { data: affiliate } = await admin
-      .from("affiliates")
-      .select("code, discount_percent")
-      .ilike("code", data.affiliate_code.trim())
-      .single();
-    if (!affiliate) return Response.json({ error: "Invalid creator code." }, { status: 400 });
-    validatedAffiliateCode = affiliate.code;
-    discountPercent = affiliate.discount_percent ?? 0;
-    if (discountPercent > 0) {
-      try {
-        const coupon = await stripe.coupons.create({
-          percent_off: discountPercent,
-          duration: "once",
-          name: `${discountPercent}% Off — ${validatedAffiliateCode}`,
-        });
-        stripeDiscounts = [{ coupon: coupon.id }];
-      } catch (err) {
-        console.error("Failed to create Stripe coupon:", err);
-      }
+  const couponCents = discountCents + giftCardDiscountCents;
+  if (couponCents > 0) {
+    const couponName = [
+      discountCents > 0 ? `${discountPercent}% Off — ${validatedAffiliateCode}` : null,
+      giftCardDiscountCents > 0 ? `Gift Card (${data.gift_card_code?.trim().toUpperCase()})` : null,
+    ].filter(Boolean).join(" + ").slice(0, 40);
+    try {
+      const coupon = await stripe.coupons.create({
+        amount_off: couponCents,
+        currency: "usd",
+        duration: "once",
+        name: couponName,
+      });
+      stripeDiscounts = [{ coupon: coupon.id }];
+    } catch (err) {
+      console.error("Failed to create Stripe coupon:", err);
+      return Response.json({ error: "Payment provider error. Please try again." }, { status: 500 });
     }
   }
 
