@@ -18,6 +18,7 @@ import { CardCompletionToggle } from "./card-completion-toggle";
 import { AdminCardEditor } from "./admin-card-editor";
 import { AddCardButton } from "./add-card-button";
 import { RefundButton } from "./refund-button";
+import { RestorationStageUpdater } from "./restoration-stage-updater";
 import { ResendConfirmationButton } from "./resend-confirmation-button";
 import { PaymentMethodEditor } from "./payment-method-editor";
 import { RegenerateLabelButton } from "./regenerate-label-button";
@@ -57,6 +58,10 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
 
   let order = orderRes.data;
   if (!order) notFound();
+
+  // Derive current restoration stage from the most recent stage_update event
+  const currentStage = events?.find((e) => e.event_type === "stage_update")
+    ?.description?.replace("Stage: ", "") ?? null;
 
   // What the customer paid for add-ons, from the order's service lines (the
   // Instagram feature was $100 before Sept 29, 2026 and $250 after)
@@ -200,6 +205,11 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Order Status</h2>
               <StatusUpdater orderId={order.id} currentStatus={order.status} currentTrackingNumber={order.tracking_number as string | null} />
             </div>
+
+            {/* Restoration stage tracker — only while in progress */}
+            {order.status === "in_progress" && (
+              <RestorationStageUpdater orderId={order.id} currentStage={currentStage} />
+            )}
 
             {/* Inbound tracking — only for buy_label orders */}
             {order.inbound_method === "buy_label" && (
