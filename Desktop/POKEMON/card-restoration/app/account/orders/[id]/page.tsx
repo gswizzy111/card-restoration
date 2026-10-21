@@ -277,7 +277,7 @@ export default async function AccountOrderPage({
               </h2>
               <CardEditor
                 orderId={id}
-                initialCards={cards}
+                initialCards={cards.map((c) => ({ ...c, photo_urls: c.photo_urls ?? [] }))}
                 locked={locked}
                 lockReason={lockReason}
               />

@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
+import { INSTAGRAM_FEATURE_CENTS } from "@/lib/order-totals";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusUpdater } from "./status-updater";
@@ -54,6 +55,11 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
 
   let order = orderRes.data;
   if (!order) notFound();
+
+  // What the customer paid for add-ons, from the order's service lines (the
+  // Instagram feature was $100 before Sept 29, 2026 and $250 after)
+  const instagramPaidCents = services?.find((s) => s.service_id === "instagram_feature")?.price_cents ?? INSTAGRAM_FEATURE_CENTS;
+  const pregradeService = services?.find((s) => s.service_id === "pregrade");
 
   // Auto-sync: if a return label was purchased but status wasn't updated to shipped_back,
   // fix it now (handles labels created before the auto-ship feature was added)
@@ -182,7 +188,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 <span className="text-5xl shrink-0">📸</span>
                 <div>
                   <p className="font-heading font-black text-2xl text-white leading-tight">📹 INSTAGRAM VIDEO PURCHASED</p>
-                  <p className="text-base font-bold text-red-100 mt-1">This customer paid $100 to have their card filmed and featured on @the_card_doc. Do NOT ship without filming!</p>
+                  <p className="text-base font-bold text-red-100 mt-1">This customer paid {formatCurrency(instagramPaidCents)} to have their card filmed and featured on @the_card_doc. Do NOT ship without filming!</p>
                 </div>
               </div>
             )}
@@ -470,7 +476,11 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               const slabCents = slabCount * 700;
 
               // Instagram feature from DB column
-              const instagramCents = (order.instagram_feature as boolean) ? 10000 : 0;
+              const instagramCents = (order.instagram_feature as boolean) ? instagramPaidCents : 0;
+
+              // Pregrade from its service line (saved by checkout)
+              const pregradeCount = pregradeService?.quantity ?? 0;
+              const pregradeCents = pregradeService ? pregradeService.price_cents * pregradeService.quantity : 0;
 
               // Re-compute insurance using same formula as checkout (1.5% × 1.1 markup, min $2.50)
               const declaredValueCents: number = (order.insurance_declared_value_cents as number) ?? 0;
@@ -489,7 +499,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               const loyaltyPct: number = (order.loyalty_discount_percent as number) ?? 0;
               const loyaltyCents = loyaltyPct > 0 ? Math.round(subtotalCents * loyaltyPct / 100) : 0;
               const effectiveDiscountCents = Math.max(discountCents, loyaltyCents);
-              const knownSum = subtotalCents - effectiveDiscountCents + taxCents + shippingCents + instagramCents + insuranceCents + slabCents + signatureCents - gcApplied;
+              const knownSum = subtotalCents - effectiveDiscountCents + taxCents + shippingCents + instagramCents + insuranceCents + slabCents + pregradeCents + signatureCents - gcApplied;
               const residual = totalCents - knownSum;
               // Any unaccounted residual > $0.50 is shown as a catch-all for older orders missing data
               const unaccountedCents = residual > 50 ? residual : 0;
@@ -509,6 +519,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               }
 
               if (slabCents > 0) rows.push({ label: `Slab crack × ${slabCount}`, cents: slabCents });
+              if (pregradeCents > 0) rows.push({ label: `Pregrade × ${pregradeCount}`, cents: pregradeCents });
               if (instagramCents > 0) rows.push({ label: "Instagram Feature", cents: instagramCents });
               if (loyaltyCents > 0 && loyaltyCents >= discountCents) {
                 rows.push({ label: `Loyalty Discount (${loyaltyPct}% off)`, cents: -loyaltyCents, style: "text-green-600" });
@@ -698,7 +709,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               <div className="flex flex-col gap-3 mb-4">
                 {events?.map((e) => (
                   <div key={e.id} className="text-sm border-l-2 border-border pl-3">
-                    <p className="text-foreground">{e.description}</p>
+                    <p className="text-foreground break-words [overflow-wrap:anywhere]">{e.description}</p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-xs text-muted-foreground">{new Date(e.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</p>
                       {e.is_customer_visible && (

@@ -56,7 +56,9 @@ export async function POST(request: Request) {
 
   const totalCents = d.cards.reduce((sum, c) => sum + cardPriceCents(c), 0);
   const actualInboundMethod = d.order_type === "dropoff" ? "dropoff" : d.inbound_method;
-  const actualStatus = d.order_type === "dropoff" ? "awaiting_restoration" : "awaiting_cards";
+  // Drop-off cards are already in hand. "received" is the status the site and the
+  // database know for that ("awaiting_restoration" is rejected by orders_status_check).
+  const actualStatus = d.order_type === "dropoff" ? "received" : "awaiting_cards";
 
   // Generate prepaid Shippo label for online + buy_label orders
   let shippingLabelUrl: string | null = null;
@@ -214,20 +216,23 @@ export async function POST(request: Request) {
     });
   }
 
-  await admin.from("cards").insert(
-    d.cards.map((c) => {
-      const effectiveTier = c.tier ?? d.restoration_tier ?? null;
-      return {
-        order_id: order.id,
-        card_name: c.card_name,
-        card_set: c.card_set ?? null,
-        card_year: c.card_year ?? null,
-        photo_urls: [],
-        service_ids: [],
-        tier: effectiveTier,
-      };
-    })
+  const cardRows = d.cards.map((c) => ({
+    order_id: order.id,
+    card_name: c.card_name,
+    card_set: c.card_set ?? null,
+    card_year: c.card_year ?? null,
+    photo_urls: [],
+    service_ids: [],
+  }));
+  // cards.tier is optional: the live database has no such column, and inserting
+  // it made the whole insert fail, so manual orders were saved with no cards
+  const { error: cardsErr } = await admin.from("cards").insert(
+    cardRows.map((row, i) => ({ ...row, tier: d.cards[i].tier ?? d.restoration_tier ?? null }))
   );
+  if (cardsErr) {
+    const { error: retryErr } = await admin.from("cards").insert(cardRows);
+    if (retryErr) console.error("Failed to save manual order cards:", retryErr);
+  }
 
   const eventDescription = d.order_type === "dropoff"
     ? "Drop-off order created manually by admin"

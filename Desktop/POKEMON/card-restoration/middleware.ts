@@ -34,7 +34,7 @@ export async function middleware(request: NextRequest) {
 
   // Account portal — protect all routes except login/signup
   if (
-    pathname.startsWith("/account") &&
+    (pathname === "/account" || pathname.startsWith("/account/")) &&
     !pathname.startsWith("/account/login") &&
     !pathname.startsWith("/account/signup")
   ) {

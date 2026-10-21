@@ -5,12 +5,13 @@ import { z } from "zod";
 
 const CardPatch = z.object({
   card_name: z.string().min(1).max(200),
-  card_set: z.string().max(200).optional(),
-  card_year: z.string().max(10).optional(),
-  card_number: z.string().max(50).optional(),
-  estimated_value_cents: z.number().int().min(0).optional(),
-  notes: z.string().max(2000).optional(),
-  photo_urls: z.array(z.string().url()).max(8),
+  // The card editor sends null for blank fields
+  card_set: z.string().max(200).nullable().optional(),
+  card_year: z.string().max(10).nullable().optional(),
+  card_number: z.string().max(50).nullable().optional(),
+  estimated_value_cents: z.number().int().min(0).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  photo_urls: z.array(z.string().url()).max(8).nullable(),
 });
 
 const Body = z.object({
@@ -98,7 +99,7 @@ export async function PATCH(
         card_number: fields.card_number ?? null,
         estimated_value_cents: fields.estimated_value_cents ?? null,
         notes: fields.notes ?? null,
-        photo_urls: fields.photo_urls,
+        photo_urls: fields.photo_urls ?? [],
       }).eq("id", cardId)
     )
   );

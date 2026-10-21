@@ -20,8 +20,11 @@ export function UpgradeSection({ orderNumber, customerEmail, currentTier, curren
   const [loading, setLoading] = useState<RestorationTierId | null>(null);
   const [error, setError] = useState("");
 
+  // Diamond and Fast Pass orders sit outside the upgrade ladder: nothing to offer.
   const currentIndex = TIER_ORDER.indexOf(currentTier ?? "regular");
-  const upgradeTiers = getAllTiers().filter((t) => TIER_ORDER.indexOf(t.id) > currentIndex);
+  const upgradeTiers = currentIndex === -1
+    ? []
+    : getAllTiers().filter((t) => TIER_ORDER.indexOf(t.id) > currentIndex && t.price_cents * cardCount > currentSubtotalCents);
 
   if (upgradeTiers.length === 0) return null;
 
