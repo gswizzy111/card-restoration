@@ -59,9 +59,18 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   let order = orderRes.data;
   if (!order) notFound();
 
-  // Derive current restoration stage from the most recent stage_update event
-  const currentStage = events?.find((e) => e.event_type === "stage_update")
-    ?.description?.replace("Stage: ", "") ?? null;
+  // Derive per-card restoration stages from stage_update events
+  // Description format: "Stage: <stage> [card:<card_id>]"
+  const stageByCard: Record<string, string> = {};
+  const stageRegex = /^Stage: (.+?) \[card:(.+)\]$/;
+  // events are ordered DESC so first match per card is most recent
+  for (const e of events ?? []) {
+    if (e.event_type !== "stage_update") continue;
+    const m = stageRegex.exec(e.description ?? "");
+    if (!m) continue;
+    const [, stage, cardId] = m;
+    if (!stageByCard[cardId]) stageByCard[cardId] = stage;
+  }
 
   // What the customer paid for add-ons, from the order's service lines (the
   // Instagram feature was $100 before Sept 29, 2026 and $250 after)
@@ -208,7 +217,11 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
 
             {/* Restoration stage tracker — only while in progress */}
             {order.status === "in_progress" && (
-              <RestorationStageUpdater orderId={order.id} currentStage={currentStage} />
+              <RestorationStageUpdater
+                orderId={order.id}
+                cards={(cards ?? []).map((c) => ({ id: c.id, card_name: c.card_name }))}
+                stageByCard={stageByCard}
+              />
             )}
 
             {/* Inbound tracking — only for buy_label orders */}

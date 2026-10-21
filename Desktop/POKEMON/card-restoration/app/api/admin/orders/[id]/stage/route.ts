@@ -8,17 +8,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
-  const { stage } = await request.json();
+  const { stage, card_id } = await request.json();
 
-  if (!stage?.trim()) {
-    return Response.json({ error: "Stage is required" }, { status: 400 });
+  if (!stage?.trim() || !card_id?.trim()) {
+    return Response.json({ error: "stage and card_id are required" }, { status: 400 });
   }
 
   const admin = createAdminClient();
+  // Encode card_id in the description so no schema change is needed
   const { error } = await admin.from("order_events").insert({
     order_id: id,
     event_type: "stage_update",
-    description: `Stage: ${stage.trim()}`,
+    description: `Stage: ${stage.trim()} [card:${card_id.trim()}]`,
     is_customer_visible: false,
   });
 

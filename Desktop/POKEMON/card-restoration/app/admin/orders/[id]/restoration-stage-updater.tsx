@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-const STAGES = [
+export const STAGES = [
   "Humidor",
   "Humidity Press",
   "Book",
@@ -13,74 +13,93 @@ const STAGES = [
   "Final Dry",
 ];
 
+interface Card {
+  id: string;
+  card_name: string;
+}
+
 export function RestorationStageUpdater({
   orderId,
-  currentStage,
+  cards,
+  stageByCard,
 }: {
   orderId: string;
-  currentStage: string | null;
+  cards: Card[];
+  stageByCard: Record<string, string>;
 }) {
-  const [loading, setLoading] = useState<string | null>(null);
+  const [loading, setLoading] = useState<string | null>(null); // "cardId:stage"
   const router = useRouter();
 
-  async function setStage(stage: string) {
-    if (stage === currentStage) return;
-    setLoading(stage);
+  async function setStage(cardId: string, stage: string) {
+    if (stageByCard[cardId] === stage) return;
+    const key = `${cardId}:${stage}`;
+    setLoading(key);
     await fetch(`/api/admin/orders/${orderId}/stage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage }),
+      body: JSON.stringify({ stage, card_id: cardId }),
     });
     setLoading(null);
     router.refresh();
   }
 
-  const currentIdx = STAGES.indexOf(currentStage ?? "");
-
   return (
     <div className="bg-white rounded-xl border border-purple-200 p-6">
-      <h2 className="font-heading font-black text-lg text-foreground mb-1">Restoration Stage</h2>
-      <p className="text-xs text-muted-foreground mb-4">Track where this order is in the restoration process.</p>
+      <h2 className="font-heading font-black text-lg text-foreground mb-1">Restoration Stages</h2>
+      <p className="text-xs text-muted-foreground mb-5">Track each card through the restoration process. Click a stage to mark it current.</p>
 
-      <div className="flex flex-col gap-2">
-        {STAGES.map((stage, i) => {
-          const isDone = currentIdx > i;
-          const isCurrent = stage === currentStage;
-          const isNext = currentIdx === i - 1;
+      <div className="flex flex-col divide-y divide-border">
+        {cards.map((card) => {
+          const currentStage = stageByCard[card.id] ?? null;
+          const currentIdx = STAGES.indexOf(currentStage ?? "");
 
           return (
-            <button
-              key={stage}
-              onClick={() => setStage(stage)}
-              disabled={loading !== null}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium text-left transition-colors disabled:opacity-60 ${
-                isCurrent
-                  ? "bg-purple-600 text-white border-purple-600"
-                  : isDone
-                  ? "bg-purple-50 text-purple-700 border-purple-200 line-through opacity-60"
-                  : isNext
-                  ? "border-purple-300 text-purple-700 hover:bg-purple-50"
-                  : "border-border text-muted-foreground hover:border-purple-300 hover:text-purple-700"
-              }`}
-            >
-              <span className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${
-                isCurrent ? "bg-white text-purple-600" : isDone ? "bg-purple-300 text-white" : "bg-border text-muted-foreground"
-              }`}>
-                {isDone ? "✓" : i + 1}
-              </span>
-              <span>{stage}</span>
-              {loading === stage && <span className="ml-auto text-xs opacity-70">Saving…</span>}
-              {isCurrent && <span className="ml-auto text-xs font-bold opacity-80">Current</span>}
-            </button>
+            <div key={card.id} className="py-4 first:pt-0 last:pb-0">
+              <div className="flex items-center gap-2 mb-3">
+                <p className="text-sm font-bold text-foreground truncate">{card.card_name}</p>
+                {currentStage ? (
+                  <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                    {currentStage}
+                  </span>
+                ) : (
+                  <span className="shrink-0 text-xs text-muted-foreground">Not started</span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {STAGES.map((stage, i) => {
+                  const isDone = currentIdx > i;
+                  const isCurrent = stage === currentStage;
+                  const key = `${card.id}:${stage}`;
+
+                  return (
+                    <button
+                      key={stage}
+                      onClick={() => setStage(card.id, stage)}
+                      disabled={loading !== null}
+                      title={stage}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors disabled:opacity-60 ${
+                        isCurrent
+                          ? "bg-purple-600 text-white border-purple-600"
+                          : isDone
+                          ? "bg-purple-50 text-purple-400 border-purple-100 line-through"
+                          : "border-border text-muted-foreground hover:border-purple-400 hover:text-purple-700"
+                      }`}
+                    >
+                      <span className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${
+                        isCurrent ? "bg-white text-purple-600" : isDone ? "bg-purple-300 text-white" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {isDone ? "✓" : i + 1}
+                      </span>
+                      {loading === key ? "…" : stage}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </div>
-
-      {currentStage && (
-        <p className="text-xs text-muted-foreground mt-4">
-          Click any stage to mark it as current. Stages are logged internally (not shown to customer).
-        </p>
-      )}
     </div>
   );
 }
