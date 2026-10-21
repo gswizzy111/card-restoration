@@ -3,6 +3,7 @@ import { ShipQueueStatusControl } from "./mark-shipped-button";
 import { ReturnLabelButton as KitReturnLabelButton } from "../shop-orders/return-label-button";
 import { ReturnLabelButton as RestorationReturnLabelButton } from "../orders/[id]/return-label-button";
 import { AddressEditor } from "./address-editor";
+import { CancelKitOrderButton } from "./cancel-kit-order-button";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
 
@@ -181,8 +182,9 @@ export default async function ShipQueuePage({
                             />
                           </div>
                         </div>
-                        <div className="shrink-0">
+                        <div className="shrink-0 flex flex-col items-end gap-2">
                           <ShipQueueStatusControl orderId={order.id} currentStatus={order.status} />
+                          <CancelKitOrderButton orderId={order.id} customerName={order.customer_name} />
                         </div>
                       </div>
                     </div>

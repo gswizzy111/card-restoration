@@ -5,12 +5,14 @@ import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, C
 
 interface Entry {
   cents: number;
+  refundedCents?: number;
   createdAt: string;
 }
 
 interface Bucket {
   label: string;
-  revenue: number;
+  revenue: number;   // net (gross − refunded)
+  refunded: number;  // refunded portion
   orders: number;
   trend: number | null;
 }
@@ -27,6 +29,16 @@ const RANGES: { key: Range; label: string }[] = [
 function buildBuckets(entries: Entry[], range: Range): Bucket[] {
   const now = new Date();
 
+  function bucketItems(items: Entry[]) {
+    const grossCents = items.reduce((s, e) => s + e.cents, 0);
+    const refundedCents = items.reduce((s, e) => s + (e.refundedCents ?? 0), 0);
+    return {
+      revenue: Math.max(0, grossCents - refundedCents) / 100,
+      refunded: refundedCents / 100,
+      orders: items.length,
+    };
+  }
+
   if (range === "24h") {
     return Array.from({ length: 24 }, (_, i) => {
       const hourStart = new Date(now);
@@ -40,7 +52,7 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
       });
       const h = hourStart.getHours();
       const label = h === 0 ? "12am" : h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`;
-      return { label, revenue: items.reduce((s, e) => s + e.cents, 0) / 100, orders: items.length, trend: null };
+      return { label, ...bucketItems(items), trend: null };
     });
   }
 
@@ -53,8 +65,7 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
       });
       return {
         label: d.toLocaleString("default", { weekday: "short", month: "short", day: "numeric" }),
-        revenue: items.reduce((s, e) => s + e.cents, 0) / 100,
-        orders: items.length,
+        ...bucketItems(items),
         trend: null as number | null,
       };
     });
@@ -70,8 +81,7 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
       });
       return {
         label: d.toLocaleString("default", { month: "short", day: "numeric" }),
-        revenue: items.reduce((s, e) => s + e.cents, 0) / 100,
-        orders: items.length,
+        ...bucketItems(items),
         trend: null as number | null,
       };
     });
@@ -101,7 +111,7 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
       return od.getFullYear() === year && od.getMonth() === month;
     });
     const label = new Date(year, month, 1).toLocaleString("default", { month: "short", year: "2-digit" });
-    return { label, revenue: items.reduce((s, e) => s + e.cents, 0) / 100, orders: items.length, trend: null as number | null };
+    return { label, ...bucketItems(items), trend: null as number | null };
   });
 
   return raw.map((d, i) => {
@@ -115,6 +125,7 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
 function CustomTooltip({ active, payload, label, range }: { active?: boolean; payload?: { name: string; value: number }[]; label?: string; range: Range }) {
   if (!active || !payload?.length) return null;
   const revenue = payload.find((p) => p.name === "revenue");
+  const refunded = payload.find((p) => p.name === "refunded");
   const orders = payload.find((p) => p.name === "orders");
   const trend = payload.find((p) => p.name === "trend");
   const avgLabel = range === "all" ? "3-mo avg" : range === "7d" ? "3-day avg" : "7-day avg";
@@ -122,6 +133,9 @@ function CustomTooltip({ active, payload, label, range }: { active?: boolean; pa
     <div className="bg-white border border-border rounded-lg p-3 shadow-md text-sm">
       <p className="font-bold text-foreground mb-1">{label}</p>
       {revenue && <p className="text-primary font-bold">${revenue.value.toFixed(2)}</p>}
+      {refunded && refunded.value > 0 && (
+        <p className="text-red-500 text-xs font-semibold">−${refunded.value.toFixed(2)} refunded</p>
+      )}
       {orders && <p className="text-muted-foreground">{orders.value} order{orders.value !== 1 ? "s" : ""}</p>}
       {trend && trend.value != null && (
         <p className="text-orange-500 text-xs mt-1">{avgLabel}: ${trend.value.toFixed(2)}</p>
@@ -136,7 +150,9 @@ export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[];
   const data = useMemo(() => buildBuckets(entries, range), [entries, range]);
 
   const totalRevenue = useMemo(() => data.reduce((s, d) => s + d.revenue, 0), [data]);
+  const totalRefunded = useMemo(() => data.reduce((s, d) => s + d.refunded, 0), [data]);
   const totalOrders = useMemo(() => data.reduce((s, d) => s + d.orders, 0), [data]);
+  const hasRefunds = totalRefunded > 0;
 
   const showTrend = range !== "24h" && range !== "7d";
   const xInterval = range === "24h" ? 3 : range === "30d" ? 4 : 0;
@@ -170,11 +186,17 @@ export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[];
       </div>
 
       {/* Totals for selected range */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className={`grid gap-3 mb-6 ${hasRefunds ? "grid-cols-3" : "grid-cols-2"}`}>
         <div className="bg-secondary/40 rounded-lg p-4">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Revenue</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Net Revenue</p>
           <p className="font-heading font-black text-2xl text-primary">${totalRevenue.toFixed(2)}</p>
         </div>
+        {hasRefunds && (
+          <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+            <p className="text-xs font-bold uppercase tracking-widest text-red-400 mb-1">Refunded</p>
+            <p className="font-heading font-black text-2xl text-red-600">−${totalRefunded.toFixed(2)}</p>
+          </div>
+        )}
         <div className="bg-secondary/40 rounded-lg p-4">
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Orders</p>
           <p className="font-heading font-black text-2xl text-foreground">{totalOrders}</p>
@@ -198,7 +220,8 @@ export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[];
             tickFormatter={(v) => `$${v}`}
           />
           <Tooltip content={<CustomTooltip range={range} />} />
-          <Bar dataKey="revenue" fill="oklch(0.55 0.22 265)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="revenue" fill="oklch(0.55 0.22 265)" stackId="rev" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="refunded" fill="#ef4444" stackId="rev" radius={[4, 4, 0, 0]} fillOpacity={0.85} />
           <Bar dataKey="orders" fill="oklch(0.75 0.15 265)" radius={[4, 4, 0, 0]} />
           {showTrend && (
             <Line
@@ -213,10 +236,15 @@ export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[];
         </ComposedChart>
       </ResponsiveContainer>
 
-      <div className="flex gap-6 mt-4">
+      <div className="flex gap-6 mt-4 flex-wrap">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="w-3 h-3 rounded-sm bg-primary inline-block" />Revenue
         </div>
+        {hasRefunds && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="w-3 h-3 rounded-sm inline-block bg-red-500 opacity-85" />Refunded
+          </div>
+        )}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="w-3 h-3 rounded-sm inline-block" style={{ background: "oklch(0.75 0.15 265)" }} />Orders
         </div>

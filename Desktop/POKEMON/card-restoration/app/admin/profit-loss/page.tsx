@@ -33,7 +33,7 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
   // Fetch kit orders + product list + cost config in parallel
   const [shopResult, productResult, costConfig] = await Promise.all([
     (() => {
-      let q = admin.from("shop_orders").select("total_cents, subtotal_cents, shipping_cents, items, created_at").neq("status", "cancelled");
+      let q = admin.from("shop_orders").select("total_cents, subtotal_cents, shipping_cents, refunded_cents, items, created_at").neq("status", "cancelled");
       if (start) q = q.gte("created_at", start);
       return q;
     })(),
@@ -142,9 +142,10 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
     Object.values(costConfig.restoration).some((v) => v > 0);
 
   // Combined entries for revenue chart (kit + restoration)
+  // Pass gross cents + refundedCents so the chart can show the red refund section
   const allRevenueEntries = [
-    ...shopOrders.map((o) => ({ cents: o.total_cents ?? 0, createdAt: o.created_at })),
-    ...restorationOrders.map((o) => ({ cents: Math.max(0, (o.total_cents ?? 0) - ((o.refunded_cents as number | null | undefined) ?? 0)), createdAt: o.created_at })),
+    ...shopOrders.map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o.refunded_cents as number | null | undefined) ?? 0, createdAt: o.created_at })),
+    ...restorationOrders.map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o.refunded_cents as number | null | undefined) ?? 0, createdAt: o.created_at })),
   ];
 
   return (
