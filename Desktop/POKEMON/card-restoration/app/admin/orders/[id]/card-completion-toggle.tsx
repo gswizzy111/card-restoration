@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export function CardCompletionToggle({
   cardId,
@@ -12,6 +13,7 @@ export function CardCompletionToggle({
   const [completed, setCompleted] = useState(initialCompleted);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const router = useRouter();
 
   async function toggle() {
     setLoading(true);
@@ -21,6 +23,7 @@ export function CardCompletionToggle({
       const data = await res.json();
       if (res.ok) {
         setCompleted(data.completed);
+        router.refresh();
       } else {
         setErr(data.error ?? "Failed");
       }
