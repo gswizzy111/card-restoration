@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import Stripe from "stripe";
 import { isSoldOut } from "@/lib/site-config";
+import { addressProblem, normalizeAddress } from "@/lib/shipping-address";
+import { usAddressRejection } from "@/lib/verify-address";
 
 const BodySchema = z.object({
   items: z.array(z.object({ id: z.string(), quantity: z.number().int().positive(), slug: z.string(), size: z.string().optional() })).min(1),
@@ -38,6 +40,18 @@ export async function POST(request: Request) {
 
   if (isInternational && !data.international_shipping_cents) {
     return Response.json({ error: "Please calculate international shipping before proceeding." }, { status: 400 });
+  }
+
+  // No kit is paid for without a shippable address: complete, with a house
+  // number, a real state and ZIP, and (US) one USPS recognises.
+  const address = normalizeAddress({ ...data.address, country: isInternational ? data.address.country : "US" });
+  const problem = addressProblem(address);
+  if (problem) return Response.json({ error: problem }, { status: 400 });
+  if (!isInternational) {
+    const rejection = await usAddressRejection(address, data.customer.name);
+    if (rejection) {
+      return Response.json({ error: `We couldn't verify that address with USPS: ${rejection} Please check it and try again.` }, { status: 400 });
+    }
   }
 
   const admin = createAdminClient();
@@ -99,7 +113,14 @@ export async function POST(request: Request) {
     quantity: 1,
   });
 
-  // For international: add shipping as a line item
+  // Shipping is a line item: the checked address above is the ship-to, so
+  // Stripe's page doesn't collect another one
+  if (!isInternational) {
+    lineItems.push({
+      price_data: { currency: "usd", product_data: { name: "Standard Shipping" }, unit_amount: 599 },
+      quantity: 1,
+    });
+  }
   if (isInternational && data.international_shipping_cents) {
     lineItems.push({
       price_data: {
@@ -163,52 +184,21 @@ export async function POST(request: Request) {
     gift_card_discount_cents: giftCardDiscountCents > 0 ? String(giftCardDiscountCents) : "",
   };
 
-  if (isInternational) {
-    metadata.is_international = "true";
-    metadata.shipping_address_json = JSON.stringify({
-      street1: data.address.street1,
-      street2: data.address.street2 ?? null,
-      city: data.address.city,
-      state: data.address.state,
-      zip: data.address.zip,
-      country: data.address.country,
-    });
-  }
+  // The checked address travels with the order; the webhook ships to it
+  metadata.shipping_address_json = JSON.stringify(address);
+  if (isInternational) metadata.is_international = "true";
 
   let session;
   try {
-    if (isInternational) {
-      session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        customer_email: data.customer.email,
-        line_items: lineItems,
-        discounts: stripeDiscounts,
-        success_url: `${appUrl}/shop/order-confirmed?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${appUrl}/cart`,
-        metadata,
-      });
-    } else {
-      session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        customer_email: data.customer.email,
-        line_items: lineItems,
-        discounts: stripeDiscounts,
-        shipping_address_collection: { allowed_countries: ["US"] },
-        shipping_options: [
-          {
-            shipping_rate_data: {
-              type: "fixed_amount",
-              fixed_amount: { amount: 599, currency: "usd" },
-              display_name: "Standard Shipping",
-              delivery_estimate: { minimum: { unit: "business_day", value: 3 }, maximum: { unit: "business_day", value: 7 } },
-            },
-          },
-        ],
-        success_url: `${appUrl}/shop/order-confirmed?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${appUrl}/cart`,
-        metadata,
-      });
-    }
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: data.customer.email,
+      line_items: lineItems,
+      discounts: stripeDiscounts,
+      success_url: `${appUrl}/shop/order-confirmed?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/cart`,
+      metadata,
+    });
   } catch (err) {
     console.error("Stripe shop session error:", err);
     return Response.json({ error: "Payment provider error. Please try again." }, { status: 500 });

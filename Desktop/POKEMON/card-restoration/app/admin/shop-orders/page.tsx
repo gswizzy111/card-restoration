@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { addressFromSession } from "@/lib/shipping-address";
 import { stripe } from "@/lib/stripe";
 import { shippo } from "@/lib/shippo";
 import { formatCurrency } from "@/lib/utils";
@@ -83,20 +84,10 @@ async function syncRecentFromStripe() {
     }));
 
     const typedSession = session as Stripe.Checkout.Session;
-    const addr = typedSession.collected_information?.shipping_details?.address;
-    let shippingAddress = addr ? {
-      street1: addr.line1 ?? "",
-      street2: addr.line2 ?? null,
-      city: addr.city ?? "",
-      state: addr.state ?? "",
-      zip: addr.postal_code ?? "",
-      country: addr.country ?? "US",
-    } : null;
+    // The address checked in the cart (older orders: the one Stripe collected)
+    const shippingAddress = addressFromSession(typedSession);
 
     const isInternational = session.metadata?.is_international === "true";
-    if (!shippingAddress && isInternational && session.metadata?.shipping_address_json) {
-      try { shippingAddress = JSON.parse(session.metadata.shipping_address_json); } catch { /* ignore */ }
-    }
 
     const totalCents = session.amount_total ?? 0;
     const shippingCents = isInternational
