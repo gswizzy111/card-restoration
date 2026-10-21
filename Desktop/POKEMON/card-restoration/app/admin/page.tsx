@@ -236,12 +236,12 @@ export default async function AdminPage({
   ] = await Promise.all([
     admin
       .from("orders")
-      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, status, created_at, inbound_method, restoration_tier, admin_notes, payment_method, instagram_feature")
+      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, refunded_cents, status, created_at, inbound_method, restoration_tier, admin_notes, payment_method, instagram_feature")
       .neq("status", "awaiting_payment")
       .order("created_at", { ascending: false }),
     admin
       .from("shop_orders")
-      .select("id, total_cents, created_at")
+      .select("id, total_cents, refunded_cents, created_at")
       .order("created_at", { ascending: false }),
     admin
       .from("orders")
@@ -427,8 +427,8 @@ export default async function AdminPage({
   const pastOrders = (orders ?? []).filter((o) => PAST_STATUSES.includes(o.status) && tierMatchFn(o.restoration_tier) && methodMatchFn(o as any) && notesMatchFn(o.status, (o as any).admin_notes));
 
   const allRevenue = [
-    ...(orders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, created_at: o.created_at })),
-    ...(shopOrders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, created_at: o.created_at })),
+    ...(orders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, refunded_cents: (o as any).refunded_cents ?? 0, created_at: o.created_at })),
+    ...(shopOrders ?? []).map((o) => ({ total_cents: o.total_cents ?? 0, refunded_cents: (o as any).refunded_cents ?? 0, created_at: o.created_at })),
   ];
 
   const now = new Date();
@@ -436,10 +436,10 @@ export default async function AdminPage({
     const d = new Date(o.created_at);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
-  const monthRevenue = thisMonthRevenue.reduce((sum, o) => sum + o.total_cents, 0);
+  const monthRevenue = thisMonthRevenue.reduce((sum, o) => sum + Math.max(0, o.total_cents - o.refunded_cents), 0);
   const thisMonthOrderCount = thisMonthRevenue.length;
-  const revenueEntries = allRevenue.map((o) => ({ cents: o.total_cents, createdAt: o.created_at }));
-  const kitRevenueEntries = (shopOrders ?? []).map((o) => ({ cents: o.total_cents ?? 0, createdAt: o.created_at }));
+  const revenueEntries = allRevenue.map((o) => ({ cents: o.total_cents, refundedCents: o.refunded_cents, createdAt: o.created_at }));
+  const kitRevenueEntries = (shopOrders ?? []).map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o as any).refunded_cents ?? 0, createdAt: o.created_at }));
 
   const fulfillmentCount = fulfillmentOrders?.length ?? 0;
   const shippedCount = shippedRaw?.length ?? 0;

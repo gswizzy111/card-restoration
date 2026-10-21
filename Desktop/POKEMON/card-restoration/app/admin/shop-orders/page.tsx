@@ -348,7 +348,7 @@ export default async function ShopOrdersPage({
           <>
             <div className="mb-8">
               <RevenueChart
-                entries={(orders ?? []).map((o) => ({ cents: o.total_cents ?? 0, createdAt: o.created_at }))}
+                entries={(orders ?? []).map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o.refunded_cents as number | null | undefined) ?? 0, createdAt: o.created_at }))}
                 label="Kit Sales"
               />
             </div>
