@@ -22,6 +22,7 @@ import { ResendConfirmationButton } from "./resend-confirmation-button";
 import { PaymentMethodEditor } from "./payment-method-editor";
 import { RegenerateLabelButton } from "./regenerate-label-button";
 import type { Track } from "shippo/models/components";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ const TRACKING_BADGE: Record<string, { label: string; cls: string }> = {
 };
 
 export default async function AdminOrderPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const admin = createAdminClient();
 

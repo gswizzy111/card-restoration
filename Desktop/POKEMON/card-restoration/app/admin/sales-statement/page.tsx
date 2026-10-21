@@ -1,4 +1,4 @@
-import { requireAdminOrAccountant } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { PrintButton } from "./print-button";
@@ -47,7 +47,7 @@ export default async function SalesStatementPage({
 }: {
   searchParams: Promise<{ preset?: string; from?: string; to?: string }>;
 }) {
-  await requireAdminOrAccountant();
+  await requireAdmin();
 
   const sp = await searchParams;
   const preset = (["this_month", "last_month", "this_year", "all"].includes(sp.preset ?? "") ? sp.preset : "this_month") as Preset;

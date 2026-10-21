@@ -4,6 +4,7 @@ import { ReturnLabelButton as KitReturnLabelButton } from "../shop-orders/return
 import { ReturnLabelButton as RestorationReturnLabelButton } from "../orders/[id]/return-label-button";
 import { AddressEditor } from "./address-editor";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export default async function ShipQueuePage({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
+  await requireAdmin();
   const { tab } = await searchParams;
   const activeTab = tab === "restoration" ? "restoration" : "kits";
 

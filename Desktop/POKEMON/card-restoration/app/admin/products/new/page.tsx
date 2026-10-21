@@ -1,6 +1,8 @@
 import { ProductForm } from "../product-form";
+import { requireAdmin } from "@/lib/admin-auth";
 
-export default function NewProductPage() {
+export default async function NewProductPage() {
+  await requireAdmin();
   return (
     <div className="min-h-screen bg-secondary/30">
       <div className="max-w-2xl mx-auto px-6 py-10">

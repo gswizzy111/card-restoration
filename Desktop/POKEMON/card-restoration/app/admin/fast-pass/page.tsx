@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,7 @@ export default async function FastPassPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
+  await requireAdmin();
   const { status: statusFilter } = await searchParams;
   const admin = createAdminClient();
 

@@ -1,4 +1,4 @@
-import { requireAdminOrAccountant } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductCosts } from "@/lib/product-costs";
 import { formatCurrency } from "@/lib/utils";
@@ -22,7 +22,7 @@ function periodStart(period: Period): string | null {
 }
 
 export default async function ProfitLossPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
-  await requireAdminOrAccountant();
+  await requireAdmin();
 
   const sp = await searchParams;
   const period = (["today", "week", "month", "all"].includes(sp.period ?? "") ? sp.period : "month") as Period;

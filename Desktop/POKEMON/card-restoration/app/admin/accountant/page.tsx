@@ -192,7 +192,7 @@ export default function AccountantAccessPage() {
         </div>
 
         <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 leading-relaxed">
-          <strong>What can accountants see?</strong> Tax reports, P&L, sales statements, orders (view only), and customer list. They cannot update orders, send emails, purchase labels, or change any settings.
+          <strong>What can accountants see?</strong> Tax reports only, including the CSV export. They cannot open individual orders or customer details, update orders, send emails, purchase labels, or change any settings.
         </div>
       </div>
     </div>
