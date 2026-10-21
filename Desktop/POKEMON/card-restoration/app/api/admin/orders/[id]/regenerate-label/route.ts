@@ -42,8 +42,9 @@ export async function POST(
         state: addr.state ?? "",
         zip: addr.zip,
         country: addr.country ?? "US",
-        phone: addr.phone ?? (order.customer_phone as string) ?? "",
-        email: (order.customer_email as string) ?? "",
+        phone: addr.phone || (order.customer_phone as string) || businessAddress.phone,
+        // USPS refuses a label whose sender has no email
+        email: (order.customer_email as string) || businessAddress.email,
       },
       addressTo: {
         name: businessAddress.name,
