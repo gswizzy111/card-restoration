@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CardCompletionToggle } from "./card-completion-toggle";
 
 export const STAGES = [
+  "Ready for Slab Crack",
   "Humidor",
   "Humidity Press",
   "Book",
