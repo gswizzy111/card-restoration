@@ -4,6 +4,7 @@ import { stripe, invoiceSubscriptionId } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
 import { resend, fromEmail, businessName } from "@/lib/resend";
+import { buyKitLabel, type KitLabel } from "@/lib/kit-label";
 import { RESTORATION_TIERS, getCardPriceCents, getTierById } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 
@@ -143,12 +144,18 @@ export async function POST(request: Request) {
       const customerEmail = session.customer_email ?? "";
       const customerPhone = session.metadata.customer_phone ?? "";
       const totalCents = session.amount_total ?? 0;
-      const shippingCents = isInternationalShop
-        ? totalCents - (session.amount_subtotal ?? totalCents - 599)
-        : 599;
+      // Live-rate checkouts record what shipping cost; older ones were $5.99
+      // in the US (abroad: what the total holds beyond the items)
+      const kitShippingCents = parseInt(session.metadata.kit_shipping_cents ?? "", 10);
+      const shippingCents = Number.isFinite(kitShippingCents)
+        ? kitShippingCents
+        : isInternationalShop
+          ? totalCents - (session.amount_subtotal ?? totalCents - 599)
+          : 599;
+      const shippingService = session.metadata.kit_shipping_service ?? "";
 
       // Save shop order to DB
-      await admin.from("shop_orders").insert({
+      const { data: savedKitOrder, error: kitInsertError } = await admin.from("shop_orders").insert({
         stripe_session_id: session.id,
         customer_name: customerName,
         customer_email: customerEmail,
@@ -160,7 +167,39 @@ export async function POST(request: Request) {
         total_cents: totalCents,
         status: "paid",
         affiliate_code: session.metadata.affiliate_code || null,
-      });
+      }).select("id").single();
+
+      // Stripe retried an event we already handled (the session ID is unique):
+      // don't take stock, gift card balance or a label twice
+      if (kitInsertError?.code === "23505") return Response.json({ received: true });
+
+      // The shipping speed the customer picked is bought as the label now, so
+      // the kit is ready to pack the moment the order lands
+      let kitLabel: KitLabel | null = null;
+      let kitLabelError = "";
+      const kitRateId = session.metadata.kit_rate_object_id;
+      if (kitRateId && savedKitOrder) {
+        const bought = await buyKitLabel(kitRateId, isInternationalShop);
+        if ("label" in bought) {
+          kitLabel = bought.label;
+          const { error: labelSaveError } = await admin.from("shop_orders").update({
+            labels: [{
+              labelUrl: kitLabel.labelUrl,
+              trackingNumber: kitLabel.trackingNumber,
+              createdAt: new Date().toISOString(),
+              ...(kitLabel.customsUrl ? { customsUrl: kitLabel.customsUrl } : {}),
+            }],
+            return_label_url: kitLabel.labelUrl,
+            tracking_number: kitLabel.trackingNumber,
+            status: "processing",
+          }).eq("id", savedKitOrder.id);
+          if (labelSaveError) console.error(`Kit label bought but not saved (session ${session.id}):`, labelSaveError.message, kitLabel.labelUrl);
+        } else {
+          kitLabelError = bought.error;
+          console.error(`Kit label purchase failed (session ${session.id}):`, bought.error);
+        }
+      }
+      const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
       // Decrement inventory for each product
       for (const item of items) {
@@ -206,10 +245,11 @@ export async function POST(request: Request) {
                 <p>Hi ${customerName.split(" ")[0] || "there"}, your order has been placed and will ship within 1-2 business days.</p>
                 <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
                   ${itemsHtml}
-                  <tr style="border-top:1px solid #eee"><td style="padding:8px 0;font-weight:700">Shipping</td><td style="padding:8px 0;text-align:right">$5.99</td></tr>
+                  <tr style="border-top:1px solid #eee"><td style="padding:8px 0;font-weight:700">Shipping${shippingService ? ` <span style="font-weight:400;color:#666">(${esc(shippingService)})</span>` : ""}</td><td style="padding:8px 0;text-align:right">$${(shippingCents / 100).toFixed(2)}</td></tr>
                   <tr><td style="padding:4px 0;font-weight:700">Total</td><td style="padding:4px 0;text-align:right;font-weight:700">$${(totalCents / 100).toFixed(2)}</td></tr>
                 </table>
                 ${addrLine ? `<p style="font-size:13px;color:#666">Shipping to: ${addrLine}</p>` : ""}
+                ${kitLabel?.trackingNumber ? `<p style="font-size:13px;color:#666">Tracking number: ${kitLabel.trackingUrl ? `<a href="${esc(kitLabel.trackingUrl)}" style="color:#111">${esc(kitLabel.trackingNumber)}</a>` : esc(kitLabel.trackingNumber)}. It starts updating once your kit is handed to the carrier.</p>` : ""}
                 <p style="font-size:13px;color:#666">Questions? DM us on Instagram <strong>@thecarddoc</strong></p>
                 <p style="font-size:13px;color:#999">${businessName}</p>
               </div>
@@ -235,6 +275,11 @@ export async function POST(request: Request) {
               <p style="color:#666;font-size:14px">${customerEmail} · ${customerPhone}</p>
               ${addrLine ? `<p style="font-size:14px"><strong>Ship to:</strong> ${addrLine}</p>` : ""}
               <p style="font-size:14px"><strong>Total:</strong> $${(totalCents / 100).toFixed(2)}</p>
+              ${kitRateId && savedKitOrder
+                ? kitLabel
+                  ? `<p style="font-size:14px"><strong>Label bought:</strong> ${esc(shippingService || "shipping label")}${kitLabel.trackingNumber ? ` · ${esc(kitLabel.trackingNumber)}` : ""} · <a href="${esc(kitLabel.labelUrl)}">Print label</a>${kitLabel.customsUrl ? ` · <a href="${esc(kitLabel.customsUrl)}">Customs invoice</a>` : ""}</p>`
+                  : `<p style="font-size:14px;color:#b91c1c"><strong>The label couldn't be bought:</strong> ${esc(kitLabelError)}. Buy it from Kit Orders.</p>`
+                : ""}
               <a href="${appUrl}/admin/shop-orders" style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:8px">View Kit Orders</a>
             </div>
           `,
