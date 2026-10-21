@@ -234,6 +234,7 @@ function OrderCard({ order }: { order: Record<string, any> }) {
             alreadyRefundedCents={refundedCents}
             customerEmail={order.customer_email ?? ""}
             refundUrl={`/api/admin/shop-orders/${order.id}/refund`}
+            defaultMessage="We noticed there's no address on file for your order, so we've gone ahead and issued a full refund. If you'd like to reorder, simply place a new order at thecarddoc1.com and add your shipping address — we'll get it shipped out as soon as possible!"
           />
         </div>
       )}

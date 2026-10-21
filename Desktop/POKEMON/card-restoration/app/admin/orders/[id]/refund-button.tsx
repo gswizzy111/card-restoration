@@ -10,15 +10,16 @@ interface Props {
   customerEmail: string;
   // Kit orders refund through /api/admin/shop-orders/[id]/refund
   refundUrl?: string;
+  defaultMessage?: string;
 }
 
-export function RefundButton({ orderId, totalCents, alreadyRefundedCents, customerEmail, refundUrl }: Props) {
+export function RefundButton({ orderId, totalCents, alreadyRefundedCents, customerEmail, refundUrl, defaultMessage }: Props) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"full" | "partial">("full");
   const [partialDollars, setPartialDollars] = useState("");
   const [reason, setReason] = useState("");
   const [sendEmail, setSendEmail] = useState(true);
-  const [customerMessage, setCustomerMessage] = useState("");
+  const [customerMessage, setCustomerMessage] = useState(defaultMessage ?? "");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
