@@ -9,7 +9,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { US_STATES } from "@/lib/constants";
+import { KIT_US_STATES, addressProblem } from "@/lib/shipping-address";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 const INPUT_CN = "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm";
@@ -159,10 +159,13 @@ function CheckoutInner() {
     }
   }
 
+  // Same check the checkout API runs: a complete address with a house number
+  const addressIssue = addressProblem({ ...form, country: isInternational ? form.country : "US" });
+  const addressStarted = !!(form.street1 || form.city || form.zip);
+
   function isAddressValid() {
-    if (!form.name || !form.email || !form.phone || !form.street1 || !form.city || !form.zip) return false;
-    if (isInternational) return !!form.country;
-    return !!form.state;
+    if (!form.name || !form.email || !form.phone) return false;
+    return addressIssue === null;
   }
 
   function canPay() {
@@ -313,7 +316,7 @@ function CheckoutInner() {
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none"
                   >
                     <option value="">Select state</option>
-                    {US_STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    {KIT_US_STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </div>
               )}
@@ -322,6 +325,10 @@ function CheckoutInner() {
                 <Input value={form.zip} onChange={(e) => set("zip", e.target.value)} placeholder="SW1A 1AA" />
               </div>
             </div>
+
+            {addressStarted && addressIssue && (
+              <p role="alert" className="text-xs font-semibold text-red-600 mt-3">{addressIssue}</p>
+            )}
 
             {/* International shipping calculator */}
             {isInternational && (

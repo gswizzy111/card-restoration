@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { addressFromSession } from "@/lib/shipping-address";
 import { stripe, invoiceSubscriptionId } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
@@ -134,22 +135,9 @@ export async function POST(request: Request) {
         price_cents: productMap[i.id]?.price_cents ?? 0,
       }));
 
-      // Shipping address from Stripe (SDK v22: collected_information)
-      const addr = session.collected_information?.shipping_details?.address;
-      let shippingAddress = addr ? {
-        street1: addr.line1 ?? "",
-        street2: addr.line2 ?? null,
-        city: addr.city ?? "",
-        state: addr.state ?? "",
-        zip: addr.postal_code ?? "",
-        country: addr.country ?? "US",
-      } : null;
-
-      // International orders send their address in metadata (same as the admin sync)
+      // The address checked in the cart (older orders: the one Stripe collected)
+      const shippingAddress = addressFromSession(session);
       const isInternationalShop = session.metadata.is_international === "true";
-      if (!shippingAddress && isInternationalShop && session.metadata.shipping_address_json) {
-        try { shippingAddress = JSON.parse(session.metadata.shipping_address_json); } catch { /* ignore */ }
-      }
 
       const customerName = session.metadata.customer_name ?? session.customer_details?.name ?? "";
       const customerEmail = session.customer_email ?? "";
