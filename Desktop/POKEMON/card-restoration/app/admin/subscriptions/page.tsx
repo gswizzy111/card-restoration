@@ -1,10 +1,10 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { CreateKitOrderButton } from "./create-kit-order-button";
 import { CancelSubscriptionButton } from "./cancel-button";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +39,7 @@ type SubShopOrder = {
 };
 
 export default async function AdminSubscriptionsPage() {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     redirect("/admin/login");
   }
 

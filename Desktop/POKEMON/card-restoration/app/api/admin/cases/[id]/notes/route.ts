@@ -1,8 +1,8 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { INQUIRY_TYPE, escapeHtml, orderLabel } from "@/lib/card-inquiries";
 import { z } from "zod";
+import { isAdmin } from "@/lib/admin-auth";
 
 const NoteSchema = z.object({
   body: z.string().min(1),
@@ -10,8 +10,7 @@ const NoteSchema = z.object({
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

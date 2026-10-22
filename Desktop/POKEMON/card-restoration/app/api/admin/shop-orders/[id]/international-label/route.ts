@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo, businessAddress } from "@/lib/shippo";
 import {
@@ -8,6 +7,7 @@ import {
   CustomsDeclarationNonDeliveryOptionEnum,
   CustomsDeclarationEelPfcEnum,
 } from "shippo/models/components";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const maxDuration = 60;
 
@@ -26,8 +26,7 @@ type ShippingAddress = {
 };
 
 async function authed() {
-  const jar = await cookies();
-  return jar.get("admin_auth")?.value === process.env.ADMIN_PASSWORD;
+  return isAdmin();
 }
 
 // GET — create Shippo shipment with customs declaration, return rates

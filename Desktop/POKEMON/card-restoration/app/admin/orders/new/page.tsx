@@ -1,13 +1,12 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ManualOrderForm } from "./manual-order-form";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewManualOrderPage() {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     redirect("/admin/login");
   }
 

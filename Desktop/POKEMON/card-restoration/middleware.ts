@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { ADMIN_SESSION_COOKIE, lookupAdminSession } from "@/lib/admin-session";
 
 // ─── COMING SOON MODE ───────────────────────────────────────────────────────
 // Set to false and push to bring the full site back.
@@ -9,9 +10,14 @@ const COMING_SOON = false;
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const adminCookie = request.cookies.get("admin_auth")?.value;
-  const isFullAdmin = !!process.env.ADMIN_PASSWORD && adminCookie === process.env.ADMIN_PASSWORD;
-  const isAccountantSession = !isFullAdmin && !!adminCookie?.startsWith("act_");
+  // Admin and accountant sign-in sessions (lib/admin-session.ts), looked up
+  // only on admin paths. Each page and route checks the role again itself.
+  const onAdminPath = pathname === "/admin" || pathname.startsWith("/admin/") || pathname.startsWith("/api/admin/");
+  const adminSession = onAdminPath
+    ? await lookupAdminSession(request.cookies.get(ADMIN_SESSION_COOKIE)?.value)
+    : null;
+  const isFullAdmin = adminSession?.role === "admin";
+  const isAccountantSession = adminSession?.role === "accountant";
 
   // Accountants get the tax reports and nothing else: no orders, customers or
   // settings. Any other admin page sends them back to the tax reports, and any
@@ -41,7 +47,6 @@ export async function middleware(request: NextRequest) {
   // Admin auth (always runs)
   if (pathname.startsWith("/admin")) {
     if (pathname.startsWith("/admin/login")) return NextResponse.next();
-    // Full admin: exact password match. Accountant: act_<uuid> prefix (DB verified at page level).
     if (!isFullAdmin && !isAccountantSession) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }

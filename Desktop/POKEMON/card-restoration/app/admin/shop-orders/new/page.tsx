@@ -1,14 +1,13 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { ManualKitOrderForm } from "./manual-kit-order-form";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewKitOrderPage() {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) redirect("/admin/login");
+  if (!(await isAdmin())) redirect("/admin/login");
 
   const admin = createAdminClient();
   const { data: products } = await admin

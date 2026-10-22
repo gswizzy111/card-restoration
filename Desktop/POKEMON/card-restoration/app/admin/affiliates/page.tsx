@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { NewAffiliateForm } from "./new-affiliate-form";
@@ -6,6 +5,7 @@ import { NewCouponForm } from "./new-coupon-form";
 import { EditAffiliateForm } from "./edit-affiliate-form";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +32,7 @@ export default async function AdminAffiliatesPage({
   searchParams: Promise<{ edit?: string }>;
 }) {
   const { edit: editingId } = await searchParams;
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     redirect("/admin/login");
   }
 

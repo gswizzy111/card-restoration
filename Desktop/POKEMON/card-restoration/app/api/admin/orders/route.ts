@@ -1,8 +1,8 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RESTORATION_TIERS } from "@/lib/restoration-tiers";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { z } from "zod";
+import { isAdmin } from "@/lib/admin-auth";
 
 const TIER_IDS = ["regular", "expedited", "premium", "ultra_premium", "elite", "fast_pass"] as const;
 
@@ -32,8 +32,7 @@ const BodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

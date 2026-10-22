@@ -1,8 +1,8 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { INQUIRY_TYPE } from "@/lib/card-inquiries";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +27,7 @@ const PRIORITY_STYLES: Record<string, string> = {
 };
 
 export default async function CasesPage({ searchParams }: { searchParams: Promise<{ filter?: string; type?: string }> }) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) redirect("/admin/login");
+  if (!(await isAdmin())) redirect("/admin/login");
 
   const sp = await searchParams;
   const filter = sp.filter ?? "open";
