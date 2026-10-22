@@ -407,18 +407,22 @@ export default async function AdminPage({
     allCardCountByOrder[row.order_id] = (allCardCountByOrder[row.order_id] ?? 0) + 1;
   }
 
-  // Find when each fulfillment order was marked received (for accurate "days since received")
-  const { data: receivedEvents } = fulfillmentIds.length > 0
-    ? await admin.from("order_events")
-        .select("order_id, created_at")
-        .in("order_id", fulfillmentIds)
-        .like("description", "%Cards Received%")
-        .order("created_at", { ascending: true })
-    : { data: [] };
+  // Single query covering both sort-by-received-date AND backlog chart accuracy
+  const { data: allBacklogEvents } = await admin
+    .from("order_events")
+    .select("order_id, created_at, description")
+    .or("description.ilike.%Cards Received%,description.ilike.%Shipped Back%")
+    .order("created_at", { ascending: true });
 
   const receivedAtByOrder: Record<string, string> = {};
-  for (const ev of receivedEvents ?? []) {
-    if (!receivedAtByOrder[ev.order_id]) receivedAtByOrder[ev.order_id] = ev.created_at;
+  const shippedAtByOrder: Record<string, string> = {};
+  for (const ev of allBacklogEvents ?? []) {
+    const desc = (ev.description as string) ?? "";
+    if (desc.includes("Cards Received") && !receivedAtByOrder[ev.order_id]) {
+      receivedAtByOrder[ev.order_id] = ev.created_at;
+    } else if (desc.includes("Shipped Back") && !shippedAtByOrder[ev.order_id]) {
+      shippedAtByOrder[ev.order_id] = ev.created_at;
+    }
   }
 
   // Sort fulfillment orders by due date (default) or completion progress
@@ -474,15 +478,25 @@ export default async function AdminPage({
   const revenueEntries = allRevenue.map((o) => ({ cents: o.total_cents, refundedCents: o.refunded_cents, createdAt: o.created_at }));
   const kitRevenueEntries = (shopOrders ?? []).map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o as any).refunded_cents ?? 0, createdAt: o.created_at }));
 
-  // Backlog history: one entry per restoration order with card count
-  const BACKLOG_EXIT_STATUSES = ["completed", "shipped_back", "delivered", "cancelled"];
+  // Backlog: only decreases when physically shipped — "completed"/"cancelled" do NOT exit the backlog.
+  // createdAt = actual received date (from order_events), completedAt = actual shipped date.
+  const BACKLOG_ENTRY_STATUSES = ["received", "in_progress", "awaiting_restoration", "completed", "shipped_back", "delivered"];
   const backlogEntries = (orders ?? [])
-    .filter((o) => (allCardCountByOrder[o.id] ?? 0) > 0)
+    .filter((o) => {
+      const hasCards = (allCardCountByOrder[o.id] ?? 0) > 0;
+      const wasReceived = BACKLOG_ENTRY_STATUSES.includes(o.status) || !!receivedAtByOrder[o.id];
+      return hasCards && wasReceived;
+    })
     .map((o) => ({
       cardCount: allCardCountByOrder[o.id] ?? 0,
-      createdAt: o.created_at,
-      completedAt: BACKLOG_EXIT_STATUSES.includes(o.status) ? ((o as any).updated_at ?? null) : null,
+      createdAt: receivedAtByOrder[o.id] ?? o.created_at,
+      completedAt: shippedAtByOrder[o.id] ?? null,
     }));
+
+  // Current backlog = all cards received but not yet shipped (includes completed-but-unshipped orders)
+  const currentBacklogCardCount = backlogEntries
+    .filter((e) => !e.completedAt)
+    .reduce((sum, e) => sum + e.cardCount, 0);
 
   const fulfillmentCount = fulfillmentCards?.length ?? 0;
   const shippedCount = shippedRaw?.length ?? 0;
@@ -504,9 +518,9 @@ export default async function AdminPage({
               {activeTab === "fulfillment"
                 ? "Cards in your hands — sorted oldest first"
                 : `${allRevenue.length} total`}
-              {activeTab !== "fulfillment" && fulfillmentCount > 0 && (
+              {activeTab !== "fulfillment" && currentBacklogCardCount > 0 && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700">
-                  {fulfillmentCount} card{fulfillmentCount !== 1 ? "s" : ""} in backlog
+                  {currentBacklogCardCount} card{currentBacklogCardCount !== 1 ? "s" : ""} in backlog
                 </span>
               )}
             </p>
@@ -674,8 +688,8 @@ export default async function AdminPage({
               </div>
               <div className="bg-white rounded-xl border border-border p-5">
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Active Backlog</p>
-                <p className="font-heading font-black text-3xl text-purple-600">{fulfillmentCount}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">cards in hand</p>
+                <p className="font-heading font-black text-3xl text-purple-600">{currentBacklogCardCount}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">cards not yet shipped</p>
               </div>
             </div>
 
