@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resend, fromEmail, businessName } from "@/lib/resend";
+import { INQUIRY_TYPE, escapeHtml, orderLabel } from "@/lib/card-inquiries";
 import { z } from "zod";
 
 const NoteSchema = z.object({
@@ -21,37 +22,70 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const admin = createAdminClient();
 
+  const { data: caseRow } = await admin
+    .from("cases")
+    .select("type, title, customer_name, customer_email, order_ref")
+    .eq("id", id)
+    .single();
+  if (!caseRow) return Response.json({ error: "Case not found" }, { status: 404 });
+
+  const isInquiry = caseRow.type === INQUIRY_TYPE;
+  const emailed = parsed.data.is_customer_visible && !!caseRow.customer_email;
+
+  // Email first: a note is only marked "Emailed to customer" if it really went out.
+  if (emailed) {
+    const firstName = caseRow.customer_name?.trim().split(/\s+/)[0];
+    const greeting = `Hi${firstName ? ` ${escapeHtml(firstName)}` : ""},`;
+    const label = escapeHtml(orderLabel(caseRow.order_ref));
+    const subject = isInquiry
+      ? `An update on your order ${orderLabel(caseRow.order_ref)}`
+      : `Update on your case: ${caseRow.title}`;
+    const intro = isInquiry
+      ? `Here's an update on your card${caseRow.order_ref ? ` (order <strong>${label}</strong>)` : ""}:`
+      : `We have an update on your case: <strong>${escapeHtml(caseRow.title)}</strong>`;
+
+    const { error: sendError } = await resend.emails
+      .send({
+        from: fromEmail,
+        to: caseRow.customer_email!,
+        subject,
+        html: `
+          <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
+            <h2 style="margin-bottom:8px">${greeting}</h2>
+            <p style="color:#555">${intro}</p>
+            <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin:16px 0;white-space:pre-wrap;font-size:15px;color:#333">${escapeHtml(parsed.data.body)}</div>
+            <p style="color:#888;font-size:13px">If you have questions, reply to this email or contact us directly.</p>
+            <p style="color:#888;font-size:13px;margin-top:24px">— ${businessName}</p>
+          </div>
+        `,
+      })
+      .catch((err: unknown) => ({ error: err }));
+
+    if (sendError) {
+      console.error("Failed to email case update:", sendError);
+      return Response.json(
+        { error: "The email didn't send, so nothing was saved. Please try again." },
+        { status: 502 }
+      );
+    }
+  }
+
   const { data: note, error } = await admin
     .from("case_notes")
-    .insert({ case_id: id, body: parsed.data.body, is_customer_visible: parsed.data.is_customer_visible })
+    .insert({ case_id: id, body: parsed.data.body, is_customer_visible: emailed })
     .select("id, created_at")
     .single();
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  // Update case updated_at
-  await admin.from("cases").update({ updated_at: new Date().toISOString() }).eq("id", id);
-
-  // Send email to customer if this note is customer-visible and the case has a customer email
-  if (parsed.data.is_customer_visible) {
-    const { data: caseRow } = await admin.from("cases").select("title, customer_name, customer_email").eq("id", id).single();
-    if (caseRow?.customer_email) {
-      await resend.emails.send({
-        from: fromEmail,
-        to: caseRow.customer_email,
-        subject: `Update on your case: ${caseRow.title}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
-            <h2 style="margin-bottom:8px">Hi${caseRow.customer_name ? ` ${caseRow.customer_name}` : ""},</h2>
-            <p style="color:#555">We have an update on your case: <strong>${caseRow.title}</strong></p>
-            <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin:16px 0;white-space:pre-wrap;font-size:15px;color:#333">${parsed.data.body}</div>
-            <p style="color:#888;font-size:13px">If you have questions, reply to this email or contact us directly.</p>
-            <p style="color:#888;font-size:13px;margin-top:24px">— ${businessName}</p>
-          </div>
-        `,
-      }).catch(() => {/* fail silently */});
-    }
-  }
+  // Answering a "Where's my card?" question resolves it; the customer can ask again.
+  await admin
+    .from("cases")
+    .update({
+      updated_at: new Date().toISOString(),
+      ...(isInquiry && emailed ? { status: "resolved" } : {}),
+    })
+    .eq("id", id);
 
   return Response.json({ id: note.id, created_at: note.created_at });
 }

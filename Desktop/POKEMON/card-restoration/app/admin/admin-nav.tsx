@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 const NAV_ITEMS = [
@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/admin/profit-loss",       label: "P&L",           icon: "💰" },
   { href: "/admin/sales-statement",   label: "Statement",     icon: "📄" },
   { href: "/admin/tax",               label: "Tax Reports",   icon: "🧾" },
+  { href: "/admin/cases?filter=open&type=inquiry", label: "Update Requests", icon: "🔔" },
   { href: "/admin/cases",             label: "Cases",         icon: "🗂️" },
   { href: "/admin/gift-cards",     label: "Gift Cards",    icon: "🎁" },
   { href: "/admin/testimonials",     label: "Reviews",         icon: "⭐" },
@@ -33,13 +34,31 @@ const ACCOUNTANT_NAV_ITEMS = [
   { href: "/admin/tax", label: "Tax Reports", icon: "🧾" },
 ];
 
-function NavLinks({ onNavigate, openCaseCount, role }: { onNavigate?: () => void; openCaseCount?: number; role?: string | null }) {
+function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, role }: { onNavigate?: () => void; openCaseCount?: number; openUpdateRequestCount?: number; role?: string | null }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const items = role === "accountant" ? ACCOUNTANT_NAV_ITEMS : NAV_ITEMS;
+
+  // A filtered view of another page (Update Requests = cases of one type) is
+  // active on that page with that type; the page's own item steps aside
+  const activeFilter = items.find((item) => {
+    const [path, query] = item.href.split("?");
+    const type = query ? new URLSearchParams(query).get("type") : null;
+    return !!type && pathname === path && searchParams.get("type") === type;
+  })?.href;
 
   function isActive(href: string) {
     if (href === "/admin") return pathname === "/admin";
+    if (href.includes("?")) return href === activeFilter;
+    if (activeFilter?.startsWith(`${href}?`)) return false;
     return pathname.startsWith(href);
+  }
+
+  // Red count badges: open cases, and update requests waiting on a reply
+  function badgeFor(href: string) {
+    if (href === "/admin/cases") return openCaseCount ?? 0;
+    if (href.startsWith("/admin/cases?") && href.includes("type=inquiry")) return openUpdateRequestCount ?? 0;
+    return 0;
   }
 
   return (
@@ -57,9 +76,9 @@ function NavLinks({ onNavigate, openCaseCount, role }: { onNavigate?: () => void
         >
           <span>{item.icon}</span>
           <span className="flex-1">{item.label}</span>
-          {item.href === "/admin/cases" && openCaseCount && openCaseCount > 0 ? (
+          {badgeFor(item.href) > 0 ? (
             <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-black px-1">
-              {openCaseCount > 99 ? "99+" : openCaseCount}
+              {badgeFor(item.href) > 99 ? "99+" : badgeFor(item.href)}
             </span>
           ) : null}
         </Link>
@@ -78,7 +97,7 @@ function NavLinks({ onNavigate, openCaseCount, role }: { onNavigate?: () => void
   );
 }
 
-export function AdminNav({ openCaseCount, role }: { openCaseCount?: number; role?: string | null }) {
+export function AdminNav({ openCaseCount, openUpdateRequestCount, role }: { openCaseCount?: number; openUpdateRequestCount?: number; role?: string | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -91,7 +110,7 @@ export function AdminNav({ openCaseCount, role }: { openCaseCount?: number; role
           <p className="text-xs text-muted-foreground mt-0.5">Admin</p>
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 flex flex-col gap-1">
-          <NavLinks openCaseCount={openCaseCount} role={role} />
+          <NavLinks openCaseCount={openCaseCount} openUpdateRequestCount={openUpdateRequestCount} role={role} />
           {role === "accountant" && (
             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest px-3 pt-4">Accountant View</p>
           )}
@@ -141,7 +160,7 @@ export function AdminNav({ openCaseCount, role }: { openCaseCount?: number; role
       )}
       <div className={`lg:hidden fixed top-14 left-0 right-0 z-30 max-h-[calc(100dvh-3.5rem)] overflow-y-auto bg-white border-b border-border transition-transform duration-200 ${open ? "translate-y-0" : "-translate-y-full pointer-events-none"}`}>
         <nav className="px-3 py-3 flex flex-col gap-1">
-          <NavLinks onNavigate={() => setOpen(false)} openCaseCount={openCaseCount} role={role} />
+          <NavLinks onNavigate={() => setOpen(false)} openCaseCount={openCaseCount} openUpdateRequestCount={openUpdateRequestCount} role={role} />
         </nav>
         <div className="px-3 py-3 border-t border-border">
           <form action="/api/admin/logout" method="POST">
