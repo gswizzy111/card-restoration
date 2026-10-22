@@ -59,6 +59,9 @@ export function Footer() {
             <Link href="/privacy" className="text-xs text-white/60 hover:text-white transition-colors">
               Privacy Policy
             </Link>
+            <Link href="/affiliates" className="text-xs text-white/60 hover:text-white transition-colors">
+              Creator Portal
+            </Link>
           </div>
         </div>
       </div>

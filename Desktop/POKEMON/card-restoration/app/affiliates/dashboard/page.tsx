@@ -1,131 +1,138 @@
-import { cookies } from "next/headers";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
+import { formatCurrency } from "@/lib/utils";
+import { COMMISSION_PERCENT, creatorSales, getCreator, summarizeSales, type CreatorTotals } from "@/lib/creator-portal";
+import { CopyCode } from "./copy-code";
 
 export const dynamic = "force-dynamic";
 
-type OrderItem = {
-  product_id: string;
-  product_name: string;
-  quantity: number;
-  price_cents: number;
-};
+const RECENT = 10;
 
-type ShopOrder = {
-  id: string;
-  items: OrderItem[];
-  total_cents: number;
-  created_at: string;
-  status: string;
-  customer_name: string;
-};
+function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="bg-white rounded-xl border border-border p-5">
+      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="font-heading font-black text-2xl sm:text-3xl text-foreground mt-2 tabular-nums">{value}</p>
+      {note && <p className="text-xs text-muted-foreground mt-1">{note}</p>}
+    </div>
+  );
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function ServiceRow({ label, t }: { label: string; t: CreatorTotals }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-3 border-b border-border last:border-0">
+      <div>
+        <p className="font-semibold text-sm text-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground">{plural(t.sales, "sale")} · {formatCurrency(t.cents)}</p>
+      </div>
+      <p className="font-semibold text-sm text-foreground">{formatCurrency(t.commissionCents)}</p>
+    </div>
+  );
+}
 
 export default async function AffiliateDashboard() {
-  const jar = await cookies();
-  const affiliateId = jar.get("affiliate_session")?.value;
-  if (!affiliateId) redirect("/affiliates");
+  const creator = await getCreator();
+  if (!creator) redirect("/affiliates");
 
-  const admin = createAdminClient();
-
-  const { data: affiliate } = await admin
-    .from("affiliates")
-    .select("id, name, code")
-    .eq("id", affiliateId)
-    .single();
-
-  if (!affiliate) redirect("/affiliates");
-
-  const { data: orders } = await admin
-    .from("shop_orders")
-    .select("id, items, total_cents, created_at, status, customer_name")
-    .eq("affiliate_code", affiliate.code)
-    .order("created_at", { ascending: false });
-
-  const allOrders: ShopOrder[] = orders ?? [];
-
-  const totalOrders = allOrders.length;
-  const totalKits = allOrders.reduce((sum, order) => {
-    const items: OrderItem[] = Array.isArray(order.items) ? order.items : [];
-    return sum + items.reduce((s, item) => s + (item.quantity ?? 0), 0);
-  }, 0);
-  const earnings = totalKits * 10;
-
-  function itemsSummary(items: OrderItem[]): string {
-    if (!Array.isArray(items) || items.length === 0) return "—";
-    return items
-      .map((i) => `${i.product_name} ×${i.quantity}`)
-      .join(", ");
-  }
-
-  function statusBadge(status: string) {
-    const styles: Record<string, string> = {
-      paid: "bg-green-100 text-green-800",
-      shipped: "bg-blue-100 text-blue-800",
-      delivered: "bg-purple-100 text-purple-800",
-      refunded: "bg-red-100 text-red-800",
-    };
-    const cls = styles[status] ?? "bg-gray-100 text-gray-700";
-    return (
-      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cls}`}>
-        {status}
-      </span>
-    );
-  }
+  const sales = await creatorSales(creator.code);
+  const s = summarizeSales(sales);
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   return (
     <div className="min-h-screen bg-secondary/30">
-      <div className="max-w-3xl mx-auto px-6 py-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 flex flex-col gap-6">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="font-heading font-black text-3xl text-foreground">{affiliate.name}</h1>
-            <p className="text-muted-foreground text-sm mt-1">Creator Dashboard — The Card Doc</p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Creator dashboard · The Card Doc</p>
+            <h1 className="font-heading font-black text-3xl text-foreground mt-1 [overflow-wrap:anywhere]">{creator.name}</h1>
           </div>
-          <form action="/api/affiliates/logout" method="POST">
-            <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Sign out
-            </button>
+          <form action="/api/affiliates/logout" method="POST" className="shrink-0">
+            <button className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1">Sign out</button>
           </form>
         </div>
 
-        {/* Earnings banner */}
-        <div className="bg-green-600 rounded-xl p-6 mb-6">
-          <p className="text-xs font-bold uppercase tracking-widest text-white/70 mb-1">Total Earned</p>
-          <p className="font-heading font-black text-4xl text-white">${earnings.toFixed(2)}</p>
-          <p className="text-white/70 text-sm mt-1">
-            {totalKits} kit{totalKits !== 1 ? "s" : ""} sold · {totalOrders} order{totalOrders !== 1 ? "s" : ""}
-          </p>
-        </div>
-
-        {/* Your Code card */}
-        <div className="bg-white rounded-xl border border-border p-6 mb-6">
-          <h2 className="font-heading font-black text-lg text-foreground mb-1">Your Creator Code</h2>
-          <p className="text-xs text-muted-foreground mb-3">Share this at checkout to track your orders</p>
-          <div className="bg-secondary/40 rounded-lg px-5 py-4 text-center">
-            <span className="font-mono font-black text-3xl text-foreground tracking-widest">{affiliate.code}</span>
+        {/* Earnings and code */}
+        <div className="bg-foreground text-white rounded-xl p-6 sm:p-8 grid gap-6 sm:grid-cols-[1.4fr_1fr] sm:items-center">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-white/70">Commission earned</p>
+            <p className="font-heading font-black text-5xl mt-2 tabular-nums">{formatCurrency(s.all.commissionCents)}</p>
+            <p className="text-white/70 text-sm mt-2">{COMMISSION_PERCENT}% of {formatCurrency(s.all.cents)} in sales with your code</p>
+          </div>
+          <div className="sm:border-l sm:border-white/15 sm:pl-6">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/70">Your code</p>
+            <p className="font-mono font-black text-2xl tracking-wider mt-2 [overflow-wrap:anywhere]">{creator.code}</p>
+            <p className="text-white/70 text-xs mt-1 mb-3">
+              {creator.discount_percent > 0
+                ? `Customers get ${creator.discount_percent}% off when they enter it at checkout.`
+                : "Customers enter it at checkout."}
+            </p>
+            <CopyCode code={creator.code} />
           </div>
         </div>
 
-        {/* Orders table */}
+        {/* Totals */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Stat label="Sales" value={String(s.all.sales)} note="orders with your code" />
+          <Stat label="Revenue" value={formatCurrency(s.all.cents)} note="generated by your code" />
+          <Stat label="Commission" value={`${COMMISSION_PERCENT}%`} note="of every sale" />
+          <Stat label="This month" value={formatCurrency(s.thisMonth.commissionCents)} note={`earned from ${plural(s.thisMonth.sales, "sale")}`} />
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* By service */}
+          <div className="bg-white rounded-xl border border-border p-6">
+            <h2 className="font-heading font-black text-lg text-foreground">By service</h2>
+            <p className="text-xs text-muted-foreground mb-2">Sales and revenue, with your commission on the right</p>
+            <ServiceRow label="Restorations" t={s.restoration} />
+            <ServiceRow label="Restoration kits" t={s.kit} />
+          </div>
+
+          {/* By month */}
+          <div className="bg-white rounded-xl border border-border p-6">
+            <h2 className="font-heading font-black text-lg text-foreground mb-3">Last 6 months</h2>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th scope="col" className="font-semibold pb-2">Month</th>
+                  <th scope="col" className="font-semibold pb-2 text-right">Sales</th>
+                  <th scope="col" className="font-semibold pb-2 text-right">Revenue</th>
+                  <th scope="col" className="font-semibold pb-2 text-right">Earned</th>
+                </tr>
+              </thead>
+              <tbody>
+                {s.byMonth.map((m) => (
+                  <tr key={m.key} className="border-t border-border">
+                    <td className="py-2 text-foreground">{m.label}</td>
+                    <td className="py-2 text-right text-foreground">{m.totals.sales}</td>
+                    <td className="py-2 text-right text-foreground">{formatCurrency(m.totals.cents)}</td>
+                    <td className="py-2 text-right font-semibold text-foreground">{formatCurrency(m.totals.commissionCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Recent sales */}
         <div className="bg-white rounded-xl border border-border p-6">
-          <h2 className="font-heading font-black text-lg text-foreground mb-4">Orders Using Your Code</h2>
-          {totalOrders === 0 ? (
-            <p className="text-sm text-muted-foreground">No orders yet using your code.</p>
+          <h2 className="font-heading font-black text-lg text-foreground">Recent sales</h2>
+          <p className="text-xs text-muted-foreground mb-3">The last {RECENT} orders with your code. Customer names and details aren&apos;t shown.</p>
+          {sales.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No sales with your code yet. Share it with your followers and they&apos;ll show up here.</p>
           ) : (
-            <div className="flex flex-col gap-3">
-              {allOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="flex items-start justify-between text-sm border-b border-border pb-3 last:border-0 last:pb-0"
-                >
-                  <div>
-                    <p className="font-bold text-foreground">{order.customer_name || "Customer"}</p>
-                    <p className="text-muted-foreground text-xs mt-0.5">{itemsSummary(Array.isArray(order.items) ? order.items : [])}</p>
-                    <p className="text-muted-foreground text-xs">{new Date(order.created_at).toLocaleDateString()}</p>
+            <div className="flex flex-col">
+              {sales.slice(0, RECENT).map((sale, i) => (
+                <div key={i} className="flex items-start justify-between gap-4 py-3 border-t border-border first:border-0 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{sale.type === "kit" ? "Restoration kit" : "Restoration"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{fmtDate(sale.date)}{sale.type === "kit" ? ` · ${sale.summary}` : ""}</p>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {statusBadge(order.status)}
+                  <div className="text-right shrink-0">
+                    <p className="font-semibold text-foreground">+{formatCurrency(sale.commissionCents)}</p>
+                    <p className="text-xs text-muted-foreground">on {formatCurrency(sale.cents)}</p>
                   </div>
                 </div>
               ))}
@@ -133,6 +140,9 @@ export default async function AffiliateDashboard() {
           )}
         </div>
 
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Commission is {COMMISSION_PERCENT}% of each order total after refunds. Orders count once they&apos;re paid; cancelled orders don&apos;t count.
+        </p>
       </div>
     </div>
   );
