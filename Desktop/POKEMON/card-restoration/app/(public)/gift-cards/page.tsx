@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { MissingNote, Need, Req, revealMissing } from "@/components/checkout/required";
 
 const PRESET_AMOUNTS = [25, 50, 75, 100, 150, 200];
 
@@ -19,6 +20,8 @@ export default function GiftCardsPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Pressed purchase with something missing: outline it in red
+  const [showMissing, setShowMissing] = useState(false);
 
   const effectiveAmountDollars = useCustom
     ? parseFloat(customAmount.replace(/[^0-9.]/g, "")) || null
@@ -32,8 +35,15 @@ export default function GiftCardsPage() {
     purchaserEmail.trim().length > 0 &&
     (!sendToRecipient || (recipientName.trim().length > 0 && recipientEmail.trim().length > 0));
 
+  const amountOk = effectiveAmountDollars !== null && effectiveAmountDollars >= 10 && effectiveAmountDollars <= 1000;
+  const miss = (v: string) => showMissing && !v.trim();
+
   async function handleCheckout() {
-    if (!isValid || !effectiveAmountDollars) return;
+    if (!isValid || !effectiveAmountDollars) {
+      setShowMissing(true);
+      revealMissing();
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -76,8 +86,8 @@ export default function GiftCardsPage() {
         <div className="bg-white rounded-2xl border border-border p-8 flex flex-col gap-6">
 
           {/* Amount selection */}
-          <div>
-            <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-3">Select Amount</p>
+          <Need missing={showMissing && !amountOk} note="Choose an amount from $10 to $1,000.">
+            <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-3">Select Amount<Req /></p>
             <div className="grid grid-cols-3 gap-3 mb-3">
               {PRESET_AMOUNTS.map((amt) => (
                 <button
@@ -121,26 +131,30 @@ export default function GiftCardsPage() {
                 />
               </div>
             )}
-          </div>
+          </Need>
 
           {/* Purchaser info */}
           <div className="border-t border-border pt-6">
-            <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-3">Your Info</p>
+            <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-3">Your Info<Req /></p>
             <div className="flex flex-col gap-3">
-              <input
+              <Need className="flex flex-col" missing={miss(purchaserName)} note="Enter your name.">
+<input
                 type="text"
                 value={purchaserName}
                 onChange={(e) => setPurchaserName(e.target.value)}
                 placeholder="Your name"
                 className="h-10 border border-border rounded-lg px-3 text-sm focus:outline-none focus:border-primary transition-colors"
               />
-              <input
+</Need>
+              <Need className="flex flex-col" missing={miss(purchaserEmail)} note="Enter your email.">
+<input
                 type="email"
                 value={purchaserEmail}
                 onChange={(e) => setPurchaserEmail(e.target.value)}
                 placeholder="Your email (we'll send you a receipt)"
                 className="h-10 border border-border rounded-lg px-3 text-sm focus:outline-none focus:border-primary transition-colors"
               />
+</Need>
             </div>
           </div>
 
@@ -157,20 +171,24 @@ export default function GiftCardsPage() {
             </label>
             {sendToRecipient && (
               <div className="flex flex-col gap-3">
-                <input
+                <Need className="flex flex-col" missing={miss(recipientName)} note="Enter the recipient's name.">
+<input
                   type="text"
                   value={recipientName}
                   onChange={(e) => setRecipientName(e.target.value)}
                   placeholder="Recipient's name"
                   className="h-10 border border-border rounded-lg px-3 text-sm focus:outline-none focus:border-primary transition-colors"
                 />
-                <input
+</Need>
+                <Need className="flex flex-col" missing={miss(recipientEmail)} note="Enter the recipient's email.">
+<input
                   type="email"
                   value={recipientEmail}
                   onChange={(e) => setRecipientEmail(e.target.value)}
                   placeholder="Recipient's email"
                   className="h-10 border border-border rounded-lg px-3 text-sm focus:outline-none focus:border-primary transition-colors"
                 />
+</Need>
                 <textarea
                   value={personalMessage}
                   onChange={(e) => setPersonalMessage(e.target.value)}
@@ -187,7 +205,7 @@ export default function GiftCardsPage() {
           <button
             type="button"
             onClick={handleCheckout}
-            disabled={!isValid || loading}
+            disabled={loading}
             className="w-full py-4 bg-primary text-white font-bold text-lg rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-40"
           >
             {loading
@@ -197,6 +215,7 @@ export default function GiftCardsPage() {
               : "Purchase Gift Card"
             }
           </button>
+          <MissingNote show={showMissing && !isValid} />
 
           <p className="text-xs text-muted-foreground text-center">
             The gift card code will be emailed immediately after purchase.
