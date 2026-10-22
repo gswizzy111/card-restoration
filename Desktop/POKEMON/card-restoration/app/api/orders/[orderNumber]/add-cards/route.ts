@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { AgreementsSchema, requiredAgreements } from "@/lib/agreements";
+import { recordAgreements } from "@/lib/order-agreements";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { RESTORATION_TIERS, getCardPriceCents } from "@/lib/restoration-tiers";
@@ -17,6 +19,7 @@ const CardSchema = z.object({
 const Body = z.object({
   email: z.string().email(),
   cards: z.array(CardSchema).min(1).max(20),
+  agreements: AgreementsSchema,
 });
 
 export async function POST(
@@ -35,7 +38,13 @@ export async function POST(
   const parsed = Body.safeParse(body);
   if (!parsed.success) return Response.json({ error: "Invalid request" }, { status: 400 });
 
-  const { email, cards } = parsed.data;
+  const { email, cards, agreements } = parsed.data;
+
+  // Every added card declared above $5,000 needs its own High-Value Card Agreement
+  const agreementCheck = requiredAgreements(agreements, 0, cards.map((c) => ({ name: c.name.trim(), declaredValueCents: c.declaredValueCents })));
+  if ("error" in agreementCheck) {
+    return Response.json({ error: agreementCheck.error, code: "AGREEMENT_REQUIRED" }, { status: 400 });
+  }
   const admin = createAdminClient();
 
   const { data: order } = await admin
@@ -51,6 +60,11 @@ export async function POST(
     return Response.json({ error: "Cards can only be added before they are received" }, { status: 409 });
 
   const tier = RESTORATION_TIERS[order.restoration_tier as RestorationTierId] ?? RESTORATION_TIERS["regular"];
+
+  const agreementError = await recordAgreements(admin, order.id, agreementCheck.rows, request);
+  if (agreementError) {
+    return Response.json({ error: "We couldn't save your signed agreements. Please try again." }, { status: 500 });
+  }
 
   const cardPrices = cards.map((c) => getCardPriceCents(tier, c.declaredValueCents));
   const subtotalCents = cardPrices.reduce((a, b) => a + b, 0);

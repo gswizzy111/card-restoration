@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { SignedAgreements, type SignedAgreement } from "@/components/agreements/signed-agreements";
 import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
@@ -49,11 +50,12 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const admin = createAdminClient();
 
-  const [orderRes, { data: cards }, { data: services }, { data: events }] = await Promise.all([
+  const [orderRes, { data: cards }, { data: services }, { data: events }, { data: agreements }] = await Promise.all([
     admin.from("orders").select("*").eq("id", id).single(),
     admin.from("cards").select("*").eq("order_id", id),
     admin.from("order_services").select("*").eq("order_id", id),
     admin.from("order_events").select("*").eq("order_id", id).order("created_at", { ascending: false }),
+    admin.from("order_agreements").select("id, kind, version, signer_name, signed_at, card_name, declared_value_cents, cards, agreement_text, ip").eq("order_id", id).order("signed_at"),
   ]);
 
   let order = orderRes.data;
@@ -617,6 +619,14 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 zip={address?.zip}
               />
             </div>
+
+            {/* Slab-Removal Authorization and High-Value Card Agreements signed at checkout */}
+            {(agreements ?? []).length > 0 && (
+              <div className="bg-white rounded-xl border border-border p-6">
+                <h2 className="font-heading font-black text-lg text-foreground mb-3">Signed Agreements</h2>
+                <SignedAgreements agreements={(agreements ?? []) as SignedAgreement[]} showIp />
+              </div>
+            )}
 
             {/* Refund */}
             {order.payment_status === "paid" || order.payment_status === "partially_refunded" || order.payment_status === "refunded" ? (

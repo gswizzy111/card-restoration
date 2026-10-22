@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { SignedAgreements, type SignedAgreement } from "@/components/agreements/signed-agreements";
 import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
@@ -227,6 +228,14 @@ export default async function OrderDetailPage({
   }
 
   const { data: cards } = await admin.from("cards").select("*").eq("order_id", order.id);
+  // The customer's copy of what they signed; a high-value agreement shows once its card is on the order
+  const { data: signedRows } = await admin
+    .from("order_agreements")
+    .select("id, kind, version, signer_name, signed_at, card_name, declared_value_cents, cards, agreement_text")
+    .eq("order_id", order.id)
+    .order("signed_at");
+  const cardNames = new Set((cards ?? []).map((c) => String(c.card_name).trim()));
+  const signedAgreements = ((signedRows ?? []) as SignedAgreement[]).filter((a) => a.kind !== "high_value" || cardNames.has(a.card_name ?? ""));
   const { data: services } = await admin.from("order_services").select("*").eq("order_id", order.id);
 
   // Fetch live inbound tracking from Shippo (only while awaiting cards)
@@ -409,6 +418,13 @@ export default async function OrderDetailPage({
           ))}
         </div>
       </div>
+
+      {signedAgreements.length > 0 && (
+        <div className="bg-white rounded-xl border border-border p-6 mb-5">
+          <h2 className="font-heading font-black text-lg text-foreground mb-4">Agreements You Signed</h2>
+          <SignedAgreements agreements={signedAgreements} />
+        </div>
+      )}
 
       {/* Services & total */}
       <div className="bg-white rounded-xl border border-border p-6 mb-5">

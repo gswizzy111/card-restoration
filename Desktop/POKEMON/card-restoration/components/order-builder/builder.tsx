@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { AgreementSignatures, agreementsComplete, submittedAgreements, type AgreementState } from "@/components/agreements/agreement-signatures";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ProgressIndicator } from "./progress-indicator";
@@ -70,6 +71,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [giftCardAmountCents, setGiftCardAmountCents] = useState(0);
   const [instagramFeature, setInstagramFeature] = useState(false);
   const [signatureDataUrl, setSignatureDataUrl] = useState("");
+  // Slab-Removal Authorization and High-Value Card Agreements (lib/agreements.ts)
+  const [agreementState, setAgreementState] = useState<AgreementState>({});
   const [submitting, setSubmitting] = useState(false);
   const [insurance, setInsurance] = useState<InsuranceSelection>({ declaredValueCents: 0, type: "none", chargeCents: 0 });
   const [addSignatureConfirmation, setAddSignatureConfirmation] = useState(false);
@@ -85,6 +88,14 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
       return sum + (isNaN(v) ? 0 : v);
     }, 0);
   }
+
+  const cardValueCents = (c: CardEntry) => {
+    const v = c.estimated_value ? Math.round(parseFloat(c.estimated_value.replace(/[$,]/g, "")) * 100) : 0;
+    return isNaN(v) ? 0 : v;
+  };
+  const agreementCards = cards.map((c, i) => ({ name: c.card_name.trim() || `Card ${i + 1}`, declaredValueCents: cardValueCents(c) }));
+  const slabCards = cards.flatMap((c, i) => (c.needs_slab_crack ? [agreementCards[i].name] : []));
+  const agreementsOk = agreementsComplete(agreementState, slabCards, agreementCards);
 
   const isDiamondOrder = selectedTier === "elite" || cards.some((c) => c.tier === "elite");
   const diamondValueOk = !isDiamondOrder || totalEstimatedValueCents() >= DIAMOND_MIN_CENTS;
@@ -151,6 +162,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
             photo_urls: c.photo_urls,
             service_ids: [serviceId],
             tier: c.tier ?? selectedTier,
+            needs_slab_crack: c.needs_slab_crack || undefined,
           })),
           customer: {
             name: customer.name,
@@ -186,6 +198,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           pregrade_count: cards.filter((c) => c.needs_pregrade).length || undefined,
           signature_path: signaturePath,
           tip_cents: tipCents > 0 ? tipCents : undefined,
+          agreements: submittedAgreements(agreementState, slabCards, agreementCards),
         }),
       });
 
@@ -257,6 +270,9 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               onDiscountChange={setDiscountPercent}
               signatureDataUrl={signatureDataUrl}
               onSignatureChange={setSignatureDataUrl}
+              agreementsSlot={
+                <AgreementSignatures slabCards={slabCards} cards={agreementCards} state={agreementState} onChange={setAgreementState} />
+              }
               insurance={insurance}
               onInsuranceChange={setInsurance}
               addSignatureConfirmation={addSignatureConfirmation}
@@ -343,7 +359,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
                 Continue
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={submitting || !signatureDataUrl} className="px-8">
+              <Button onClick={handleSubmit} disabled={submitting || !signatureDataUrl || !agreementsOk} className="px-8">
                 {submitting ? "Redirecting..." : "Pay Securely with Stripe"}
               </Button>
             )}

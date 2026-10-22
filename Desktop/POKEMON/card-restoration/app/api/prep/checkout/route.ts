@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { AgreementsSchema, requiredAgreements } from "@/lib/agreements";
+import { recordAgreements } from "@/lib/order-agreements";
+import { TERMS_UPDATED } from "@/lib/legal/terms";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 
@@ -32,6 +35,8 @@ const Body = z.object({
   insurance_amount_cents: z.number().int().min(0).optional().default(0),
   social_handle: z.string().optional(),
   customer_notes: z.string().optional(),
+  agreed_to_terms: z.boolean().optional(),
+  agreements: AgreementsSchema,
 });
 
 async function getPrepPrices(admin: ReturnType<typeof createAdminClient>) {
@@ -72,6 +77,20 @@ export async function POST(request: Request) {
   }
 
   const d = parsed.data;
+
+  if (!d.agreed_to_terms) {
+    return Response.json({ error: "Please agree to the Terms of Service before checking out.", code: "TERMS_REQUIRED" }, { status: 400 });
+  }
+  // Slab cracking needs a signed Slab-Removal Authorization, and every card
+  // declared above $5,000 its own High-Value Card Agreement (lib/agreements.ts)
+  const agreementCheck = requiredAgreements(
+    d.agreements,
+    d.slab_crack_count,
+    d.cards.map((c) => ({ name: c.card_name.trim(), declaredValueCents: c.declared_value_cents })),
+  );
+  if ("error" in agreementCheck) {
+    return Response.json({ error: agreementCheck.error, code: "AGREEMENT_REQUIRED" }, { status: 400 });
+  }
 
   const isInternational = (d.country ?? "US") !== "US";
 
@@ -159,6 +178,18 @@ export async function POST(request: Request) {
       service_ids: [],
     }))
   );
+
+  // The Terms and any signed agreements must be on file before payment
+  await admin.from("order_events").insert({
+    order_id: order.id,
+    event_type: "terms_accepted",
+    description: `Customer agreed to the Terms of Service (last updated ${TERMS_UPDATED}) at checkout.`,
+    is_customer_visible: false,
+  });
+  const agreementError = await recordAgreements(admin, order.id, agreementCheck.rows, request);
+  if (agreementError) {
+    return Response.json({ error: "We couldn't save your signed agreements. Please try again." }, { status: 500 });
+  }
 
   // Insert pre-grade service row if selected
   if (d.add_pre_grade && d.cards.length > 0) {
