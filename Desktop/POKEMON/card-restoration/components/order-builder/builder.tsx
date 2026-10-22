@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { SigningSection, emptySigning, signingReady, slabSigned, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
-import { SlabAuthorizationDialog, type HolderPatch } from "@/components/checkout/slab-authorization-dialog";
+import { SlabAuthorizationDialog } from "@/components/checkout/slab-authorization-dialog";
 import { MissingNote, Need, revealMissing } from "@/components/checkout/required";
 import { emptyIdentity, identityPayload } from "@/components/checkout/card-identity-fields";
 import type { InsuranceElection } from "@/components/checkout/insurance-election";
@@ -133,9 +133,6 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   function closeSlabDialog(signed: boolean) {
     if (!signed && slabDialogId) setCards((cs) => cs.map((c) => (c.id === slabDialogId ? { ...c, needs_slab_crack: false } : c)));
     setSlabDialogId(null);
-  }
-  function changeSlabHolder(patch: HolderPatch) {
-    setCards((cs) => cs.map((c) => (c.id === slabDialogId ? { ...c, ...patch } : c)));
   }
   function skipSlab(index: number) {
     const name = cards[index]?.card_name.trim() || `Card ${index + 1}`;
@@ -280,7 +277,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   return (
     <div className="max-w-6xl mx-auto px-6 md:px-8 py-12">
       <InAppBrowserBanner />
-      <SlabAuthorizationDialog card={slabDialogCard} state={signing} onChange={changeSigning} onHolderChange={changeSlabHolder} onClose={closeSlabDialog} />
+      <SlabAuthorizationDialog card={slabDialogCard} state={signing} onChange={changeSigning} onClose={closeSlabDialog} />
       <div className="mb-10">
         <ProgressIndicator currentStep={step} />
       </div>

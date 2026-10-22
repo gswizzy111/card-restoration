@@ -44,9 +44,8 @@ export function signingError(s: SubmittedSigning): { error: string; code: string
   return null;
 }
 
-/** The slab authorization signed for a card, if any (it must name a cert number). */
-export function slabSignatureFor(s: SubmittedSigning, index: number, card: CardDetails) {
-  if (!card.cert_number?.trim()) return null;
+/** The slab authorization signed for a card, if any. */
+export function slabSignatureFor(s: SubmittedSigning, index: number) {
   return s.slab_authorizations?.find((a) => a.card_index === index) ?? null;
 }
 
@@ -93,7 +92,7 @@ export function cardDetails(c: Omit<Partial<CardDetails>, "card_name"> & { card_
 export function authorizedOrderText(a: AuthorizedOrder): string {
   const blocks = [`## Services authorized on order ${displayOrder(a.order_number)}`];
   a.cards.forEach((c, i) => {
-    const holder = c.cert_number?.trim() ? ` Holder: ${holderLine(c)}.` : "";
+    const holder = c.grading_company?.trim() || c.cert_number?.trim() ? ` Holder: ${holderLine(c)}.` : "";
     const value = c.declared_value_cents == null ? "not given" : usd(c.declared_value_cents);
     const defects = c.known_defects?.trim() ? ` Known defects: ${c.known_defects.trim()}` : "";
     blocks.push(`Card ${i + 1}: ${cardTitle(c)}.${holder} Declared value: ${value}.${defects}`);

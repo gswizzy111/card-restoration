@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { Hammer } from "lucide-react";
 import { SigningSection, emptySigning, signingReady, slabSigned, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
-import { SlabAuthorizationDialog, type HolderPatch } from "@/components/checkout/slab-authorization-dialog";
+import { SlabAuthorizationDialog } from "@/components/checkout/slab-authorization-dialog";
 import { Need, Req, revealMissing } from "@/components/checkout/required";
 import { CardIdentityFields, emptyIdentity, identityPayload, type CardIdentity } from "@/components/checkout/card-identity-fields";
 import { InsuranceElectionBox, type InsuranceElection } from "@/components/checkout/insurance-election";
@@ -192,9 +192,6 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
     if (!signed && slabDialogId) updateCard(slabDialogId, { slab: false });
     setSlabDialogId(null);
   }
-  function changeSlabHolder(patch: HolderPatch) {
-    if (slabDialogId) updateCard(slabDialogId, patch);
-  }
   const slabCrackCount = slabCards.length;
   const highValueCards = filledCards.filter((c) => isHighValue(cardValueCents(c))).map((c) => ({ name: c.name.trim(), valueCents: cardValueCents(c) }));
   function skipSlab(index: number) {
@@ -294,9 +291,6 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
     if (filledCards.length < 1) { return fail("Please add at least one card."); }
     if (filledCards.some((c) => cardValueCents(c) <= 0)) { return fail("Please enter a declared value for every card."); }
-    if (filledCards.some((c) => c.slab && (!c.grading_company || !c.cert_number.trim()))) {
-      return fail("Slab removal needs each card's grading company and certification number.");
-    }
     if (!name.trim()) { return fail("Name is required."); }
     if (!email.trim()) { return fail("Email is required."); }
     if (!phone.trim()) { return fail("Phone is required."); }
@@ -376,7 +370,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
   return (
     <div className="max-w-xl mx-auto px-6 py-12 md:py-16">
-      <SlabAuthorizationDialog card={slabDialogCard} state={signing} onChange={setSigning} onHolderChange={changeSlabHolder} onClose={closeSlabDialog} />
+      <SlabAuthorizationDialog card={slabDialogCard} state={signing} onChange={setSigning} onClose={closeSlabDialog} />
       <div className="mb-8">
         <Link href="/prep" className="text-xs text-primary font-semibold hover:underline">← Back to Prep Pricing</Link>
         <h1 className="font-heading text-3xl font-black text-foreground mt-3 mb-1">Prep Order</h1>
@@ -476,7 +470,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                 )}
               </div>
               <div className="pl-7">
-                <CardIdentityFields idPrefix={`prep-${card.id}`} value={card} onChange={(patch) => updateCard(card.id, patch)} needsCert={card.slab} showMissing={showMissing} />
+                <CardIdentityFields idPrefix={`prep-${card.id}`} value={card} onChange={(patch) => updateCard(card.id, patch)} />
               </div>
               <label className="ml-7 flex items-start gap-3 bg-white border border-border rounded-md px-3 py-2.5 cursor-pointer">
                 <input

@@ -44,7 +44,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "Do you work on slabbed (already graded) cards?",
-        a: "Yes — add slab cracking at checkout ($7/card) and we'll remove the card before work. You'll sign a separate Slab Removal Authorization for each slab at checkout, naming the card and its certification number.",
+        a: "Yes — add slab cracking at checkout ($7/card) and we'll remove the card before work. You'll sign a separate Slab Removal Authorization for each slab at checkout, naming the card.",
       },
     ],
   },

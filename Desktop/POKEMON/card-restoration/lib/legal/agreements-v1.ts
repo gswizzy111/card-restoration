@@ -5,7 +5,7 @@ import { HIGH_VALUE_CLAUSE, HIGH_VALUE_SECTION_BLOCKS, HIGH_VALUE_SHIPPING_BLOCK
  * The two card-specific documents the Terms of Service v1.0 require besides
  * the master signature:
  *   - Slab Removal & High-Risk Holder Opening Authorization (Section 7): one
- *     per slabbed card, signed at checkout, naming the card and its cert.
+ *     per slabbed card, signed at checkout, naming the card.
  *   - High-Value Card Restoration & Custody Agreement (Section 4.2): one per
  *     card valued above $5,000, signed after the order by the customer and
  *     then by The Card Doc. The card stays on hold until both have signed.
@@ -41,9 +41,6 @@ export const TEMPLATE_CARD: CardDetails = {
   card_year: "[year]",
   card_set: "[set]",
   card_number: "[number]",
-  grading_company: "[grading company]",
-  grade: "[grade]",
-  cert_number: "[cert number]",
 };
 
 const usd = (cents: number) =>
@@ -76,7 +73,7 @@ export function slabAuthorization(c: CardDetails): AgreementDoc {
   return {
     title: SLAB_TITLE,
     blocks: [
-      para(`Card: ${cardTitle(c)}. Holder: ${holderLine(c)}.`),
+      para(`Card: ${cardTitle(c)}.${c.grading_company?.trim() || c.cert_number?.trim() ? ` Holder: ${holderLine(c)}.` : ""}`),
       para(`I authorize The Card Doc LLC to open the graded holder of this card, and only this card, for the ${usd(SLAB_FEE_CENTS)} slab-removal service, under Section 7 of the Terms of Service v${TERMS_VERSION}.`),
       para("Section 7 of the Terms, in full:"),
       ...SLAB_SECTION_BLOCKS,

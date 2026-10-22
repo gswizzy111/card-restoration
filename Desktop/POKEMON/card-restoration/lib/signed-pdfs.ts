@@ -26,7 +26,7 @@ function signatureFields(sig: SignatureRow, orderNumber: string | number): [stri
   return [
     ["Order", displayOrder(orderNumber)],
     ...(card ? [["Card", cardTitle(card)] as [string, string]] : []),
-    ...(card?.cert_number ? [["Holder", holderLine(card)] as [string, string]] : []),
+    ...(card?.grading_company?.trim() || card?.cert_number?.trim() ? [["Holder", holderLine(card)] as [string, string]] : []),
     ["Signed by", sig.typed_full_name],
     ["Signed at", utc(sig.signed_at)],
     ["Email", `${sig.email ?? "-"}${sig.email_verified ? " (verified)" : " (not verified)"}`],

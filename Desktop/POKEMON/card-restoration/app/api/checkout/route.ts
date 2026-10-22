@@ -124,8 +124,8 @@ export async function POST(request: Request) {
   }
 
   // Slab removal goes ahead only for cards with their own signed authorization
-  // naming the cert number; any other slab selection is dropped, with its $7.
-  const slabSigned = data.cards.map((c, i) => (c.needs_slab_crack ? slabSignatureFor(data, i, c) : null));
+  // naming the card; any other slab selection is dropped, with its $7.
+  const slabSigned = data.cards.map((c, i) => (c.needs_slab_crack ? slabSignatureFor(data, i) : null));
   const droppedSlabs = data.cards.filter((c, i) => c.needs_slab_crack && !slabSigned[i]).map((c) => c.card_name.trim());
 
   let terms: TermsVersionRow;
