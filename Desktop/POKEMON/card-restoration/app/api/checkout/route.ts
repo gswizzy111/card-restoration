@@ -17,7 +17,7 @@ import Stripe from "stripe";
 import { isSoldOut, INSURANCE_ENABLED, SIGNATURE_FEE_CENTS, TIER_MAX_SLOTS } from "@/lib/site-config";
 import { getSlotsOpenedAt, getRestorationsOpen } from "@/lib/store-config";
 import { logCheckoutError } from "@/lib/checkout-error-log";
-import { inboundRate } from "@/lib/inbound-rate";
+import { shippingRate } from "@/lib/inbound-rate";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -312,12 +312,12 @@ export async function POST(request: Request) {
 
   const isInternational = false;
   // Shipping is priced from the Shippo rate for this customer's ZIP (never the
-  // browser's price). The prepaid label covers the trip in and the trip back,
-  // twice the rate; a customer who sends the cards in their own way still pays
-  // once, for the trip back to them.
-  const shippingTrips = data.shipping_method === "buy_label" ? 2 : 1;
+  // browser's price). The prepaid label's rate (to us) covers the trip in and
+  // the trip back, twice; a customer who sends the cards in their own way still
+  // pays for the trip back, once, at the rate quoted from us to them.
+  const isBuyLabel = data.shipping_method === "buy_label";
   const rate = data.shipping_rate
-    ? await inboundRate(data.shipping_rate.object_id, data.customer.address.zip ?? "")
+    ? await shippingRate(data.shipping_rate.object_id, data.customer.address.zip ?? "", isBuyLabel ? "in" : "back")
     : null;
   if (!rate) {
     return Response.json(
@@ -325,7 +325,7 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const shippingCents = rate.amountCents * shippingTrips;
+  const shippingCents = rate.amountCents * (isBuyLabel ? 2 : 1);
   data.shipping_rate = { ...data.shipping_rate!, amount_cents: shippingCents, carrier: rate.carrier, service_level: rate.serviceLevel };
   const isDomesticBuyLabel = data.shipping_method === "buy_label" && !isInternational;
   const signatureFeeCents = isDomesticBuyLabel && data.add_signature_confirmation ? SIGNATURE_FEE_CENTS : 0;

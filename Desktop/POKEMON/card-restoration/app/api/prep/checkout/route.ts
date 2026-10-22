@@ -9,7 +9,7 @@ import {
 import { recordConsents, recordSignatures, signingContext, type SignatureInput } from "@/lib/signatures";
 import { ensureTermsVersion, type TermsVersionRow } from "@/lib/terms-versions";
 import { isHighValue } from "@/lib/legal/agreements-v1";
-import { inboundRate } from "@/lib/inbound-rate";
+import { shippingRate } from "@/lib/inbound-rate";
 
 const CardSchema = z.object({
   card_name: z.string().trim().min(1).max(200),
@@ -144,9 +144,12 @@ export async function POST(request: Request) {
   const taxCents = isInternational ? 0 : Math.round(serviceSubtotal * NJ_TAX_RATE);
 
   // Shipping is priced from the Shippo rate quoted for this address (never the
-  // browser's price). The prepaid label pays it twice, to us and back; sending
-  // the cards in your own way still pays it once, for the trip back to you.
-  const rate = d.shipping_rate_object_id ? await inboundRate(d.shipping_rate_object_id, d.zip ?? "") : null;
+  // browser's price). The prepaid label's rate (to us) is paid twice, to us and
+  // back; sending the cards in your own way still pays for the trip back, once,
+  // at the rate quoted from us to you.
+  const rate = d.shipping_rate_object_id
+    ? await shippingRate(d.shipping_rate_object_id, d.zip ?? "", d.shipping_method === "buy_label" ? "in" : "back", d.country ?? "US")
+    : null;
   if (!rate) {
     return Response.json(
       { error: "Your shipping quote expired. Check shipping rates again and choose an option.", code: "RATE_EXPIRED" },

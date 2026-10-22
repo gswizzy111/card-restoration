@@ -233,7 +233,8 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   const totalEstimate = serviceSubtotal + taxCents + shippingCents + estimatedInsuranceCents;
   const totalDeclaredValueCents = filledCards.reduce((sum, c) => sum + cardValueCents(c), 0);
 
-  const addressFingerprint = [country, street1.trim(), street2.trim(), city.trim(), stateCode.trim(), zip.trim()].join("|");
+  // Rates are quoted per address and per method (to us, or back to you)
+  const addressFingerprint = [shippingMethod, country, street1.trim(), street2.trim(), city.trim(), stateCode.trim(), zip.trim()].join("|");
   const addressComplete = !!(
     street1.trim() && city.trim() && zip.trim() &&
     (isInternational || stateCode) // state required for US, optional for international
@@ -246,30 +247,51 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
     setSelectedRate(null);
     const totalValueUsd = totalDeclaredValueCents > 0 ? totalDeclaredValueCents / 100 : filledCards.length * 25;
     try {
-      const res = await fetch("/api/prep/rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // The label's sender details (USPS requires an email on the from-address)
-          name: name.trim() || undefined,
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
-          street1: street1.trim(),
-          street2: street2.trim() || undefined,
-          city: city.trim(),
-          state: stateCode.trim() || undefined,
-          zip: zip.trim(),
-          country,
-          card_count: Math.max(1, filledCards.length),
-          total_value_usd: totalValueUsd,
-        }),
-      });
+      // The prepaid label is quoted from the customer to us; self-ship's paid
+      // return is quoted for the trip it pays for, from us to the customer.
+      const res = shippingMethod === "self_ship"
+        ? await fetch("/api/shipping/rates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to_address: {
+              name: name.trim(), email: email.trim(), phone: phone.trim(), street1: street1.trim(), street2: street2.trim(),
+              city: city.trim(), state: stateCode.trim(), zip: zip.trim(), country,
+            },
+            parcel: { length: 6, width: 4, height: 2, weight: 8 },
+            from_business: true,
+          }),
+        })
+        : await fetch("/api/prep/rates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            // The label's sender details (USPS requires an email on the from-address)
+            name: name.trim() || undefined,
+            email: email.trim() || undefined,
+            phone: phone.trim() || undefined,
+            street1: street1.trim(),
+            street2: street2.trim() || undefined,
+            city: city.trim(),
+            state: stateCode.trim() || undefined,
+            zip: zip.trim(),
+            country,
+            card_count: Math.max(1, filledCards.length),
+            total_value_usd: totalValueUsd,
+          }),
+        });
       const data = await res.json();
-      if (!res.ok || !data.rates) {
-        setRatesError(data.error ?? "Could not fetch rates. Please try again.");
+      const quoted: ShippingRate[] | null = !res.ok || !data.rates?.length
+        ? null
+        : shippingMethod === "self_ship"
+          ? (data.rates as { object_id: string; carrier: string; service_level: string; amount_cents: number; days: number | null; duration_terms: string }[])
+            .map((r) => ({ id: r.object_id, carrier: r.carrier, service: r.service_level, amount_cents: r.amount_cents, estimated_days: r.days, duration_terms: r.duration_terms || null }))
+          : data.rates;
+      if (!quoted) {
+        setRatesError(data.error && shippingMethod !== "self_ship" ? data.error : "Could not fetch rates. Please try again.");
         setRates([]);
       } else {
-        setRates(data.rates as ShippingRate[]);
+        setRates(quoted);
         setRatesFetchedFor(addressFingerprint);
       }
     } catch {
@@ -279,7 +301,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
       setRatesLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [street1, street2, city, stateCode, zip, country, addressFingerprint, filledCards.length, totalDeclaredValueCents]);
+  }, [street1, street2, city, stateCode, zip, country, addressFingerprint, filledCards.length, totalDeclaredValueCents, shippingMethod]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -550,11 +572,11 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
         <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-4">
           <h2 className="font-heading font-black text-base text-foreground">Shipping Your Cards To Us<Req /></h2>
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setShippingMethod("buy_label")}
+            <button type="button" onClick={() => { if (shippingMethod !== "buy_label") resetAddress(); setShippingMethod("buy_label"); }}
               className={`h-12 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors ${shippingMethod === "buy_label" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}>
               <span className="text-base">📦</span>Prepaid Label
             </button>
-            <button type="button" onClick={() => setShippingMethod("self_ship")}
+            <button type="button" onClick={() => { if (shippingMethod !== "self_ship") resetAddress(); setShippingMethod("self_ship"); if (insuranceElection === "purchased") setInsuranceElection(null); }}
               className={`h-12 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors ${shippingMethod === "self_ship" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}>
               <span className="text-base">📬</span>Ship Myself
             </button>

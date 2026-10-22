@@ -27,6 +27,8 @@ export function StepShipping({
   const [rates, setRates] = useState<ShippingRate[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);
   const [ratesError, setRatesError] = useState("");
+  // Bumped by "Try again" to fetch the rates again
+  const [ratesAttempt, setRatesAttempt] = useState(0);
 
   const isInternational = !!(customer.country && customer.country !== "US");
 
@@ -78,9 +80,9 @@ export function StepShipping({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInternational, shippingMethod]);
 
-  // Domestic: rates for the trip from the customer to us. The prepaid label
-  // pays that rate twice (to us and back); shipping your own way pays it once,
-  // for the trip back to you. The server looks the rate up again at checkout.
+  // Domestic: the prepaid label is priced from the trip to us, paid twice (to
+  // us and back); shipping your own way pays for the trip back, once, quoted
+  // from us to you. The server looks the rate up again at checkout.
   const trips = shippingMethod === "buy_label" ? 2 : 1;
   useEffect(() => {
     if (isInternational || !shippingMethod) return;
@@ -107,6 +109,7 @@ export function StepShipping({
           email: customer.email,
         },
         parcel: { length: 7, width: 5, height: 1, weight: 16 },
+        from_business: shippingMethod === "self_ship",
       }),
     })
       .then((r) => r.json())
@@ -121,14 +124,14 @@ export function StepShipping({
           const pick = filtered.find((r) => previous && r.carrier === previous.carrier && r.service_level === previous.service_level) ?? filtered[0];
           onRateChange({ ...pick, amount_cents: pick.amount_cents * trips });
         } else {
-          setRatesError("Could not load shipping rates. Please try again.");
+          setRatesError("Could not load shipping rates for this address. Check it on the previous step, or");
         }
       })
       .catch(() => { if (!stale) setRatesError("Could not load shipping rates."); })
       .finally(() => { if (!stale) setLoadingRates(false); });
     return () => { stale = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shippingMethod]);
+  }, [shippingMethod, ratesAttempt]);
 
   /** The rate choices inside the chosen method's card, priced for its trips. */
   function rateOptions(note: string, daysText: (days: number) => string) {
@@ -141,7 +144,20 @@ export function StepShipping({
             <Skeleton className="h-10 w-full rounded-lg" />
           </>
         )}
-        {ratesError && <p className="text-sm text-destructive">{ratesError}</p>}
+        {ratesError && (
+          <p className="text-sm text-destructive">
+            {ratesError}{" "}
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); setRatesAttempt((n) => n + 1); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setRatesAttempt((n) => n + 1); } }}
+              className="font-semibold underline underline-offset-2 cursor-pointer"
+            >
+              Try again
+            </span>
+          </p>
+        )}
         {!loadingRates && rates.length > 0 && (
           <p className="text-xs text-muted-foreground mb-1">{note}</p>
         )}
