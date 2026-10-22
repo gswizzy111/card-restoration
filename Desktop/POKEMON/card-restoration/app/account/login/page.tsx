@@ -15,11 +15,13 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setNotice("");
     setLoading(true);
 
     const url = tab === "login"
@@ -40,6 +42,14 @@ function LoginForm() {
 
     if (!res.ok) {
       setError(data.error ?? "Something went wrong. Please try again.");
+      return;
+    }
+
+    // New accounts confirm their email first (the link opens the account)
+    if (data.confirmationSent) {
+      setNotice(`Check your email: we sent a link to ${email} to confirm your account.`);
+      setTab("login");
+      setPassword("");
       return;
     }
 
@@ -118,6 +128,11 @@ function LoginForm() {
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
                 {error}
+              </div>
+            )}
+            {notice && (
+              <div role="status" className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800">
+                {notice}
               </div>
             )}
 
