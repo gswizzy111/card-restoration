@@ -46,8 +46,8 @@ export const TERMS_SECTIONS: TermsSection[] = [
         list: [
           "We accept orders from the United States and Puerto Rico only.",
           "Add each card to your order individually, with its details, its current declared value and 1 to 4 clear photos.",
-          "Declared value is what the card is worth right now, in its current condition (raw or graded, whichever it is today). It is not the value it might have after grading. Your declared value decides which tiers the card can use and its price, and it sets the most we will ever owe you for that card (see Section 11).",
-          "Tiers (Bronze, Silver, Gold, Platinum, Diamond and Fast Pass) differ only in turnaround speed and value coverage: every tier gets the same care. Each tier's price, turnaround estimate and declared-value range are shown when you book.",
+          "Declared value is what the card is worth right now, in its current condition (raw or graded, whichever it is today). It is not the value it might have after grading. Your declared value decides which tiers the card can use and its price.",
+          "Tiers (Bronze, Silver, Gold, Platinum, Diamond and Fast Pass) differ in turnaround speed and in the declared values they accept; every tier gets the same care. Each tier's price, turnaround estimate and declared-value range are shown when you book.",
           "Tiers, services and add-ons lock at checkout. After checkout, changes are possible only where your order page offers them (such as upgrading your tier or adding cards) or with our written agreement.",
           "If a card is strictly for your personal collection (not being graded), say so in your order notes so we know which techniques are on the table.",
         ],
@@ -104,7 +104,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
       {
         list: [
           "No upside, no charge: if we can't improve a restoration card, we refund its service fee and ship it back untouched. You cover shipping both ways.",
-          "No unnecessary work: if a card booked for restoration only needs a clean, we downgrade it to Prep and refund the difference in price.",
+          "No unnecessary work: if a card booked for restoration only needs a clean, we downgrade it to Prep so you don't overpay.",
           "No surprise charges: if we spot fixable damage during a Prep order, we ask your permission, and tell you any added cost, before doing restoration work.",
         ],
       },
@@ -116,7 +116,6 @@ export const TERMS_SECTIONS: TermsSection[] = [
     blocks: [
       "Restoration involves professional judgment, and results vary from card to card. We don't guarantee any result, any grade, any grade increase, or that a grading company won't detect restoration.",
       "Prep carries zero alteration risk. Restoration stays within grading limits, adds no material and only works with what is already there, but there is always an inherent risk, low but not zero, that a grading company detects it or returns a card as altered (or a similar designation).",
-      "If a grading company returns a card we restored with an \"altered\" (or similar) designation, send us the grading company's result and we will refund the restoration service fee you paid for that card.",
       "If you have a concern about a finished card, contact us within 14 days after it is delivered to you. We'll review it with you and, where we believe more work could help, offer to re-evaluate the card. A re-evaluation doesn't change the rest of this section.",
     ],
   },
@@ -141,13 +140,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     title: "11. Our responsibility for your cards",
     blocks: [
       "We take reasonable care of your cards from the moment we check them in until we hand them to the carrier for return.",
-      {
-        list: [
-          "Loss in our care: if a card is lost, stolen or destroyed while we have it, we will pay you its declared value or its actual market value just before the loss, whichever is lower. A card's declared value can't be more than its tier allows, so the tier you choose also sets your value coverage.",
-          "Damage in our care: if a card is damaged while we have it because we didn't take reasonable care, we will, at our choice, refund that card's service fee or pay you the loss in its value caused by the damage, up to the same limit.",
-          "The ordinary risks of the work: changes to a card that come from the risks described in Section 8 and in the Slab-Removal Authorization, when we have taken reasonable care, are covered only as those sections say.",
-        ],
-      },
+      "If a card is lost, stolen, destroyed or damaged while we have it, including through the risks of the work described in Section 8 and in the Slab-Removal Authorization, our responsibility is limited to refunding the service fee you paid for that card. It does not extend to the card's market or declared value. If you want a valuable card's full value covered while it's with us, insure it yourself (for example with a collectibles insurance policy).",
       "We are not responsible for carriers or grading companies, or for indirect or consequential losses such as lost profits or resale opportunities, or sentimental value. The limits in this section don't apply to loss or damage caused by our gross negligence or willful misconduct, and nothing in these Terms takes away any right you have under New Jersey law that cannot be waived by contract.",
     ],
   },
@@ -162,7 +155,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     id: "high-value",
     title: "13. Cards declared above $5,000",
     blocks: [
-      "Every card with a declared value above $5,000 needs its own signed [High-Value Card Agreement](/agreements/high-value) before we accept it. We may ask for more photos or information about a high-value card and may decline it before work begins, refunding its service fee. We strongly recommend insured, tracked shipping with signature confirmation for these cards.",
+      "Every card with a declared value above $5,000 needs its own signed [High-Value Card Agreement](/agreements/high-value) before we accept it. We may ask for more photos or information about a high-value card and may decline it before work begins, refunding its service fee. We strongly recommend insured, tracked shipping with signature confirmation for these cards, and your own insurance for their full value while they're with us, since our responsibility is limited as described in Section 11.",
     ],
   },
   {

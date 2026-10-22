@@ -114,7 +114,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "What if my card does come back altered?",
-        a: "It's a risk every restoration customer accepts going in. When it happens, we refund our customers. Worst case, crack it and sell it raw — it's still in better condition than when you sent it.",
+        a: "It's a risk every restoration customer accepts going in. Worst case, crack it and sell it raw — it's still in better condition than when you sent it.",
       },
     ],
   },

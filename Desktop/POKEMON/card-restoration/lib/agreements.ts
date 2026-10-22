@@ -65,7 +65,7 @@ export function highValueAgreement(card: { name: string; declaredValueCents: num
       "The Card Doc may ask me for more photos or information about this card, and may decline to work on it before work begins. If it declines, it will refund the service fee for this card and send it back to me; I cover shipping both ways.",
       "Shipping insurance is optional and is not included unless I buy it. I decide how this card is shipped to The Card Doc and whether it is insured, and I understand that insured, tracked shipping with signature confirmation is strongly recommended for a card of this value. Insurance bought at checkout covers up to the amount I insure, within the insurer's limits.",
       "Results and grades are never guaranteed. Restoration carries an inherent risk, low but not zero, that a grading company detects it or returns the card as altered.",
-      "While this card is in The Card Doc's care, The Card Doc's responsibility for loss or damage is as set out in the Terms of Service, and never more than the declared value above.",
+      "While this card is in The Card Doc's care, The Card Doc's responsibility for its loss or damage is limited as set out in the Terms of Service (to the service fee paid for this card), not its declared value. If I want its full value covered, I will insure it myself.",
       "This agreement applies to this card only and is in addition to the Terms of Service. If the two conflict for this card, this agreement controls.",
     ],
   };

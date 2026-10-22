@@ -128,7 +128,7 @@ export default async function HomePage() {
         <div className="max-w-5xl mx-auto px-6 md:px-10 text-center">
           <p className="text-xs font-bold uppercase tracking-widest text-blue-400 mb-4">Why Collectors Trust Us</p>
           <h2 className="font-heading text-4xl md:text-5xl font-black text-white mb-6 leading-tight">
-            Proven Results,<br className="hidden md:block" /> Every Time
+            Proven Results
           </h2>
           <p className="text-lg text-white/70 max-w-2xl mx-auto mb-12 leading-relaxed">
             Hundreds of cards restored and prepped. We don&apos;t just claim results, we show them.
