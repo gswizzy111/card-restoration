@@ -187,10 +187,10 @@ export default async function AboutPage() {
         </div>
       </section>
 
-      {/* Terms & Conditions summary */}
+      {/* Terms of Service summary */}
       <section className="py-16 md:py-24 bg-secondary/30">
         <div className="max-w-3xl mx-auto px-6 md:px-10">
-          <h2 className="font-heading text-3xl font-bold text-foreground mb-3 text-center">Terms & Conditions</h2>
+          <h2 className="font-heading text-3xl font-bold text-foreground mb-3 text-center">Terms of Service</h2>
           <p className="text-muted-foreground text-center mb-10">The key points — plain English. Read the full version before submitting.</p>
           <div className="flex flex-col gap-4">
             {[
@@ -199,8 +199,8 @@ export default async function AboutPage() {
                 body: "We're not responsible for loss, damage, or theft while cards are in transit to or from us. Use tracked, insured shipping and pack your cards properly.",
               },
               {
-                title: "Restoration isn't grading",
-                body: "Restored cards will be marked 'Altered' by professional graders (PSA, BGS, etc.) and will not receive a numeric grade. Do not send cards for restoration if you plan to grade them.",
+                title: "No guaranteed results",
+                body: "Results and grades are never guaranteed. Restoration stays within grading limits, but there's always an inherent risk, low but not zero, that a grader detects it or returns a card as altered.",
               },
               {
                 title: "Results vary",
@@ -208,11 +208,11 @@ export default async function AboutPage() {
               },
               {
                 title: "Payment is upfront",
-                body: "Full payment is collected at checkout. Service fees are non-refundable once work has begun, except in cases where we cannot restore the card.",
+                body: "Full payment is collected at checkout. Service fees are non-refundable once work has begun, except as our Terms provide (for example, when we can't improve a card).",
               },
               {
-                title: "Inspect within 5 days",
-                body: "You must report any issues with returned cards within 5 calendar days of receipt. Claims made after this window are waived.",
+                title: "Report problems within 14 days",
+                body: "Tell us about any problem with your returned cards in writing within 14 days of delivery, with photos.",
               },
               {
                 title: "Submit only authentic cards",
@@ -230,7 +230,7 @@ export default async function AboutPage() {
               href="/terms"
               className="inline-flex items-center gap-2 text-sm font-medium text-[#1a8fe0] hover:underline"
             >
-              Read the full Terms & Conditions →
+              Read the full Terms of Service →
             </Link>
           </div>
         </div>

@@ -44,7 +44,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "Do you work on slabbed (already graded) cards?",
-        a: "Yes — add slab cracking at checkout ($7/card) and we'll remove the card before work.",
+        a: "Yes — add slab cracking at checkout ($7/card) and we'll remove the card before work. You'll sign a separate Slab-Removal Authorization at checkout.",
       },
     ],
   },
@@ -66,7 +66,11 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "Do you charge extra to crack a slab?",
-        a: "Slab cracking is a $7 per-card add-on, selected at checkout.",
+        a: "Slab cracking is a $7 per-card add-on, selected at checkout. You'll sign a separate Slab-Removal Authorization for it at checkout.",
+      },
+      {
+        q: "Do you take cards worth more than $5,000?",
+        a: "Yes. Every card declared above $5,000 needs its own High-Value Card Agreement, signed at checkout, and we strongly recommend insured, tracked shipping with signature confirmation for it.",
       },
     ],
   },
@@ -110,7 +114,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "What if my card does come back altered?",
-        a: "It's a risk every restoration customer accepts going in. When it happens, we refund our customers. Worst case, crack it and sell it raw — it's still in better condition than when you sent it.",
+        a: "It's a risk every restoration customer accepts going in. Worst case, crack it and sell it raw — it's still in better condition than when you sent it.",
       },
     ],
   },

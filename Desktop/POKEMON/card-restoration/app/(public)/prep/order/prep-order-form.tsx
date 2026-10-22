@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { AgreementSignatures, agreementsComplete, submittedAgreements, type AgreementState } from "@/components/agreements/agreement-signatures";
 import Link from "next/link";
 import { PhotoUploader } from "@/components/order-builder/photo-uploader";
 
@@ -122,6 +123,10 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   const [addPreGrade, setAddPreGrade] = useState(false);
   const [slabCrackCount, setSlabCrackCount] = useState(0);
 
+  // Terms, plus the Slab-Removal Authorization and High-Value Card Agreements (lib/agreements.ts)
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreementState, setAgreementState] = useState<AgreementState>({});
+
   // Shipping
   const [shippingMethod, setShippingMethod] = useState<"buy_label" | "self_ship">("buy_label");
   const [country, setCountry] = useState("US");
@@ -160,6 +165,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   function updateCardPhotos(id: string, urls: string[]) { setCards((p) => p.map((c) => c.id === id ? { ...c, photoUrls: urls } : c)); }
 
   const filledCards = cards.filter((c) => c.name.trim());
+  const agreementCards = filledCards.map((c) => ({ name: c.name.trim(), declaredValueCents: cardValueCents(c) }));
 
   function cardValueCents(card: CardRow): number {
     return Math.round((parseFloat(card.declaredValueDollars.replace(/[^0-9.]/g, "")) || 0) * 100);
@@ -262,6 +268,15 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
       }
     }
 
+    if (!agreementsComplete(agreementState, slabCrackCount, agreementCards)) {
+      setError("Please sign the agreements above before checking out.");
+      return;
+    }
+    if (!agreedToTerms) {
+      setError("Please agree to the Terms of Service before checking out.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/prep/checkout", {
@@ -293,6 +308,8 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
           } : {}),
           social_handle: socialHandle.trim() || undefined,
           customer_notes: notes.trim() || undefined,
+          agreed_to_terms: agreedToTerms,
+          agreements: submittedAgreements(agreementState, slabCrackCount, agreementCards),
         }),
       });
       const data = await res.json();
@@ -727,6 +744,21 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
             </p>
           </div>
         </div>
+
+        <AgreementSignatures slabCards={slabCrackCount} cards={agreementCards} state={agreementState} onChange={setAgreementState} />
+
+        <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={agreedToTerms}
+            onChange={(e) => setAgreedToTerms(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+          />
+          <span>
+            I have read and agree to the{" "}
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline underline-offset-2">Terms of Service</a>.
+          </span>
+        </label>
 
         {error && (
           <div className="text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">{error}</div>

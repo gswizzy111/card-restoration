@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { AgreementsSchema, requiredAgreements } from "@/lib/agreements";
+import { recordAgreements } from "@/lib/order-agreements";
+import { TERMS_UPDATED } from "@/lib/legal/terms";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
@@ -33,6 +36,7 @@ const BodySchema = z.object({
       photo_urls: z.array(z.string()),
       service_ids: z.array(z.string()),
       tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite", "fast_pass"]).optional(),
+      needs_slab_crack: z.boolean().optional(),
     })
   ).min(1),
   customer: z.object({
@@ -61,6 +65,7 @@ const BodySchema = z.object({
   signature_path: z.string().optional(),
   add_signature_confirmation: z.boolean().optional(),
   tip_cents: z.number().int().min(0).max(50000).optional(),
+  agreements: AgreementsSchema,
 });
 
 export async function POST(request: Request) {
@@ -85,6 +90,19 @@ export async function POST(request: Request) {
 
   const data = parsed.data;
   const admin = createAdminClient();
+
+  // Slab cracking needs a signed Slab-Removal Authorization, and every card
+  // declared above $5,000 its own High-Value Card Agreement (lib/agreements.ts)
+  const slabCount = Math.min(data.slab_crack_count ?? 0, data.cards.length);
+  const slabNames = data.cards.filter((c) => c.needs_slab_crack).map((c) => c.card_name.trim());
+  const agreementCheck = requiredAgreements(
+    data.agreements,
+    slabNames.length === slabCount ? slabNames : slabCount,
+    data.cards.map((c) => ({ name: c.card_name.trim(), declaredValueCents: c.estimated_value_cents ?? 0 })),
+  );
+  if ("error" in agreementCheck) {
+    return Response.json({ error: agreementCheck.error, code: "AGREEMENT_REQUIRED" }, { status: 400 });
+  }
 
   // Diamond (elite) tier: enforce $5,000 minimum total declared value
   const isEliteOrder = data.restoration_tier === "elite" || data.cards.some((c) => c.tier === "elite");
@@ -499,9 +517,18 @@ export async function POST(request: Request) {
     await admin.from("order_events").insert({
       order_id: order.id,
       event_type: "customer_signed",
-      description: `Customer signed the Terms & Conditions at checkout. Signature on file: ${publicUrl}`,
+      description: `Customer signed the Terms of Service (last updated ${TERMS_UPDATED}) at checkout. Signature on file: ${publicUrl}`,
       is_customer_visible: false,
     });
+  }
+
+  // The signed agreements must be on file before payment
+  const agreementError = await recordAgreements(admin, order.id, agreementCheck.rows, request);
+  if (agreementError) {
+    return Response.json({
+      error: "We couldn't save your signed agreements. Please try again or DM @the_card_doc on Instagram.",
+      code: "AGREEMENT_SAVE_FAILED",
+    }, { status: 500 });
   }
 
   // Build Stripe line items — one per tier (or one flat line for legacy/volume pricing)

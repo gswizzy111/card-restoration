@@ -89,7 +89,8 @@ export async function POST(
     .filter(Boolean)
     .join("\n\n");
 
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // The key is saved in Netlify as ANTHROPIC_API_KE (missing its Y); read either name
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KE });
 
   const message = await anthropic.messages.create({
     model: "claude-opus-4-8",

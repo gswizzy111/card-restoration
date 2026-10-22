@@ -35,6 +35,8 @@ interface StepReviewProps {
   onSignatureChange: (v: string) => void;
   onEditStep: (step: number) => void;
   selectedTier?: RestorationTierId;
+  /** The Slab-Removal Authorization and High-Value Card Agreements, shown above the order signature */
+  agreementsSlot?: React.ReactNode;
   insurance: InsuranceSelection;
   onInsuranceChange: (ins: InsuranceSelection) => void;
   addSignatureConfirmation: boolean;
@@ -68,6 +70,7 @@ export function StepReview({
   onEditStep,
   selectedTier,
   insurance,
+  agreementsSlot,
   onInsuranceChange,
   addSignatureConfirmation,
   onSignatureConfirmationChange,
@@ -617,6 +620,8 @@ export function StepReview({
         {gcStatus === "invalid" && <p className="text-sm text-red-500">Invalid or already used gift card.</p>}
       </div>
 
+      {agreementsSlot}
+
       {/* Signature */}
       <div className="flex flex-col gap-3">
         <div>
@@ -629,7 +634,7 @@ export function StepReview({
               rel="noopener noreferrer"
               className="text-primary underline underline-offset-2 hover:opacity-80"
             >
-              Terms &amp; Conditions
+              Terms of Service
             </a>
             , including The Card Doc&apos;s limitations of liability regarding restoration outcomes and card condition.
           </p>

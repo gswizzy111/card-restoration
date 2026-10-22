@@ -54,7 +54,7 @@ export function Footer() {
           </p>
           <div className="flex items-center gap-4">
             <Link href="/terms" className="text-xs text-white/60 hover:text-white transition-colors">
-              Terms & Conditions
+              Terms of Service
             </Link>
             <Link href="/privacy" className="text-xs text-white/60 hover:text-white transition-colors">
               Privacy Policy
