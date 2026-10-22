@@ -103,12 +103,8 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
           <span>{formatCurrency(taxCents)}</span>
         </div>
         <div className="flex justify-between text-muted-foreground">
-          <span>{isInternational ? "Return shipping" : "Shipping"}</span>
-          <span>
-            {isInternational
-              ? (selectedRate ? formatCurrency(selectedRate.amount_cents) : "—")
-              : shippingMethod === "self_ship" ? "Self-ship" : selectedRate ? formatCurrency(selectedRate.amount_cents) : "—"}
-          </span>
+          <span>{isInternational || shippingMethod === "self_ship" ? "Return shipping" : "Shipping"}</span>
+          <span>{selectedRate ? formatCurrency(selectedRate.amount_cents) : "—"}</span>
         </div>
         {signatureCents > 0 && (
           <div className="flex justify-between text-muted-foreground">

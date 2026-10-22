@@ -612,7 +612,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 rows.push({ label: `Discount${discountPct > 0 ? ` (${discountPct}% off)` : ""}`, cents: -effectiveDiscountCents, style: "text-green-600" });
               }
               rows.push({ label: "Sales Tax (6.625%)", cents: taxCents, style: "text-muted-foreground" });
-              if (shippingCents > 0) rows.push({ label: "Shipping (prepaid label)", cents: shippingCents, style: "text-muted-foreground" });
+              if (shippingCents > 0) rows.push({ label: order.inbound_method === "self_ship" ? "Return shipping (customer ships in)" : "Shipping (prepaid label)", cents: shippingCents, style: "text-muted-foreground" });
               if (insuranceCents > 0) rows.push({ label: `Insured Shipping (${insuranceType === "round_trip" ? "round trip" : insuranceType === "return" ? "return" : "inbound"})`, cents: insuranceCents, style: "text-muted-foreground" });
               if (signatureCents > 0) rows.push({ label: "Signature Confirmation", cents: signatureCents, style: "text-muted-foreground" });
               if (unaccountedCents > 0) rows.push({ label: "Other charges (slab crack, add-ons — check Stripe)", cents: unaccountedCents, style: "text-amber-700" });
@@ -725,7 +725,11 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 </div>
               )}
               {order.shipping_cents > 0 && (
-                <p className="text-sm text-muted-foreground mb-3">Label cost: {formatCurrency(order.shipping_cents)}</p>
+                <p className="text-sm text-muted-foreground mb-3">
+                  {order.inbound_method === "self_ship"
+                    ? `Return shipping paid: ${formatCurrency(order.shipping_cents)}${order.return_carrier ? ` (${order.return_carrier} ${order.return_service_level ?? ""})` : ""}`
+                    : `Label cost: ${formatCurrency(order.shipping_cents)}${order.inbound_carrier ? ` (${order.inbound_carrier} ${order.inbound_service_level ?? ""}, to us and back)` : ""}`}
+                </p>
               )}
 
               {/* Live inbound tracking status */}

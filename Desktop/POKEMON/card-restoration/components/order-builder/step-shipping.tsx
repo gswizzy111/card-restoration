@@ -78,9 +78,17 @@ export function StepShipping({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInternational, shippingMethod]);
 
-  // Domestic: fetch inbound rates when buy_label selected
+  // Domestic: rates for the trip from the customer to us. The prepaid label
+  // pays that rate twice (to us and back); shipping your own way pays it once,
+  // for the trip back to you. The server looks the rate up again at checkout.
+  const trips = shippingMethod === "buy_label" ? 2 : 1;
   useEffect(() => {
-    if (isInternational || shippingMethod !== "buy_label") return;
+    if (isInternational || !shippingMethod) return;
+    let stale = false;
+    // Keep the same service when the rates are fetched again
+    const previous = selectedRate;
+    onRateChange(null);
+    setRates([]);
     setLoadingRates(true);
     setRatesError("");
     fetch("/api/shipping/rates", {
@@ -103,21 +111,76 @@ export function StepShipping({
     })
       .then((r) => r.json())
       .then((data) => {
-        if (data.rates) {
+        if (stale) return;
+        if (data.rates && data.rates.length > 0) {
           const all: ShippingRate[] = data.rates;
-          // Only show Priority/Express options for restoration inbound labels
+          // Only show Priority/Express options for restoration labels
           const expedited = all.filter((r) => /priority|express/i.test(r.service_level));
           const filtered = expedited.length > 0 ? expedited : all;
           setRates(filtered);
-          if (filtered.length > 0) onRateChange({ ...filtered[0], amount_cents: filtered[0].amount_cents * 2 });
+          const pick = filtered.find((r) => previous && r.carrier === previous.carrier && r.service_level === previous.service_level) ?? filtered[0];
+          onRateChange({ ...pick, amount_cents: pick.amount_cents * trips });
         } else {
-          setRatesError("Could not load shipping rates. Please try self-ship.");
+          setRatesError("Could not load shipping rates. Please try again.");
         }
       })
-      .catch(() => setRatesError("Could not load shipping rates."))
-      .finally(() => setLoadingRates(false));
+      .catch(() => { if (!stale) setRatesError("Could not load shipping rates."); })
+      .finally(() => { if (!stale) setLoadingRates(false); });
+    return () => { stale = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shippingMethod]);
+
+  /** The rate choices inside the chosen method's card, priced for its trips. */
+  function rateOptions(note: string, daysText: (days: number) => string) {
+    return (
+      <>
+        {loadingRates && (
+          <>
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-10 w-full rounded-lg" />
+          </>
+        )}
+        {ratesError && <p className="text-sm text-destructive">{ratesError}</p>}
+        {!loadingRates && rates.length > 0 && (
+          <p className="text-xs text-muted-foreground mb-1">{note}</p>
+        )}
+        {!loadingRates && rates.map((rate) => {
+          const chosen = selectedRate?.object_id === rate.object_id;
+          return (
+            <button
+              key={rate.object_id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRateChange({ ...rate, amount_cents: rate.amount_cents * trips });
+              }}
+              className={`w-full text-left rounded-lg border-2 px-4 py-3 flex items-center justify-between transition-all ${
+                chosen
+                  ? "border-[#1a8fe0] bg-blue-50 shadow-sm"
+                  : "border-border hover:border-[#1a8fe0]/50"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${chosen ? "border-[#1a8fe0] bg-[#1a8fe0]" : "border-muted-foreground"}`}>
+                  {chosen && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                </div>
+                <div>
+                  <p className={`text-sm font-semibold ${chosen ? "text-[#1a8fe0]" : "text-foreground"}`}>
+                    {rate.carrier} — {rate.service_level}
+                  </p>
+                  {rate.days && (
+                    <p className="text-xs text-muted-foreground">{daysText(rate.days)}</p>
+                  )}
+                </div>
+              </div>
+              <span className={`font-bold ${chosen ? "text-[#1a8fe0]" : "text-foreground"}`}>{formatCurrency(rate.amount_cents * trips)}</span>
+            </button>
+          );
+        })}
+      </>
+    );
+  }
 
   // ── International layout ──────────────────────────────────────────────────
   if (isInternational) {
@@ -222,52 +285,7 @@ export function StepShipping({
               </p>
               {shippingMethod === "buy_label" && (
                 <Need missing={showMissing && !selectedRate} note="Choose a shipping option." className="mt-4 flex flex-col gap-2">
-                  {loadingRates && (
-                    <>
-                      <Skeleton className="h-10 w-full rounded-lg" />
-                      <Skeleton className="h-10 w-full rounded-lg" />
-                      <Skeleton className="h-10 w-full rounded-lg" />
-                    </>
-                  )}
-                  {ratesError && <p className="text-sm text-destructive">{ratesError}</p>}
-                  {!loadingRates && rates.length > 0 && (
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Price covers shipping to us + return shipping back to you.
-                    </p>
-                  )}
-                  {!loadingRates && rates.map((rate) => {
-                    const chosen = selectedRate?.object_id === rate.object_id;
-                    return (
-                      <button
-                        key={rate.object_id}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRateChange({ ...rate, amount_cents: rate.amount_cents * 2 });
-                        }}
-                        className={`w-full text-left rounded-lg border-2 px-4 py-3 flex items-center justify-between transition-all ${
-                          chosen
-                            ? "border-[#1a8fe0] bg-blue-50 shadow-sm"
-                            : "border-border hover:border-[#1a8fe0]/50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${chosen ? "border-[#1a8fe0] bg-[#1a8fe0]" : "border-muted-foreground"}`}>
-                            {chosen && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                          <div>
-                            <p className={`text-sm font-semibold ${chosen ? "text-[#1a8fe0]" : "text-foreground"}`}>
-                              {rate.carrier} — {rate.service_level}
-                            </p>
-                            {rate.days && (
-                              <p className="text-xs text-muted-foreground">Est. {rate.days} business days each way</p>
-                            )}
-                          </div>
-                        </div>
-                        <span className={`font-bold ${chosen ? "text-[#1a8fe0]" : "text-foreground"}`}>{formatCurrency(rate.amount_cents * 2)}</span>
-                      </button>
-                    );
-                  })}
+                  {rateOptions("Price covers shipping to us + return shipping back to you.", (days) => `Est. ${days} business days each way`)}
                 </Need>
               )}
             </div>
@@ -277,7 +295,7 @@ export function StepShipping({
         {/* Self ship */}
         <button
           type="button"
-          onClick={() => { onMethodChange("self_ship"); onRateChange(null); }}
+          onClick={() => onMethodChange("self_ship")}
           className={`w-full text-left rounded-lg border p-5 transition-colors ${
             shippingMethod === "self_ship"
               ? "border-accent bg-accent/5"
@@ -290,11 +308,17 @@ export function StepShipping({
             }`}>
               {shippingMethod === "self_ship" && <div className="w-2 h-2 rounded-full bg-accent" />}
             </div>
-            <div>
+            <div className="flex-1">
               <p className="font-medium text-foreground">I&apos;ll ship them myself</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Use your own carrier and packaging. We&apos;ll send you our shipping address after checkout. Be sure to use a tracked, insured method.
               </p>
+              {shippingMethod === "self_ship" && (
+                <Need missing={showMissing && !selectedRate} note="Choose a return shipping option." className="mt-4 flex flex-col gap-2">
+                  <p className="text-sm font-medium text-foreground">Return shipping back to you<Req /></p>
+                  {rateOptions("You pay for the trip back now; we ship your restored cards back with a tracked label.", (days) => `Est. ${days} business days`)}
+                </Need>
+              )}
             </div>
           </div>
         </button>

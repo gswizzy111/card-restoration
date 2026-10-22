@@ -158,10 +158,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
       return !!(c.name && c.email && c.phone && c.street1 && c.city && c.country);
     }
     if (step === 3) {
-      if (!shippingMethod) return false;
-      const isInternational = !!(customer.country && customer.country !== "US");
-      if (shippingMethod === "buy_label" || isInternational) return !!selectedRate;
-      return true;
+      // Both ways need a rate: the prepaid label's, or the trip back for self-ship
+      return !!shippingMethod && !!selectedRate;
     }
     return true;
   }
@@ -306,6 +304,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
                 setShippingMethod(m);
                 // What can be insured depends on who buys the label (step-review.tsx)
                 setInsurance((ins) => ({ ...ins, type: "none", chargeCents: 0 }));
+                // Signature confirmation comes with the prepaid label only
+                if (m !== "buy_label") setAddSignatureConfirmation(false);
               }}
               onRateChange={setSelectedRate}
               showMissing={showMissing}
