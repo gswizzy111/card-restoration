@@ -7,7 +7,7 @@ import { PortalAccess } from "./portal-access";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import { isAdmin } from "@/lib/admin-auth";
-import { COMMISSION_PERCENT, commissionCents, countsForCommission, netCents } from "@/lib/creator-portal";
+import { commissionCents, commissionRatesFor, countsForCommission, currentRate, formatPercent, netCents, rateAt } from "@/lib/creator-portal";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,7 @@ type Affiliate = {
   portal_set_up: boolean;
   portal_last_login_at: string | null;
   setup_link_pending: boolean;
+  commission_percent: number;
 };
 
 type Sale = {
@@ -50,10 +51,12 @@ export default async function AdminAffiliatesPage({
     .order("created_at", { ascending: false });
 
   const now = new Date().toISOString();
+  const rates = await commissionRatesFor((affiliates ?? []).map((a) => a.id));
   const allAffiliates: Affiliate[] = (affiliates ?? []).map(({ password_hash, setup_token_expires_at, ...a }) => ({
     ...a,
     portal_set_up: !!password_hash,
     setup_link_pending: !!setup_token_expires_at && setup_token_expires_at > now,
+    commission_percent: currentRate(rates.get(a.id)),
   }));
 
   // Fetch kit orders with affiliate codes
@@ -96,7 +99,7 @@ export default async function AdminAffiliatesPage({
         <div>
           <h1 className="font-heading font-black text-3xl text-foreground">Affiliates &amp; Coupons</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            {allAffiliates.length} code{allAffiliates.length !== 1 ? "s" : ""} · {COMMISSION_PERCENT}% of every sale
+            {allAffiliates.length} code{allAffiliates.length !== 1 ? "s" : ""} · commission set per code
           </p>
         </div>
       </div>
@@ -113,7 +116,11 @@ export default async function AdminAffiliatesPage({
           {allAffiliates.map((affiliate) => {
             const sales = salesByCode[affiliate.code.toUpperCase()] ?? [];
             const totalRevenue = sales.reduce((s, o) => s + o.total_cents, 0);
-            const earned = commissionCents(totalRevenue);
+            // Each sale at the rate in effect when it was placed
+            const affiliateRates = rates.get(affiliate.id);
+            const saleCommission = (sale: Sale) => commissionCents(sale.total_cents, rateAt(affiliateRates, sale.created_at));
+            const earned = sales.reduce((s, sale) => s + saleCommission(sale), 0);
+            const mixedRates = sales.some((sale) => rateAt(affiliateRates, sale.created_at) !== affiliate.commission_percent);
 
             return (
               <div key={affiliate.id} className="bg-white rounded-xl border border-border overflow-hidden">
@@ -129,7 +136,7 @@ export default async function AdminAffiliatesPage({
                         scroll={false}
                         className="inline-block mt-2 text-xs font-semibold text-primary hover:underline underline-offset-2"
                       >
-                        Edit name, code or discount
+                        Edit name, code, discount or commission
                       </Link>
                     )}
                   </div>
@@ -154,7 +161,7 @@ export default async function AdminAffiliatesPage({
                     </div>
                     <div className="text-center">
                       <p className="font-heading font-black text-lg text-green-700">{formatCurrency(earned)}</p>
-                      <p className="text-xs text-muted-foreground">earned ({COMMISSION_PERCENT}%)</p>
+                      <p className="text-xs text-muted-foreground">earned ({formatPercent(affiliate.commission_percent)}{mixedRates ? " now" : ""})</p>
                     </div>
                   </div>
                 </div>
@@ -184,7 +191,7 @@ export default async function AdminAffiliatesPage({
                           <div className="flex items-center gap-3 shrink-0">
                             <span className="text-xs text-muted-foreground">{new Date(sale.created_at).toLocaleDateString()}</span>
                             <span className="font-semibold text-foreground">{formatCurrency(sale.total_cents)}</span>
-                            <span className="text-xs text-green-700 font-semibold">+{formatCurrency(commissionCents(sale.total_cents))}</span>
+                            <span className="text-xs text-green-700 font-semibold">+{formatCurrency(saleCommission(sale))}</span>
                           </div>
                         </div>
                       ))}

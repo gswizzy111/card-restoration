@@ -2,6 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { newToken, sha256, TOKEN_PATTERN } from "@/lib/admin-session";
+import { DEFAULT_COMMISSION_PERCENT } from "@/lib/commission";
 
 /**
  * The creator portal (/affiliates): creators sign in with their code and a
@@ -17,8 +18,7 @@ export const CREATOR_SESSION_DAYS = 30;
 export const SETUP_LINK_DAYS = 7;
 export const CREATOR_PASSWORD_MIN = 10;
 
-// Commission on every sale made with a creator's code (as on the admin Affiliates page)
-export const COMMISSION_PERCENT = 10;
+export { DEFAULT_COMMISSION_PERCENT, formatPercent } from "@/lib/commission";
 
 export type Creator = { id: string; name: string; code: string; discount_percent: number };
 
@@ -89,14 +89,59 @@ export function netCents(totalCents: number | null, refundedCents: number | null
   return Math.max(0, (totalCents ?? 0) - (refundedCents ?? 0));
 }
 
-export function commissionCents(cents: number) {
-  return Math.round((cents * COMMISSION_PERCENT) / 100);
+export function commissionCents(cents: number, percent: number) {
+  return Math.round((cents * percent) / 100);
 }
+
+// ── Commission rates ──────────────────────────────────────────────────────
+
+/**
+ * A code's commission rate over time: each row starts at effective_from and
+ * runs until the next one. A sale earns the rate in effect when it was placed,
+ * so changing a rate "from now on" leaves past sales as they were. No rows
+ * means the default rate for every sale.
+ */
+export type CommissionRate = { percent: number; effective_from: string };
+
+export async function commissionRatesFor(affiliateIds: string[]): Promise<Map<string, CommissionRate[]>> {
+  const map = new Map<string, CommissionRate[]>();
+  if (!affiliateIds.length) return map;
+  const { data } = await createAdminClient()
+    .from("affiliate_commission_rates")
+    .select("affiliate_id, percent, effective_from")
+    .in("affiliate_id", affiliateIds)
+    .order("effective_from", { ascending: true });
+  for (const r of data ?? []) {
+    const list = map.get(r.affiliate_id) ?? [];
+    list.push({ percent: Number(r.percent), effective_from: r.effective_from });
+    map.set(r.affiliate_id, list);
+  }
+  return map;
+}
+
+/** The rate for a sale placed at `date`. `rates` is sorted oldest first. */
+export function rateAt(rates: CommissionRate[] | undefined, date: string) {
+  let percent = DEFAULT_COMMISSION_PERCENT;
+  const t = new Date(date).getTime();
+  for (const r of rates ?? []) {
+    if (new Date(r.effective_from).getTime() <= t) percent = r.percent;
+    else break;
+  }
+  return percent;
+}
+
+/** The rate new sales earn today. */
+export function currentRate(rates: CommissionRate[] | undefined) {
+  return rateAt(rates, new Date().toISOString());
+}
+
 
 export type CreatorSale = {
   date: string;
   type: "kit" | "restoration";
   cents: number;
+  /** The commission rate in effect when the order was placed */
+  percent: number;
   commissionCents: number;
   /** What was bought (product names for kits); never who bought it. */
   summary: string;
@@ -106,7 +151,7 @@ export type CreatorSale = {
  * Sales made with a creator's code, newest first. Selects only the columns
  * the portal shows: no names, emails, addresses or order numbers.
  */
-export async function creatorSales(code: string): Promise<CreatorSale[]> {
+export async function creatorSales(code: string, rates: CommissionRate[] | undefined): Promise<CreatorSale[]> {
   const admin = createAdminClient();
   const match = literalCode(code);
   const [{ data: kits }, { data: restorations }] = await Promise.all([
@@ -120,13 +165,15 @@ export async function creatorSales(code: string): Promise<CreatorSale[]> {
     if (cents <= 0) continue;
     const items = Array.isArray(o.items) ? (o.items as { product_name?: string; quantity?: number }[]) : [];
     const summary = items.map((i) => `${i.product_name ?? "Item"} ×${i.quantity ?? 1}`).join(", ") || "Kit order";
-    sales.push({ date: o.created_at, type: "kit", cents, commissionCents: commissionCents(cents), summary });
+    const percent = rateAt(rates, o.created_at);
+    sales.push({ date: o.created_at, type: "kit", cents, percent, commissionCents: commissionCents(cents, percent), summary });
   }
   for (const o of restorations ?? []) {
     if (!countsForCommission("restoration", o.status)) continue;
     const cents = netCents(o.total_cents, o.refunded_cents);
     if (cents <= 0) continue;
-    sales.push({ date: o.created_at, type: "restoration", cents, commissionCents: commissionCents(cents), summary: "Restoration service" });
+    const percent = rateAt(rates, o.created_at);
+    sales.push({ date: o.created_at, type: "restoration", cents, percent, commissionCents: commissionCents(cents, percent), summary: "Restoration service" });
   }
   return sales.sort((a, b) => b.date.localeCompare(a.date));
 }
@@ -134,8 +181,12 @@ export async function creatorSales(code: string): Promise<CreatorSale[]> {
 export type CreatorTotals = { sales: number; cents: number; commissionCents: number };
 
 function total(sales: CreatorSale[]): CreatorTotals {
-  const cents = sales.reduce((s, o) => s + o.cents, 0);
-  return { sales: sales.length, cents, commissionCents: commissionCents(cents) };
+  return {
+    sales: sales.length,
+    cents: sales.reduce((s, o) => s + o.cents, 0),
+    // Each sale at its own rate, so a rate change doesn't reprice past sales
+    commissionCents: sales.reduce((s, o) => s + o.commissionCents, 0),
+  };
 }
 
 /** Totals overall, by type, for this month, and for each of the last `months` months. */

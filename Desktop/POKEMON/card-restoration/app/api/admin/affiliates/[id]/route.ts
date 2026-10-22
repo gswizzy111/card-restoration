@@ -6,7 +6,13 @@ const Body = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   code: z.string().trim().min(1).max(40).optional(),
   discount_percent: z.number().int().min(0).max(100).optional(),
+  // A new commission rate for this code, for sales from now on or for every sale
+  commission_percent: z.number().min(0).max(100).optional(),
+  commission_scope: z.enum(["future", "all"]).optional(),
 });
+
+// A rate that starts before any sale, so it covers all of them
+const EVERY_SALE = "2000-01-01T00:00:00Z";
 
 // Escape LIKE wildcards so a code is matched literally (case-insensitive)
 function literal(code: string) {
@@ -33,7 +39,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (parsed.data.code !== undefined) update.code = parsed.data.code.toUpperCase();
   if (parsed.data.discount_percent !== undefined) update.discount_percent = parsed.data.discount_percent;
 
-  const { error } = await admin.from("affiliates").update(update).eq("id", id);
+  const { error } = Object.keys(update).length
+    ? await admin.from("affiliates").update(update).eq("id", id)
+    : { error: null };
   if (error) {
     if (error.code === "23505") {
       return Response.json({ error: "That code is already taken." }, { status: 409 });
@@ -50,6 +58,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       admin.from("orders").update({ affiliate_code: newCode }).ilike("affiliate_code", oldCode),
       admin.from("shop_orders").update({ affiliate_code: newCode }).ilike("affiliate_code", oldCode),
     ]);
+  }
+
+  if (parsed.data.commission_percent !== undefined) {
+    const percent = Math.round(parsed.data.commission_percent * 100) / 100;
+    if (parsed.data.commission_scope === "all") {
+      // One rate for every sale this code has ever made
+      await admin.from("affiliate_commission_rates").delete().eq("affiliate_id", id);
+      await admin.from("affiliate_commission_rates").insert({ affiliate_id: id, percent, effective_from: EVERY_SALE });
+    } else {
+      await admin.from("affiliate_commission_rates").insert({ affiliate_id: id, percent, effective_from: new Date().toISOString() });
+    }
   }
 
   return Response.json({ ok: true });
