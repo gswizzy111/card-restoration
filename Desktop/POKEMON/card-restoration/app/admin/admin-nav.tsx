@@ -97,6 +97,23 @@ function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, role }: {
   );
 }
 
+// The signed-in admin's own page: change password and recovery email
+function ProfileLink({ onNavigate }: { onNavigate?: () => void }) {
+  const active = usePathname().startsWith("/admin/profile");
+  return (
+    <Link
+      href="/admin/profile"
+      onClick={onNavigate}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+        active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+      }`}
+    >
+      <span>👤</span>
+      Profile
+    </Link>
+  );
+}
+
 export function AdminNav({ openCaseCount, openUpdateRequestCount, role, username }: { openCaseCount?: number; openUpdateRequestCount?: number; role?: string | null; username?: string | null }) {
   const [open, setOpen] = useState(false);
 
@@ -121,6 +138,7 @@ export function AdminNav({ openCaseCount, openUpdateRequestCount, role, username
               Signed in as <span className="font-semibold text-foreground">{username}</span>
             </p>
           )}
+          {role === "admin" && <ProfileLink />}
           <form action="/api/admin/logout" method="POST">
             <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors text-left">
               <span>🚪</span>
@@ -168,6 +186,7 @@ export function AdminNav({ openCaseCount, openUpdateRequestCount, role, username
           <NavLinks onNavigate={() => setOpen(false)} openCaseCount={openCaseCount} openUpdateRequestCount={openUpdateRequestCount} role={role} />
         </nav>
         <div className="px-3 py-3 border-t border-border">
+          {role === "admin" && <ProfileLink onNavigate={() => setOpen(false)} />}
           <form action="/api/admin/logout" method="POST">
             <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors text-left">
               <span>🚪</span>
