@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { Hammer } from "lucide-react";
 import { SigningSection, emptySigning, signingReady, slabSigned, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
 import { SlabAuthorizationDialog, type HolderPatch } from "@/components/checkout/slab-authorization-dialog";
+import { Need, Req, revealMissing } from "@/components/checkout/required";
 import { CardIdentityFields, emptyIdentity, identityPayload, type CardIdentity } from "@/components/checkout/card-identity-fields";
 import { InsuranceElectionBox, type InsuranceElection } from "@/components/checkout/insurance-election";
 import { HIGH_VALUE_NOTICE, SIGN_BUTTON_LABEL, VALUE_HELP } from "@/lib/legal/current-terms";
@@ -118,6 +119,8 @@ interface PrepOrderFormProps {
 export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrackPriceCents }: PrepOrderFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Pressed the sign button with something missing: outline it in red
+  const [showMissing, setShowMissing] = useState(false);
 
   // Customer
   const [name, setName] = useState("");
@@ -282,38 +285,40 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    // Says what's wrong, outlines the missing fields in red and scrolls to the first
+    const fail = (message: string) => {
+      setError(message);
+      setShowMissing(true);
+      revealMissing();
+    };
 
-    if (filledCards.length < 1) { setError("Please add at least one card."); return; }
-    if (filledCards.some((c) => cardValueCents(c) <= 0)) { setError("Please enter a declared value for every card."); return; }
+    if (filledCards.length < 1) { return fail("Please add at least one card."); }
+    if (filledCards.some((c) => cardValueCents(c) <= 0)) { return fail("Please enter a declared value for every card."); }
     if (filledCards.some((c) => c.slab && (!c.grading_company || !c.cert_number.trim()))) {
-      setError("Slab removal needs each card's grading company and certification number.");
-      return;
+      return fail("Slab removal needs each card's grading company and certification number.");
     }
-    if (!name.trim()) { setError("Name is required."); return; }
-    if (!email.trim()) { setError("Email is required."); return; }
-    if (!phone.trim()) { setError("Phone is required."); return; }
+    if (!name.trim()) { return fail("Name is required."); }
+    if (!email.trim()) { return fail("Email is required."); }
+    if (!phone.trim()) { return fail("Phone is required."); }
     if (shippingMethod === "buy_label") {
       if (!street1.trim() || !city.trim() || !zip.trim()) {
-        setError("Full address is required to generate a prepaid label.");
-        return;
+        return fail("Full address is required to generate a prepaid label.");
       }
       if (!isInternational && !stateCode) {
-        setError("State is required for US addresses.");
-        return;
+        return fail("State is required for US addresses.");
       }
       if (!selectedRate) {
-        setError("Please check shipping rates and select an option before continuing.");
-        return;
+        return fail("Please check shipping rates and select an option before continuing.");
       }
     }
 
-    if (insuranceElection === null) { setError("Please choose whether to buy or decline shipping insurance."); return; }
-    if (addInsurance && insuranceDeclaredValueCents <= 0) { setError("Enter the amount to insure, or decline shipping insurance."); return; }
+    if (insuranceElection === null) { return fail("Please choose whether to buy or decline shipping insurance."); }
+    if (addInsurance && insuranceDeclaredValueCents <= 0) { return fail("Enter the amount to insure, or decline shipping insurance."); }
     if (!signingReady(signing, slabCards)) {
-      setError("Please sign or skip each slab authorization, check both boxes under Sign to confirm your order, and type your full legal name.");
-      return;
+      return fail("Please sign or skip each slab authorization, check both boxes under Sign to confirm your order, and type your full legal name.");
     }
 
+    setShowMissing(false);
     setSubmitting(true);
     try {
       const res = await fetch("/api/prep/checkout", {
@@ -367,6 +372,8 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   const labelCls = "block text-xs font-semibold text-muted-foreground mb-1.5";
   const selectCls = `${input} cursor-pointer`;
 
+  const miss = (v: string | undefined | null) => showMissing && !v?.trim();
+
   return (
     <div className="max-w-xl mx-auto px-6 py-12 md:py-16">
       <SlabAuthorizationDialog card={slabDialogCard} state={signing} onChange={setSigning} onHolderChange={changeSlabHolder} onClose={closeSlabDialog} />
@@ -399,19 +406,19 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
         {/* Customer */}
         <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-4">
           <h2 className="font-heading font-black text-base text-foreground">Your Info</h2>
-          <div>
-            <label className={labelCls}>Full Name *</label>
+          <Need missing={miss(name)}>
+            <label className={labelCls}>Full Name<Req /></label>
             <input className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="John Smith" />
-          </div>
+          </Need>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Email *</label>
+            <Need missing={miss(email)}>
+              <label className={labelCls}>Email<Req /></label>
               <input className={input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="john@example.com" />
-            </div>
-            <div>
-              <label className={labelCls}>Phone *</label>
+            </Need>
+            <Need missing={miss(phone)}>
+              <label className={labelCls}>Phone<Req /></label>
               <input className={input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 (555) 555-5555" />
-            </div>
+            </Need>
           </div>
         </div>
 
@@ -419,7 +426,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
         <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-heading font-black text-base text-foreground">Cards</h2>
+              <h2 className="font-heading font-black text-base text-foreground">Cards<Req /></h2>
               <p className="text-xs text-muted-foreground mt-0.5">Enter value for cards $1,500+</p>
             </div>
             <button type="button" onClick={addCard} className="text-sm font-semibold text-primary hover:text-primary/80">
@@ -429,6 +436,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
           {cards.map((card, i) => (
             <div key={card.id} className="border border-border rounded-lg p-3 flex flex-col gap-2">
+              <Need missing={showMissing && !card.name.trim() && (i === 0 || !!card.declaredValueDollars)} note="Enter the card name." className="">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground w-5 shrink-0">{i + 1}.</span>
                 <input
@@ -441,7 +449,9 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                   <button type="button" onClick={() => removeCard(card.id)} className="text-red-400 hover:text-red-600 text-xl leading-none shrink-0">×</button>
                 )}
               </div>
-              <div className="flex items-center gap-2 pl-7">
+              </Need>
+              <Need missing={showMissing && !!card.name.trim() && cardValueCents(card) <= 0} note="Enter a declared value." className="pl-7">
+              <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                   <input
@@ -458,6 +468,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                   </span>
                 )}
               </div>
+              </Need>
               <div className="pl-7 flex flex-col gap-2">
                 <p className="text-xs text-muted-foreground">{VALUE_HELP}</p>
                 {isHighValue(cardValueCents(card)) && (
@@ -465,7 +476,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                 )}
               </div>
               <div className="pl-7">
-                <CardIdentityFields idPrefix={`prep-${card.id}`} value={card} onChange={(patch) => updateCard(card.id, patch)} needsCert={card.slab} />
+                <CardIdentityFields idPrefix={`prep-${card.id}`} value={card} onChange={(patch) => updateCard(card.id, patch)} needsCert={card.slab} showMissing={showMissing} />
               </div>
               <label className="ml-7 flex items-start gap-3 bg-white border border-border rounded-md px-3 py-2.5 cursor-pointer">
                 <input
@@ -540,7 +551,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
         {/* Shipping */}
         <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-4">
-          <h2 className="font-heading font-black text-base text-foreground">Shipping Your Cards To Us</h2>
+          <h2 className="font-heading font-black text-base text-foreground">Shipping Your Cards To Us<Req /></h2>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setShippingMethod("buy_label")}
               className={`h-12 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors ${shippingMethod === "buy_label" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}>
@@ -558,7 +569,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
                 {/* Country selector — always first */}
                 <div>
-                  <label className={labelCls}>Country *</label>
+                  <label className={labelCls}>Country<Req /></label>
                   <select
                     className={selectCls}
                     value={country}
@@ -570,10 +581,10 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                   </select>
                 </div>
 
-                <div>
-                  <label className={labelCls}>Street Address *</label>
+                <Need missing={miss(street1)}>
+                  <label className={labelCls}>Street Address<Req /></label>
                   <input className={input} value={street1} onChange={(e) => { setStreet1(e.target.value); setSelectedRate(null); }} placeholder="123 Main St" />
-                </div>
+                </Need>
                 <div>
                   <label className={labelCls}>Apt / Suite / Unit <span className="font-normal">(optional)</span></label>
                   <input className={input} value={street2} onChange={(e) => setStreet2(e.target.value)} placeholder="Apt 4B" />
@@ -582,43 +593,43 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                 {!isInternational ? (
                   /* US: city / state dropdown / zip */
                   <div className="grid grid-cols-5 gap-2">
-                    <div className="col-span-2">
-                      <label className={labelCls}>City *</label>
+                    <Need missing={miss(city)} className="col-span-2">
+                      <label className={labelCls}>City<Req /></label>
                       <input className={input} value={city} onChange={(e) => { setCity(e.target.value); setSelectedRate(null); }} placeholder="New York" />
-                    </div>
-                    <div>
-                      <label className={labelCls}>State *</label>
+                    </Need>
+                    <Need missing={miss(stateCode)}>
+                      <label className={labelCls}>State<Req /></label>
                       <select className={selectCls} value={stateCode} onChange={(e) => { setStateCode(e.target.value); setSelectedRate(null); }}>
                         <option value="">—</option>
                         {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
-                    </div>
-                    <div className="col-span-2">
-                      <label className={labelCls}>ZIP Code *</label>
+                    </Need>
+                    <Need missing={miss(zip)} className="col-span-2">
+                      <label className={labelCls}>ZIP Code<Req /></label>
                       <input className={input} value={zip} onChange={(e) => { setZip(e.target.value); setSelectedRate(null); }} placeholder="10001" maxLength={10} />
-                    </div>
+                    </Need>
                   </div>
                 ) : (
                   /* International: city / state text (optional) / postal code */
                   <div className="grid grid-cols-5 gap-2">
-                    <div className="col-span-2">
-                      <label className={labelCls}>City *</label>
+                    <Need missing={miss(city)} className="col-span-2">
+                      <label className={labelCls}>City<Req /></label>
                       <input className={input} value={city} onChange={(e) => { setCity(e.target.value); setSelectedRate(null); }} placeholder="Singapore" />
-                    </div>
+                    </Need>
                     <div>
                       <label className={labelCls}>State / Province <span className="font-normal">(optional)</span></label>
                       <input className={input} value={stateCode} onChange={(e) => { setStateCode(e.target.value); setSelectedRate(null); }} placeholder="—" />
                     </div>
-                    <div className="col-span-2">
-                      <label className={labelCls}>Postal Code *</label>
+                    <Need missing={miss(zip)} className="col-span-2">
+                      <label className={labelCls}>Postal Code<Req /></label>
                       <input className={input} value={zip} onChange={(e) => { setZip(e.target.value); setSelectedRate(null); }} placeholder="123456" maxLength={12} />
-                    </div>
+                    </Need>
                   </div>
                 )}
               </div>
 
               {addressComplete && (
-                <div className="flex flex-col gap-3">
+                <Need missing={showMissing && !selectedRate} note="Check shipping rates and choose an option." className="flex flex-col gap-3">
                   {isInternational ? (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 leading-relaxed">
                       <strong>International shipping — important:</strong> You will receive a prepaid label and customs forms after checkout. You must bring your package to a carrier counter or post office in person — do not drop in a mailbox. Shipping cost covers both the inbound label (you to us) and the return shipment (us back to you).
@@ -667,7 +678,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                       ))}
                     </div>
                   )}
-                </div>
+                </Need>
               )}
 
             </div>
@@ -689,10 +700,12 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
               }
             }}
             purchaseAvailable={shippingMethod === "buy_label"}
+            showMissing={showMissing}
+            purchaseMissing={insuranceDeclaredValueCents <= 0}
             unavailableNote="Insurance through us covers our prepaid label's trip to us. Shipping it yourself, you can insure the package with your carrier."
           >
             <div>
-              <label className={labelCls}>Amount to insure (USD) *</label>
+              <label className={labelCls}>Amount to insure (USD)<Req /></label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                 <input className={`${input} pl-7`} type="number" min="0" max="10000" step="1"
@@ -804,6 +817,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
             state={signing}
             onChange={setSigning}
             onSkipSlab={skipSlab}
+            showMissing={showMissing}
             onOpenSlab={(i) => setSlabDialogId(filledCards[i]?.id ?? null)}
             skippedSlabs={skippedSlabs}
           />

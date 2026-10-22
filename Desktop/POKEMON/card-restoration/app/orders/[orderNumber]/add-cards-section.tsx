@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SigningSection, emptySigning, signingReady, submittedSigning, type SigningState } from "@/components/checkout/signing-section";
 import { CardIdentityFields, emptyIdentity, identityPayload, type CardIdentity } from "@/components/checkout/card-identity-fields";
+import { MissingNote, Need, Req, revealMissing } from "@/components/checkout/required";
 import { HIGH_VALUE_NOTICE, SIGN_BUTTON_LABEL, VALUE_HELP } from "@/lib/legal/current-terms";
 import { isHighValue } from "@/lib/legal/agreements-v1";
 import { RESTORATION_TIERS } from "@/lib/restoration-tiers";
@@ -44,6 +45,8 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
   const [error, setError] = useState("");
   // The Terms of Service v1.0 signature for the added cards
   const [signing, setSigning] = useState<SigningState>(emptySigning());
+  // Pressed the sign button with something missing: outline it in red
+  const [showMissing, setShowMissing] = useState(false);
 
   function updateCard(i: number, patch: Partial<CardEntry>) {
     setCards((prev) => prev.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
@@ -69,10 +72,15 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
   const overCap = (c: CardEntry) => maxCents !== null && valueCents(c) > maxCents;
   const highValueCards = cards.filter((c) => isHighValue(valueCents(c))).map((c) => ({ name: c.name.trim(), valueCents: valueCents(c) }));
   const cardsOk = cards.every((c) => c.name.trim().length > 0 && valueCents(c) > 0 && !overCap(c));
-  const canSubmit = cardsOk && signingReady(signing, []) && !loading;
+  const ready = cardsOk && signingReady(signing, []);
 
   async function handleSubmit() {
-    if (!canSubmit) return;
+    if (loading) return;
+    if (!ready) {
+      setShowMissing(true);
+      revealMissing();
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -127,8 +135,8 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
             </div>
 
             <div className="flex flex-col gap-3">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Card Name *</label>
+              <Need missing={showMissing && !card.name.trim()}>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Card Name<Req /></label>
                 <input
                   type="text"
                   value={card.name}
@@ -137,12 +145,12 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
                   disabled={loading}
                   className={inputCls}
                 />
-              </div>
+              </Need>
 
-              <CardIdentityFields idPrefix={`add-${i}`} value={card} onChange={(patch) => updateCard(i, patch)} />
+              <CardIdentityFields idPrefix={`add-${i}`} value={card} onChange={(patch) => updateCard(i, patch)} showMissing={showMissing} />
 
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Declared Value *</label>
+              <Need missing={showMissing && (valueCents(card) <= 0 || overCap(card))} note={overCap(card) ? null : "Enter a declared value."}>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Declared Value<Req /></label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                   <input
@@ -165,7 +173,7 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
                 {isHighValue(valueCents(card)) && (
                   <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-md px-3 py-2 font-medium mt-2">{HIGH_VALUE_NOTICE}</p>
                 )}
-              </div>
+              </Need>
 
               <div>
                 <label className="text-xs font-semibold text-muted-foreground mb-1 block">Photos (optional)</label>
@@ -206,14 +214,15 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
       </div>
 
       <div className="mt-6 bg-white rounded-lg border border-border p-4 md:p-5">
-        <SigningSection slabCards={[]} highValueCards={highValueCards} state={signing} onChange={setSigning} onSkipSlab={() => {}} />
+        <SigningSection slabCards={[]} highValueCards={highValueCards} state={signing} onChange={setSigning} onSkipSlab={() => {}} showMissing={showMissing} />
       </div>
 
       {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
 
+      <MissingNote show={showMissing && !ready} />
       <button
         onClick={handleSubmit}
-        disabled={!canSubmit}
+        disabled={loading}
         className="mt-4 w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-40"
       >
         {loading ? "Redirecting to checkout…" : SIGN_BUTTON_LABEL}
