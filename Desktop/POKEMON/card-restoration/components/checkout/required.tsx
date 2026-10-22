@@ -32,7 +32,7 @@ export function Need({
   return (
     <div
       data-missing={missing || undefined}
-      className={`${className} rounded-md transition-[outline-color] ${missing ? "outline-2 outline-offset-4 outline-red-600" : "outline-0 outline-transparent"}`}
+      className={`${className} rounded-md ${missing ? "outline-3 outline-offset-4 outline-red-600" : ""}`}
     >
       {children}
       {missing && note && <p className="mt-1.5 text-xs font-semibold text-red-700" role="alert">{note}</p>}
