@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CardFieldsSchema, SigningSchema, checkoutConsents, masterSignatureInput, signingError } from "@/lib/checkout-signing";
+import { CardFieldsSchema, SigningSchema, cardDetails, checkoutConsents, masterSignatureInput, signingError, type AuthorizedOrder } from "@/lib/checkout-signing";
 import { recordConsents, recordSignatures, signingContext } from "@/lib/signatures";
 import { ensureTermsVersion } from "@/lib/terms-versions";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -68,6 +68,13 @@ export async function POST(
     }, { status: 400 });
   }
 
+  const cardPrices = cards.map((c) => getCardPriceCents(tier, c.declaredValueCents));
+  const subtotalCents = cardPrices.reduce((a, b) => a + b, 0);
+  if (subtotalCents <= 0) return Response.json({ error: "Could not compute price" }, { status: 400 });
+
+  const taxCents = Math.round(subtotalCents * TAX_RATE);
+  const totalCents = subtotalCents + taxCents;
+
   let terms;
   try {
     terms = await ensureTermsVersion(admin);
@@ -75,8 +82,18 @@ export async function POST(
     console.error("Terms version unavailable:", err);
     return Response.json({ error: "We couldn't load the Terms of Service. Please try again in a moment.", code: "TERMS_UNAVAILABLE" }, { status: 500 });
   }
+  // Exactly what the customer is authorizing, recorded with the signature
+  const authorized: AuthorizedOrder = {
+    order_number: order.order_number,
+    cards: cards.map((c, i) => ({
+      ...cardDetails({ ...c, card_name: c.name }, c.declaredValueCents),
+      services: [{ name: `${tier.name} - Full Restoration & PSA Prep (added card)`, cents: cardPrices[i] }],
+    })),
+    order_lines: [{ name: "Sales tax", cents: taxCents }],
+    total_cents: totalCents,
+  };
   const ctx = await signingContext(request, email);
-  const signed = await recordSignatures(admin, [masterSignatureInput(order.id, terms, parsed.data.terms!.signer_name)], ctx);
+  const signed = await recordSignatures(admin, [masterSignatureInput(order.id, terms, parsed.data.terms!.signer_name, authorized)], ctx);
   const consentError = "error" in signed ? null : await recordConsents(admin, checkoutConsents(order.id, parsed.data), ctx);
   if ("error" in signed || consentError) {
     return Response.json({ error: "We couldn't save your signature. Please try again." }, { status: 500 });
@@ -91,12 +108,6 @@ export async function POST(
     metadata: { cards, terms_version_id: terms.id },
   }).select("id").single();
 
-  const cardPrices = cards.map((c) => getCardPriceCents(tier, c.declaredValueCents));
-  const subtotalCents = cardPrices.reduce((a, b) => a + b, 0);
-  if (subtotalCents <= 0) return Response.json({ error: "Could not compute price" }, { status: 400 });
-
-  const taxCents = Math.round(subtotalCents * TAX_RATE);
-  const totalCents = subtotalCents + taxCents;
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://thecarddoc1.com";
 

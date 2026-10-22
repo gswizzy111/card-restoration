@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   esignConsentText, masterSignatureText, MEDIA_LABEL, TAG_LABEL, TERMS_VERSION,
 } from "@/lib/legal/current-terms";
-import { agreementText, slabAuthorization, type CardDetails } from "@/lib/legal/agreements-v1";
+import { agreementText, cardTitle, holderLine, slabAuthorization, type CardDetails } from "@/lib/legal/agreements-v1";
 import { documentHash, masterDocumentHash, type ConsentType, type SignatureInput } from "@/lib/signatures";
 import type { TermsVersionRow } from "@/lib/terms-versions";
 
@@ -50,8 +50,60 @@ export function slabSignatureFor(s: SubmittedSigning, index: number, card: CardD
   return s.slab_authorizations?.find((a) => a.card_index === index) ?? null;
 }
 
-export function masterSignatureInput(orderId: string, terms: TermsVersionRow, signerName: string): SignatureInput {
-  const documentText = masterSignatureText();
+/** A charge the customer authorized: a service on one card, or an order-level line (no amount for a choice like self-ship). */
+export type AuthorizedLine = { name: string; cents?: number | null };
+
+/**
+ * Exactly what the customer authorized when signing (Terms 35.3): each card
+ * with its identifying details, declared value and services, then the
+ * order's other charges and total. Stored with the master signature and
+ * printed on its PDF, so the record shows what was bought, not just that the
+ * Terms were accepted.
+ */
+export type AuthorizedOrder = {
+  order_number: string | number;
+  cards: (CardDetails & { services: AuthorizedLine[] })[];
+  order_lines: AuthorizedLine[];
+  total_cents: number;
+};
+
+export const usd = (cents: number) =>
+  `${cents < 0 ? "-" : ""}$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const line = (l: AuthorizedLine) => `- ${l.name}${l.cents == null ? "" : `: ${usd(l.cents)}`}`;
+const displayOrder = (n: string | number) => (/^\d+$/.test(String(n)) ? `R${n}` : String(n));
+
+/** One card's identifying details and declared value, as recorded with a signature. */
+export function cardDetails(c: Omit<Partial<CardDetails>, "card_name"> & { card_name: string }, declaredValueCents: number | null | undefined): CardDetails {
+  return {
+    card_name: c.card_name.trim(),
+    card_set: c.card_set ?? null,
+    card_year: c.card_year ?? null,
+    card_number: c.card_number ?? null,
+    variation: c.variation ?? null,
+    grading_company: c.grading_company ?? null,
+    grade: c.grade ?? null,
+    cert_number: c.cert_number ?? null,
+    known_defects: c.known_defects ?? null,
+    declared_value_cents: declaredValueCents ?? null,
+  };
+}
+
+export function authorizedOrderText(a: AuthorizedOrder): string {
+  const blocks = [`## Services authorized on order ${displayOrder(a.order_number)}`];
+  a.cards.forEach((c, i) => {
+    const holder = c.cert_number?.trim() ? ` Holder: ${holderLine(c)}.` : "";
+    const value = c.declared_value_cents == null ? "not given" : usd(c.declared_value_cents);
+    const defects = c.known_defects?.trim() ? ` Known defects: ${c.known_defects.trim()}` : "";
+    blocks.push(`Card ${i + 1}: ${cardTitle(c)}.${holder} Declared value: ${value}.${defects}`);
+    if (c.services.length) blocks.push(c.services.map(line).join("\n"));
+  });
+  if (a.order_lines.length) blocks.push("Order:", a.order_lines.map(line).join("\n"));
+  blocks.push(`Order total: ${usd(a.total_cents)}`);
+  return blocks.join("\n\n");
+}
+
+export function masterSignatureInput(orderId: string, terms: TermsVersionRow, signerName: string, authorized: AuthorizedOrder): SignatureInput {
+  const documentText = [masterSignatureText(), authorizedOrderText(authorized)].join("\n\n");
   return {
     order_id: orderId,
     type: "master_terms",
@@ -59,6 +111,7 @@ export function masterSignatureInput(orderId: string, terms: TermsVersionRow, si
     document_title: `Terms of Service v${terms.version}`,
     document_text: documentText,
     document_sha256: masterDocumentHash(terms.content_markdown, documentText),
+    card_snapshot: authorized,
     typed_full_name: signerName,
   };
 }

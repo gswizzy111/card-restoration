@@ -21,7 +21,8 @@ const fileSafe = (s: string) => s.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/
 export type CompanySignature = { signed_by: string; signed_at: string };
 
 function signatureFields(sig: SignatureRow, orderNumber: string | number): [string, string][] {
-  const card = sig.card_snapshot as CardDetails | null;
+  // A master signature's snapshot is the whole order (printed in its text), not one card
+  const card = sig.type === "master_terms" ? null : (sig.card_snapshot as CardDetails | null);
   return [
     ["Order", displayOrder(orderNumber)],
     ...(card ? [["Card", cardTitle(card)] as [string, string]] : []),
@@ -61,7 +62,7 @@ export async function signaturePdf(
   elements.push({ type: "rule" });
   if (sig.type === "master_terms" && terms) {
     elements.push(
-      { type: "small", text: "The document signed: the Terms of Service below, then the Key Terms, certification and box checked." },
+      { type: "small", text: "The document signed: the Terms of Service below, then the Key Terms, certification, box checked and the services authorized." },
       ...blocksToPdf(parseLegalMarkdown(terms.content_markdown)),
       { type: "rule" },
     );
