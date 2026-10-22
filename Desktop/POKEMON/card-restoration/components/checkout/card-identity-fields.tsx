@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { GRADING_COMPANIES } from "@/lib/legal/agreements-v1";
+import { Need, Req } from "./required";
 
 /** The identifying details for one card (Terms Section 3.2), besides its name, value and photos. */
 export type CardIdentity = {
@@ -38,12 +39,15 @@ export function CardIdentityFields({
   onChange,
   idPrefix,
   needsCert = false,
+  showMissing = false,
 }: {
   value: CardIdentity;
   onChange: (patch: Partial<CardIdentity>) => void;
   idPrefix: string;
   /** Slab removal is selected: the grading company and cert number are required. */
   needsCert?: boolean;
+  /** The customer tried to go on: outline what's missing in red */
+  showMissing?: boolean;
 }) {
   const graded = !!value.grading_company || needsCert;
   const missingCert = needsCert && (!value.grading_company || !value.cert_number.trim());
@@ -65,8 +69,8 @@ export function CardIdentityFields({
         <Label htmlFor={`${idPrefix}-var`}>Variation</Label>
         <Input id={`${idPrefix}-var`} placeholder="e.g. 1st Edition, Holo, Refractor" value={value.variation} onChange={(e) => onChange({ variation: e.target.value })} />
       </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`${idPrefix}-company`}>Grading company{needsCert && " *"}</Label>
+      <Need missing={showMissing && needsCert && !value.grading_company} className="flex flex-col gap-1.5">
+        <Label htmlFor={`${idPrefix}-company`}>Grading company{needsCert && <Req />}</Label>
         <select
           id={`${idPrefix}-company`}
           className={SELECT}
@@ -76,7 +80,7 @@ export function CardIdentityFields({
           <option value="">{needsCert ? "Choose…" : "Not graded (raw)"}</option>
           {GRADING_COMPANIES.map((g) => <option key={g} value={g}>{g}</option>)}
         </select>
-      </div>
+      </Need>
       {graded && (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${idPrefix}-grade`}>Grade</Label>
@@ -84,11 +88,11 @@ export function CardIdentityFields({
         </div>
       )}
       {graded && (
-        <div className="sm:col-span-2 flex flex-col gap-1.5">
-          <Label htmlFor={`${idPrefix}-cert`}>Certification number{needsCert && " *"}</Label>
+        <Need missing={showMissing && needsCert && !value.cert_number.trim()} className="sm:col-span-2 flex flex-col gap-1.5">
+          <Label htmlFor={`${idPrefix}-cert`}>Certification number{needsCert && <Req />}</Label>
           <Input id={`${idPrefix}-cert`} placeholder="From the slab label" value={value.cert_number} onChange={(e) => onChange({ cert_number: e.target.value })} />
           {missingCert && <p className="text-xs text-red-700 font-medium">Slab removal needs the grading company and certification number.</p>}
-        </div>
+        </Need>
       )}
       <div className="sm:col-span-2 flex flex-col gap-1.5">
         <Label htmlFor={`${idPrefix}-defects`}>Known defects</Label>

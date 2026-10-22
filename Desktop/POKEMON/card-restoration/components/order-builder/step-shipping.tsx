@@ -5,12 +5,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 import type { CustomerInfo, ShippingRate } from "@/lib/types";
 
+import { Need, Req } from "@/components/checkout/required";
 interface StepShippingProps {
   customer: CustomerInfo;
   shippingMethod: "buy_label" | "self_ship" | null;
   selectedRate: ShippingRate | null;
   onMethodChange: (method: "buy_label" | "self_ship") => void;
   onRateChange: (rate: ShippingRate | null) => void;
+  /** The customer pressed Continue with something missing: outline it in red */
+  showMissing?: boolean;
 }
 
 export function StepShipping({
@@ -19,6 +22,7 @@ export function StepShipping({
   selectedRate,
   onMethodChange,
   onRateChange,
+  showMissing = false,
 }: StepShippingProps) {
   const [rates, setRates] = useState<ShippingRate[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);
@@ -143,6 +147,7 @@ export function StepShipping({
             Select a return shipping option below. This is paid now so we can ship your restored cards back to you.
           </p>
 
+          <Need missing={showMissing && !selectedRate} note="Choose a return shipping option.">
           {loadingRates && (
             <div className="flex flex-col gap-2">
               <Skeleton className="h-14 w-full rounded-lg" />
@@ -173,6 +178,7 @@ export function StepShipping({
               <span className="font-medium text-foreground">{formatCurrency(rate.amount_cents)}</span>
             </button>
           ))}
+          </Need>
         </div>
       </div>
     );
@@ -183,11 +189,11 @@ export function StepShipping({
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="font-serif text-2xl font-medium text-foreground mb-1">
-          How will you send your cards to us?
+          How will you send your cards to us?<Req />
         </h2>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <Need missing={showMissing && !shippingMethod} note="Choose how you'll send your cards." className="flex flex-col gap-3">
         {/* Buy label */}
         <button
           type="button"
@@ -215,7 +221,7 @@ export function StepShipping({
                 We generate a prepaid label and email it to you. Print, tape it on, and drop it off. Includes tracking. Insured shipping and signature confirmation are optional add-ons at checkout.
               </p>
               {shippingMethod === "buy_label" && (
-                <div className="mt-4 flex flex-col gap-2">
+                <Need missing={showMissing && !selectedRate} note="Choose a shipping option." className="mt-4 flex flex-col gap-2">
                   {loadingRates && (
                     <>
                       <Skeleton className="h-10 w-full rounded-lg" />
@@ -262,7 +268,7 @@ export function StepShipping({
                       </button>
                     );
                   })}
-                </div>
+                </Need>
               )}
             </div>
           </div>
@@ -292,7 +298,7 @@ export function StepShipping({
             </div>
           </div>
         </button>
-      </div>
+      </Need>
     </div>
   );
 }

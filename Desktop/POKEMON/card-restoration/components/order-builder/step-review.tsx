@@ -11,6 +11,7 @@ import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import { INSURANCE_ENABLED } from "@/lib/site-config";
 import { InsuranceElectionBox, type InsuranceElection } from "@/components/checkout/insurance-election";
+import { Req } from "@/components/checkout/required";
 import type { InsuranceType } from "@/lib/types";
 
 const INSURANCE_OPTION_LABELS: Record<Exclude<InsuranceType, "none">, { label: string; sub: string }> = {
@@ -43,6 +44,8 @@ interface StepReviewProps {
   selectedTier?: RestorationTierId;
   /** The slab authorizations, permissions, e-sign consent and master signature (components/checkout/signing-section.tsx) */
   signingSlot?: React.ReactNode;
+  /** The customer pressed sign with something missing: outline it in red */
+  showMissing?: boolean;
   insuranceElection: InsuranceElection;
   onInsuranceElectionChange: (e: Exclude<InsuranceElection, null>) => void;
   insurance: InsuranceSelection;
@@ -77,6 +80,7 @@ export function StepReview({
   selectedTier,
   insurance,
   signingSlot,
+  showMissing = false,
   insuranceElection,
   onInsuranceElectionChange,
   onInsuranceChange,
@@ -340,9 +344,14 @@ export function StepReview({
 
       {/* Shipping insurance: a required choice, buy or decline (Terms 15.2, 15.4) */}
       {INSURANCE_ENABLED && (
-        <InsuranceElectionBox election={insuranceElection} onElection={onInsuranceElectionChange}>
+        <InsuranceElectionBox
+          election={insuranceElection}
+          onElection={onInsuranceElectionChange}
+          showMissing={showMissing}
+          purchaseMissing={!(insurance.declaredValueCents > 0 && insurance.type !== "none")}
+        >
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide" htmlFor="insurance-amount">Amount to insure</label>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide" htmlFor="insurance-amount">Amount to insure<Req /></label>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">$</span>
               <input

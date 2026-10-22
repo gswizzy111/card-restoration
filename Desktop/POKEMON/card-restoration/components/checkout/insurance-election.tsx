@@ -2,6 +2,7 @@
 
 import { Info, ShieldCheck, ShieldOff } from "lucide-react";
 import { INSURANCE_DECLINED_TEXT, INSURANCE_DETAILS, NOT_INSURED_TEXT } from "@/lib/legal/current-terms";
+import { Need, Req } from "./required";
 
 export type InsuranceElection = "purchased" | "declined" | null;
 
@@ -15,12 +16,18 @@ export function InsuranceElectionBox({
   onElection,
   purchaseAvailable = true,
   unavailableNote,
+  showMissing = false,
+  purchaseMissing = false,
   children,
 }: {
   election: InsuranceElection;
   onElection: (e: Exclude<InsuranceElection, null>) => void;
   purchaseAvailable?: boolean;
   unavailableNote?: string;
+  /** The customer tried to go on: outline what's missing in red */
+  showMissing?: boolean;
+  /** "Buy" is chosen but the amount or coverage isn't filled in yet */
+  purchaseMissing?: boolean;
   children?: React.ReactNode;
 }) {
   const option = (value: Exclude<InsuranceElection, null>, label: string, Icon: typeof ShieldCheck, disabled = false) => (
@@ -45,20 +52,24 @@ export function InsuranceElectionBox({
   return (
     <div className="flex flex-col gap-3" id="insurance-election">
       <div>
-        <h3 className="font-medium text-foreground">Shipping insurance <span className="text-xs font-normal text-muted-foreground">(choose one)</span></h3>
+        <h3 className="font-medium text-foreground">Shipping insurance<Req /> <span className="text-xs font-normal text-muted-foreground">(choose one)</span></h3>
         <p className="text-xs text-muted-foreground mt-1">{NOT_INSURED_TEXT}</p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {option("purchased", "Buy shipping insurance", ShieldCheck, !purchaseAvailable)}
-        {option("declined", "Decline shipping insurance", ShieldOff)}
-      </div>
+      <Need missing={showMissing && election === null} note="Choose to buy or decline shipping insurance.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {option("purchased", "Buy shipping insurance", ShieldCheck, !purchaseAvailable)}
+          {option("declined", "Decline shipping insurance", ShieldOff)}
+        </div>
+      </Need>
       {!purchaseAvailable && unavailableNote && <p className="text-xs text-muted-foreground">{unavailableNote}</p>}
       {election === "purchased" && purchaseAvailable && (
         <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
           <ul className="flex flex-col gap-1.5 text-xs text-muted-foreground leading-relaxed">
             {INSURANCE_DETAILS.map((d) => <li key={d}>{d}</li>)}
           </ul>
-          {children}
+          <Need missing={showMissing && purchaseMissing} note="Enter the amount to insure and pick a coverage." className="flex flex-col gap-3">
+            {children}
+          </Need>
         </div>
       )}
       {election === "declined" && (

@@ -9,6 +9,7 @@ import {
 } from "@/lib/legal/current-terms";
 import { cardTitle, holderLine, SLAB_FEE_CENTS, type CardDetails } from "@/lib/legal/agreements-v1";
 import type { SubmittedSigning } from "@/lib/checkout-signing";
+import { Need, Req } from "./required";
 
 /**
  * Everything a customer signs or chooses before an order is placed (Terms
@@ -86,6 +87,7 @@ export function SigningSection({
   onOpenSlab,
   skippedSlabs = [],
   mediaRequiredNote,
+  showMissing = false,
 }: {
   slabCards: SlabCard[];
   highValueCards: { name: string; valueCents: number }[];
@@ -99,6 +101,8 @@ export function SigningSection({
   skippedSlabs?: string[];
   /** Set when a paid add-on depends on the photo permission. */
   mediaRequiredNote?: string;
+  /** The customer pressed sign with something missing: outline it in red */
+  showMissing?: boolean;
 }) {
   const id = useId();
   return (
@@ -109,7 +113,8 @@ export function SigningSection({
           {slabCards.map((c) => {
             const signed = slabSigned(state, c);
             return (
-              <div key={slabKey(c)} className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border px-4 py-3 text-sm ${signed ? "border-border bg-card" : "border-amber-300 bg-amber-50"}`}>
+              <Need key={slabKey(c)} missing={showMissing && !signed} note="Sign this slab's authorization, or choose not to open it.">
+              <div className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border px-4 py-3 text-sm ${signed ? "border-border bg-card" : "border-amber-300 bg-amber-50"}`}>
                 <p className="text-foreground min-w-0">
                   {signed ? <Check className="inline h-4 w-4 mr-1.5 -mt-0.5 text-primary" strokeWidth={2.25} /> : null}
                   <strong className="font-semibold">{cardTitle(c.details) || `Card ${c.index + 1}`}</strong> ({holderLine(c.details)}):{" "}
@@ -128,6 +133,7 @@ export function SigningSection({
                   )}
                 </span>
               </div>
+              </Need>
             );
           })}
           {skippedSlabs.length > 0 && (
@@ -189,14 +195,18 @@ export function SigningSection({
             </a>
           </div>
         </div>
-        <label className="flex items-start gap-2.5 text-sm cursor-pointer">
-          <input type="checkbox" className={CHECK} checked={state.agreed} onChange={(e) => onChange({ ...state, agreed: e.target.checked })} />
-          <span className="font-semibold text-foreground">{AGREE_LABEL} <span className="text-red-700">*</span></span>
-        </label>
-        <label className="flex items-start gap-2.5 text-sm cursor-pointer">
-          <input type="checkbox" className={CHECK} checked={state.esign} onChange={(e) => onChange({ ...state, esign: e.target.checked })} />
-          <span className="text-foreground">{ESIGN_LABEL} <span className="text-red-700">*</span></span>
-        </label>
+        <Need missing={showMissing && !state.agreed} note="Check this box to agree to the Terms.">
+          <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+            <input type="checkbox" className={CHECK} checked={state.agreed} onChange={(e) => onChange({ ...state, agreed: e.target.checked })} />
+            <span className="font-semibold text-foreground">{AGREE_LABEL}<Req /></span>
+          </label>
+        </Need>
+        <Need missing={showMissing && !state.esign} note="Check this box to sign electronically.">
+          <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+            <input type="checkbox" className={CHECK} checked={state.esign} onChange={(e) => onChange({ ...state, esign: e.target.checked })} />
+            <span className="text-foreground">{ESIGN_LABEL}<Req /></span>
+          </label>
+        </Need>
         <details>
           <summary className={MORE}>Your certification (Section {CERTIFICATION_CLAUSE}) and electronic records</summary>
           <div className="mt-2 max-h-64 overflow-y-auto rounded-md border border-border bg-white p-3 flex flex-col gap-3" tabIndex={0} aria-label="Certification and consent to electronic records">
@@ -204,8 +214,8 @@ export function SigningSection({
             <LegalDocument blocks={ESIGN_BLOCKS} variant="compact" />
           </div>
         </details>
-        <div className="flex flex-col gap-1.5 max-w-md">
-          <label htmlFor={`${id}-legal-name`} className="text-xs font-semibold text-muted-foreground">Full legal name *</label>
+        <Need missing={showMissing && !named(state.signerName)} note="Type your full legal name to sign." className="flex flex-col gap-1.5 max-w-md">
+          <label htmlFor={`${id}-legal-name`} className="text-xs font-semibold text-muted-foreground">Full legal name<Req /></label>
           <input
             id={`${id}-legal-name`}
             className={NAME_INPUT}
@@ -216,7 +226,7 @@ export function SigningSection({
           <p className="text-xs text-muted-foreground">
             Typing your name is your electronic signature on the Terms, including the certification above. The date and time come from our server when you place the order.
           </p>
-        </div>
+        </Need>
       </section>
     </div>
   );

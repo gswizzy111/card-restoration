@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { PhotoUploader } from "./photo-uploader";
 import { CardIdentityFields, emptyIdentity, type CardIdentity } from "@/components/checkout/card-identity-fields";
+import { Need, Req } from "@/components/checkout/required";
 import { HIGH_VALUE_NOTICE, VALUE_HELP } from "@/lib/legal/current-terms";
 import { isHighValue } from "@/lib/legal/agreements-v1";
 import type { Service, CardEntry } from "@/lib/types";
@@ -46,6 +47,8 @@ interface StepCardsProps {
   slabSigned?: (cardId: string) => boolean;
   /** Open the card's slab authorization pop-up */
   onOpenSlab?: (cardId: string) => void;
+  /** The customer pressed Continue with something missing: outline it in red */
+  showMissing?: boolean;
 }
 
 function identityOf(c: CardEntry): CardIdentity {
@@ -74,7 +77,7 @@ export function cardProblems(c: CardEntry, defaultTier?: RestorationTierId): str
   return problems;
 }
 
-export function StepCards({ cards, services, selectedServiceIds, onChange, defaultTier, slabSigned, onOpenSlab }: StepCardsProps) {
+export function StepCards({ cards, services, selectedServiceIds, onChange, defaultTier, slabSigned, onOpenSlab, showMissing = false }: StepCardsProps) {
   const availableServices = services.filter((s) => selectedServiceIds.includes(s.id));
 
   function updateCard(id: string, patch: Partial<CardEntry>) {
@@ -126,6 +129,7 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
           const estimatedValueCents = parseCents(card.estimated_value ?? "");
           const activeTierId = card.tier ?? defaultTier;
           const activeTier = activeTierId ? ALL_TIERS.find((t) => t.id === activeTierId) : null;
+          const missing = new Set(showMissing ? cardProblems(card, defaultTier) : []);
 
           return (
             <div key={card.id} className="border border-border rounded-lg p-5 flex flex-col gap-4 bg-card">
@@ -143,15 +147,15 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2 flex flex-col gap-1.5">
-                  <Label htmlFor={`name-${card.id}`}>Card Name *</Label>
+                <Need missing={missing.has("name")} className="sm:col-span-2 flex flex-col gap-1.5">
+                  <Label htmlFor={`name-${card.id}`}>Card Name<Req /></Label>
                   <Input
                     id={`name-${card.id}`}
                     placeholder="e.g. 1986 Fleer Michael Jordan"
                     value={card.card_name}
                     onChange={(e) => updateCard(card.id, { card_name: e.target.value })}
                   />
-                </div>
+                </Need>
 
                 <div className="sm:col-span-2">
                   <CardIdentityFields
@@ -159,12 +163,13 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                     value={identityOf(card)}
                     onChange={(patch) => updateCard(card.id, patch)}
                     needsCert={card.needs_slab_crack}
+                    showMissing={showMissing}
                   />
                 </div>
 
-                <div className="sm:col-span-2 flex flex-col gap-1.5">
+                <Need missing={missing.has("value")} className="sm:col-span-2 flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor={`value-${card.id}`}>Declared value (USD) *</Label>
+                    <Label htmlFor={`value-${card.id}`}>Declared value (USD)<Req /></Label>
                     {activeTier && (
                       <span className="text-xs text-muted-foreground">
                         {activeTier.max_card_value_cents === null
@@ -189,7 +194,7 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                   {isHighValue(estimatedValueCents) && (
                     <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-md px-3 py-2 font-medium">{HIGH_VALUE_NOTICE}</p>
                   )}
-                </div>
+                </Need>
 
                 <div className="sm:col-span-2 flex flex-col gap-1.5">
                   <Label htmlFor={`notes-${card.id}`}>Notes</Label>
@@ -204,8 +209,8 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
               </div>
 
               {/* Per-card tier selector */}
-              <div className="flex flex-col gap-2">
-                <Label>Service Level</Label>
+              <Need missing={missing.has("tier")} note="Pick a tier that allows this card's value." className="flex flex-col gap-2">
+                <Label>Service Level<Req /></Label>
                 <div className="grid grid-cols-2 gap-2">
                   {ALL_TIERS.map((t) => {
                     const selected = (card.tier ?? defaultTier) === t.id;
@@ -243,7 +248,7 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                     );
                   })}
                 </div>
-              </div>
+              </Need>
 
               {/* Services */}
               {availableServices.length > 1 && (
@@ -272,10 +277,10 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
               )}
 
               {/* Photos — required */}
-              <div className="flex flex-col gap-1.5">
+              <Need missing={missing.has("photos")} note="Upload at least one photo." className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                   <Label>
-                    Photos <span className="text-red-500 font-bold">*</span>
+                    Photos<Req />
                   </Label>
                   {card.photo_urls.length > 0 && (
                     <span className="text-xs text-green-600 font-semibold">✓ {card.photo_urls.length} photo{card.photo_urls.length !== 1 ? "s" : ""} added</span>
@@ -285,10 +290,10 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                   photoUrls={card.photo_urls}
                   onChange={(urls) => updateCard(card.id, { photo_urls: urls })}
                 />
-                {card.photo_urls.length === 0 && (
+                {card.photo_urls.length === 0 && !missing.has("photos") && (
                   <p className="text-xs text-red-500 font-medium">Upload at least one photo to continue.</p>
                 )}
-              </div>
+              </Need>
 
               {/* Slab cracking */}
               <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
