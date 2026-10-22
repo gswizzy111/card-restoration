@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
+import { sendCancellationEmail } from "@/lib/subscription-emails";
 
 export async function POST() {
   const supabase = await createClient();
@@ -11,7 +12,7 @@ export async function POST() {
 
   const { data: sub } = await admin
     .from("subscriptions")
-    .select("id, stripe_subscription_id, status")
+    .select("id, stripe_subscription_id, status, customer_email, customer_name")
     .ilike("customer_email", user.email!)
     .eq("status", "active")
     .maybeSingle();
@@ -25,10 +26,12 @@ export async function POST() {
     return Response.json({ error: msg }, { status: 500 });
   }
 
+  const cancelledAt = new Date();
   await admin
     .from("subscriptions")
-    .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+    .update({ status: "cancelled", cancelled_at: cancelledAt.toISOString() })
     .eq("id", sub.id);
+  await sendCancellationEmail(sub.customer_email, sub.customer_name, cancelledAt);
 
   return Response.json({ ok: true });
 }

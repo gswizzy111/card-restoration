@@ -6,6 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { PhotoUploader } from "./photo-uploader";
+import { CardIdentityFields, emptyIdentity, type CardIdentity } from "@/components/checkout/card-identity-fields";
+import { HIGH_VALUE_NOTICE, VALUE_HELP } from "@/lib/legal/current-terms";
+import { isHighValue } from "@/lib/legal/agreements-v1";
 import type { Service, CardEntry } from "@/lib/types";
 import { getAllTiers, formatCents } from "@/lib/restoration-tiers";
 import type { RestorationTier, RestorationTierId } from "@/lib/restoration-tiers";
@@ -41,6 +44,32 @@ interface StepCardsProps {
   defaultTier?: RestorationTierId;
 }
 
+function identityOf(c: CardEntry): CardIdentity {
+  return {
+    card_set: c.card_set ?? "",
+    card_year: c.card_year ?? "",
+    card_number: c.card_number ?? "",
+    variation: c.variation ?? "",
+    grading_company: c.grading_company ?? "",
+    grade: c.grade ?? "",
+    cert_number: c.cert_number ?? "",
+    known_defects: c.known_defects ?? "",
+  };
+}
+
+/** A card is ready when it has a name, photos and a value within its tier's cap; a slab to open also needs its cert. */
+export function cardProblems(c: CardEntry, defaultTier?: RestorationTierId): string[] {
+  const problems: string[] = [];
+  const value = parseCents(c.estimated_value ?? "");
+  const tier = ALL_TIERS.find((t) => t.id === (c.tier ?? defaultTier));
+  if (!c.card_name.trim()) problems.push("name");
+  if (c.photo_urls.length === 0) problems.push("photos");
+  if (value <= 0) problems.push("value");
+  if (tier && tier.max_card_value_cents !== null && value > tier.max_card_value_cents) problems.push("tier");
+  if (c.needs_slab_crack && (!c.grading_company || !c.cert_number?.trim())) problems.push("cert");
+  return problems;
+}
+
 export function StepCards({ cards, services, selectedServiceIds, onChange, defaultTier }: StepCardsProps) {
   const availableServices = services.filter((s) => selectedServiceIds.includes(s.id));
 
@@ -52,9 +81,7 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
     const newCard: CardEntry = {
       id: crypto.randomUUID(),
       card_name: "",
-      card_set: "",
-      card_year: "",
-      card_number: "",
+      ...emptyIdentity(),
       estimated_value: "",
       notes: "",
       photo_urls: [],
@@ -122,29 +149,18 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                   />
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`set-${card.id}`}>Set / Year</Label>
-                  <Input
-                    id={`set-${card.id}`}
-                    placeholder="e.g. Base Set"
-                    value={card.card_set}
-                    onChange={(e) => updateCard(card.id, { card_set: e.target.value })}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`num-${card.id}`}>Card Number</Label>
-                  <Input
-                    id={`num-${card.id}`}
-                    placeholder="e.g. #57"
-                    value={card.card_number}
-                    onChange={(e) => updateCard(card.id, { card_number: e.target.value })}
+                <div className="sm:col-span-2">
+                  <CardIdentityFields
+                    idPrefix={`card-${card.id}`}
+                    value={identityOf(card)}
+                    onChange={(patch) => updateCard(card.id, patch)}
+                    needsCert={card.needs_slab_crack}
                   />
                 </div>
 
                 <div className="sm:col-span-2 flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor={`value-${card.id}`}>Estimated Value (USD)</Label>
+                    <Label htmlFor={`value-${card.id}`}>Declared value (USD) *</Label>
                     {activeTier && (
                       <span className="text-xs text-muted-foreground">
                         {activeTier.max_card_value_cents === null
@@ -156,13 +172,18 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                   <Input
                     id={`value-${card.id}`}
                     placeholder="e.g. 500"
+                    inputMode="decimal"
                     value={card.estimated_value}
                     onChange={(e) => updateCard(card.id, { estimated_value: e.target.value })}
                   />
+                  <p className="text-xs text-muted-foreground">{VALUE_HELP}</p>
                   {activeTier && activeTier.max_card_value_cents !== null && estimatedValueCents > activeTier.max_card_value_cents && (
                     <p className="text-xs text-red-600 font-semibold">
                       ⚠ This value exceeds the {activeTier.name} tier&apos;s max of ${(activeTier.max_card_value_cents / 100).toLocaleString()}. Please select a higher tier below.
                     </p>
+                  )}
+                  {isHighValue(estimatedValueCents) && (
+                    <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-md px-3 py-2 font-medium">{HIGH_VALUE_NOTICE}</p>
                   )}
                 </div>
 
@@ -170,7 +191,7 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                   <Label htmlFor={`notes-${card.id}`}>Notes</Label>
                   <Textarea
                     id={`notes-${card.id}`}
-                    placeholder="Describe condition issues, areas of concern, or special instructions"
+                    placeholder="Special instructions or areas of concern"
                     value={card.notes}
                     onChange={(e) => updateCard(card.id, { notes: e.target.value })}
                     rows={2}

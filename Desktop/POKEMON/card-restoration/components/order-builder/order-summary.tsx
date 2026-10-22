@@ -1,5 +1,5 @@
 import { formatCurrency } from "@/lib/utils";
-import { getTierById, formatCents, RESTORATION_TIERS } from "@/lib/restoration-tiers";
+import { getTierById, getCardPriceCents, formatCents, RESTORATION_TIERS } from "@/lib/restoration-tiers";
 import type { CardEntry, ShippingRate, InsuranceSelection } from "@/lib/types";
 import { INSURANCE_ENABLED } from "@/lib/site-config";
 import { computeOrderTotals } from "@/lib/order-totals";
@@ -21,9 +21,14 @@ interface OrderSummaryProps {
 export function OrderSummary({ cards, shippingMethod, selectedRate, discountPercent = 0, isInternational = false, selectedTier, insurance, addSignatureConfirmation = false, instagramFeature = false, giftCardAmountCents = 0 }: OrderSummaryProps) {
   // Build per-tier breakdown
   const tierCounts: Partial<Record<RestorationTierId, number>> = {};
+  // What each tier's cards cost (Diamond is a percentage of each card's value)
+  const tierCents: Partial<Record<RestorationTierId, number>> = {};
   for (const card of cards) {
     const tierId = card.tier ?? selectedTier;
-    if (tierId) tierCounts[tierId] = (tierCounts[tierId] ?? 0) + 1;
+    if (!tierId) continue;
+    tierCounts[tierId] = (tierCounts[tierId] ?? 0) + 1;
+    const value = Math.round((parseFloat((card.estimated_value ?? "").replace(/[$,]/g, "")) || 0) * 100);
+    tierCents[tierId] = (tierCents[tierId] ?? 0) + getCardPriceCents(getTierById(tierId), value);
   }
 
   const tierEntries = Object.entries(tierCounts) as [RestorationTierId, number][];
@@ -61,7 +66,7 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
             return (
               <div key={tierId} className="flex justify-between text-muted-foreground">
                 <span>{tier.name} × {count}</span>
-                <span>{formatCents(tier.price_cents * count)}</span>
+                <span>{formatCents(tierCents[tierId] ?? tier.price_cents * count)}</span>
               </div>
             );
           })
@@ -72,7 +77,11 @@ export function OrderSummary({ cards, shippingMethod, selectedRate, discountPerc
               <span>{cards.length} card{cards.length !== 1 ? "s" : ""}</span>
             </div>
             {tierEntries[0] && (
-              <p className="text-xs text-muted-foreground">{formatCents(getTierById(tierEntries[0][0]).price_cents)} each</p>
+              <p className="text-xs text-muted-foreground">
+                {getTierById(tierEntries[0][0]).pricing_type === "percentage"
+                  ? `${((getTierById(tierEntries[0][0]).pricing_rate ?? 0) * 100).toFixed(0)}% of each card's value: ${formatCents(tierCents[tierEntries[0][0]] ?? 0)}`
+                  : `${formatCents(getTierById(tierEntries[0][0]).price_cents)} each`}
+              </p>
             )}
           </>
         )}

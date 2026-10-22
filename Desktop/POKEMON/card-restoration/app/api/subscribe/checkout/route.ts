@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { stripe } from "@/lib/stripe";
 import { getSubscriptionPriceCents } from "@/lib/store-config";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { recordConsents, requestOrigin } from "@/lib/signatures";
+import { subscriptionDisclosures, subscriptionEnrollLabel } from "@/lib/subscription-terms";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -11,6 +14,8 @@ const schema = z.object({
   city: z.string().min(1, "City is required"),
   state: z.string().min(1, "State is required"),
   zip: z.string().min(1, "ZIP is required"),
+  // The customer's separate, affirmative choice to enroll (Terms Section 26)
+  enroll: z.literal(true, { message: "Please check the box to enroll in the Monthly Kit Club." }),
 });
 
 export async function POST(request: Request) {
@@ -64,6 +69,13 @@ export async function POST(request: Request) {
         }),
       },
     });
+
+    // The enrollment choice and exactly what was shown, kept with the email
+    await recordConsents(createAdminClient(), [{
+      type: "subscription",
+      granted: true,
+      consent_text: [...subscriptionDisclosures(priceCents), `[x] ${subscriptionEnrollLabel(priceCents)}`, `Stripe session ${session.id}`].join("\n\n"),
+    }], { ...requestOrigin(request), email: email.trim().toLowerCase() });
 
     return Response.json({ url: session.url });
   } catch (err) {

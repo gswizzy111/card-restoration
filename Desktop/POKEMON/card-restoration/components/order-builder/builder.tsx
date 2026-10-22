@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { AgreementSignatures, agreementsComplete, submittedAgreements, type AgreementState } from "@/components/agreements/agreement-signatures";
+import { SigningSection, emptySigning, signingReady, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
+import { emptyIdentity, identityPayload } from "@/components/checkout/card-identity-fields";
+import type { InsuranceElection } from "@/components/checkout/insurance-election";
+import { SIGN_BUTTON_LABEL } from "@/lib/legal/current-terms";
+import { isHighValue } from "@/lib/legal/agreements-v1";
+import { cardProblems } from "./step-cards";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ProgressIndicator } from "./progress-indicator";
@@ -19,9 +24,7 @@ function defaultCard(serviceId: string, tier?: RestorationTierId): CardEntry {
   return {
     id: crypto.randomUUID(),
     card_name: "",
-    card_set: "",
-    card_year: "",
-    card_number: "",
+    ...emptyIdentity(),
     estimated_value: "",
     notes: "",
     photo_urls: [],
@@ -70,10 +73,11 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [giftCardCode, setGiftCardCode] = useState("");
   const [giftCardAmountCents, setGiftCardAmountCents] = useState(0);
   const [instagramFeature, setInstagramFeature] = useState(false);
-  const [signatureDataUrl, setSignatureDataUrl] = useState("");
-  // Slab-Removal Authorization and High-Value Card Agreements (lib/agreements.ts)
-  const [agreementState, setAgreementState] = useState<AgreementState>({});
+  // The signatures and consents for the Terms of Service v1.0 (components/checkout/signing-section.tsx)
+  const [signing, setSigning] = useState<SigningState>(emptySigning());
+  const [skippedSlabs, setSkippedSlabs] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [insuranceElection, setInsuranceElection] = useState<InsuranceElection>(null);
   const [insurance, setInsurance] = useState<InsuranceSelection>({ declaredValueCents: 0, type: "none", chargeCents: 0 });
   const [addSignatureConfirmation, setAddSignatureConfirmation] = useState(false);
   const [tipCents, setTipCents] = useState(0);
@@ -93,17 +97,47 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
     const v = c.estimated_value ? Math.round(parseFloat(c.estimated_value.replace(/[$,]/g, "")) * 100) : 0;
     return isNaN(v) ? 0 : v;
   };
-  const agreementCards = cards.map((c, i) => ({ name: c.card_name.trim() || `Card ${i + 1}`, declaredValueCents: cardValueCents(c) }));
-  const slabCards = cards.flatMap((c, i) => (c.needs_slab_crack ? [agreementCards[i].name] : []));
-  const agreementsOk = agreementsComplete(agreementState, slabCards, agreementCards);
+  const slabCards: SlabCard[] = cards.flatMap((c, i) => (c.needs_slab_crack ? [{
+    index: i,
+    details: { card_name: c.card_name.trim(), ...identityPayload(c), declared_value_cents: cardValueCents(c) },
+  }] : []));
+  const highValueCards = cards.filter((c) => isHighValue(cardValueCents(c))).map((c) => ({ name: c.card_name.trim(), valueCents: cardValueCents(c) }));
+  const insuranceOk = insuranceElection === "declined"
+    || (insuranceElection === "purchased" && insurance.declaredValueCents > 0 && insurance.type !== "none");
+  const readyToSign = signingReady(signing, slabCards) && insuranceOk;
+  const stillNeeded = [
+    insuranceElection === null ? "choose to buy or decline shipping insurance" : !insuranceOk ? "enter the amount to insure and pick a coverage" : null,
+    ...slabCards.filter((c) => !submittedSigning(signing, [c]).slab_authorizations?.length).map((c) => `sign or skip the slab authorization for ${c.details.card_name || `card ${c.index + 1}`}`),
+    !signing.esign ? "consent to electronic records" : null,
+    !signing.agreed ? "check the box agreeing to the Terms" : null,
+    signing.signerName.trim().length < 2 ? "type your full legal name" : null,
+  ].filter(Boolean) as string[];
+
+  // The paid Instagram feature needs the photo permission, and goes when it's unchecked
+  function changeInstagramFeature(v: boolean) {
+    setInstagramFeature(v);
+    if (v) setSigning((s) => ({ ...s, media: true }));
+  }
+  function changeSigning(next: SigningState) {
+    setSigning(next);
+    if (!next.media && instagramFeature) setInstagramFeature(false);
+  }
+  function skipSlab(index: number) {
+    const name = cards[index]?.card_name.trim() || `Card ${index + 1}`;
+    setCards((cs) => cs.map((c, i) => (i === index ? { ...c, needs_slab_crack: false } : c)));
+    setSkippedSlabs((s) => [...s, name]);
+  }
+  function changeInsuranceElection(e: Exclude<InsuranceElection, null>) {
+    setInsuranceElection(e);
+    if (e === "declined") setInsurance((ins) => ({ ...ins, type: "none", chargeCents: 0 }));
+  }
 
   const isDiamondOrder = selectedTier === "elite" || cards.some((c) => c.tier === "elite");
   const diamondValueOk = !isDiamondOrder || totalEstimatedValueCents() >= DIAMOND_MIN_CENTS;
 
   function canAdvance(): boolean {
     if (step === 1) {
-      const basicOk = cards.every((c) => c.card_name.trim().length > 0 && c.photo_urls.length > 0);
-      return basicOk && diamondValueOk;
+      return cards.every((c) => cardProblems(c, selectedTier).length === 0) && diamondValueOk;
     }
     if (step === 2) {
       const c = customer;
@@ -125,21 +159,6 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
     setSubmitting(true);
     setCheckoutError(null);
     try {
-      // Upload signature before going to Stripe
-      let signaturePath: string | undefined;
-      if (signatureDataUrl) {
-        const sigRes = await fetch("/api/orders/signature", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dataUrl: signatureDataUrl }),
-        });
-        if (sigRes.ok) {
-          const sigData = await sigRes.json();
-          signaturePath = sigData.path;
-        }
-        // If upload fails, we still proceed — the act of signing is enforced on the client
-      }
-
       // Determine if all cards share one tier or have mixed tiers
       const tiers = cards.map((c) => c.tier ?? selectedTier);
       const uniqueTiers = [...new Set(tiers.filter(Boolean))];
@@ -154,15 +173,14 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
             : { services: [{ id: serviceId, quantity: cards.length }] }),
           cards: cards.map((c) => ({
             card_name: c.card_name,
-            card_set: c.card_set || undefined,
-            card_year: c.card_year || undefined,
-            card_number: c.card_number || undefined,
-            estimated_value_cents: c.estimated_value ? Math.round(parseFloat(c.estimated_value.replace(/[$,]/g, "")) * 100) : undefined,
+            ...identityPayload(c),
+            estimated_value_cents: cardValueCents(c),
             notes: c.notes || undefined,
             photo_urls: c.photo_urls,
             service_ids: [serviceId],
             tier: c.tier ?? selectedTier,
             needs_slab_crack: c.needs_slab_crack || undefined,
+            needs_pregrade: !!c.needs_pregrade,
           })),
           customer: {
             name: customer.name,
@@ -191,14 +209,14 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
           discount_percent: discountPercent > 0 ? discountPercent : undefined,
           gift_card_code: giftCardCode.trim().toUpperCase() || undefined,
           instagram_feature: instagramFeature || undefined,
-          insurance_declared_value_cents: insurance.declaredValueCents > 0 ? insurance.declaredValueCents : undefined,
-          insurance_type: insurance.declaredValueCents > 0 && insurance.type !== "none" ? insurance.type : undefined,
+          insurance_election: insuranceElection,
+          insurance_declared_value_cents: insuranceElection === "purchased" && insurance.declaredValueCents > 0 ? insurance.declaredValueCents : undefined,
+          insurance_type: insuranceElection === "purchased" && insurance.declaredValueCents > 0 && insurance.type !== "none" ? insurance.type : undefined,
           add_signature_confirmation: addSignatureConfirmation || undefined,
           slab_crack_count: cards.filter((c) => c.needs_slab_crack).length || undefined,
           pregrade_count: cards.filter((c) => c.needs_pregrade).length || undefined,
-          signature_path: signaturePath,
           tip_cents: tipCents > 0 ? tipCents : undefined,
-          agreements: submittedAgreements(agreementState, slabCards, agreementCards),
+          ...submittedSigning(signing, slabCards),
         }),
       });
 
@@ -250,7 +268,11 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               customer={customer}
               shippingMethod={shippingMethod}
               selectedRate={selectedRate}
-              onMethodChange={setShippingMethod}
+              onMethodChange={(m) => {
+                setShippingMethod(m);
+                // What can be insured depends on who buys the label (step-review.tsx)
+                setInsurance((ins) => ({ ...ins, type: "none", chargeCents: 0 }));
+              }}
               onRateChange={setSelectedRate}
             />
           )}
@@ -268,11 +290,19 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               onAffiliateCodeChange={setAffiliateCode}
               discountPercent={discountPercent}
               onDiscountChange={setDiscountPercent}
-              signatureDataUrl={signatureDataUrl}
-              onSignatureChange={setSignatureDataUrl}
-              agreementsSlot={
-                <AgreementSignatures slabCards={slabCards} cards={agreementCards} state={agreementState} onChange={setAgreementState} />
+              signingSlot={
+                <SigningSection
+                  slabCards={slabCards}
+                  highValueCards={highValueCards}
+                  state={signing}
+                  onChange={changeSigning}
+                  onSkipSlab={skipSlab}
+                  skippedSlabs={skippedSlabs}
+                  mediaRequiredNote={instagramFeature ? "The Instagram feature you added needs the first permission; unchecking it removes the feature." : undefined}
+                />
               }
+              insuranceElection={insuranceElection}
+              onInsuranceElectionChange={changeInsuranceElection}
               insurance={insurance}
               onInsuranceChange={setInsurance}
               addSignatureConfirmation={addSignatureConfirmation}
@@ -282,7 +312,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               giftCardAmountCents={giftCardAmountCents}
               onGiftCardAmountChange={setGiftCardAmountCents}
               instagramFeature={instagramFeature}
-              onInstagramFeatureChange={setInstagramFeature}
+              onInstagramFeatureChange={changeInstagramFeature}
               loyaltyDiscountPercent={loyaltyDiscountPercent}
               onLoyaltyDiscountChange={setLoyaltyDiscountPercent}
               tipCents={tipCents}
@@ -359,11 +389,14 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
                 Continue
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={submitting || !signatureDataUrl || !agreementsOk} className="px-8">
-                {submitting ? "Redirecting..." : "Pay Securely with Stripe"}
+              <Button onClick={handleSubmit} disabled={submitting || !readyToSign} className="px-8">
+                {submitting ? "Redirecting..." : SIGN_BUTTON_LABEL}
               </Button>
             )}
           </div>
+          {step === 4 && !readyToSign && stillNeeded.length > 0 && (
+            <p className="mt-3 text-xs text-muted-foreground sm:text-right">To sign, {stillNeeded.join("; ")}.</p>
+          )}
         </div>
 
         <div className="lg:col-span-1">

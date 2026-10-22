@@ -1,7 +1,12 @@
 import { z } from "zod";
-import { AgreementsSchema, requiredAgreements } from "@/lib/agreements";
-import { recordAgreements } from "@/lib/order-agreements";
-import { TERMS_UPDATED } from "@/lib/legal/terms";
+import { randomUUID } from "node:crypto";
+import {
+  CardFieldsSchema, SigningSchema, checkoutConsents, masterSignatureInput, signingError, slabSignatureFor, slabSignatureInput,
+} from "@/lib/checkout-signing";
+import { recordConsents, recordSignatures, signingContext, type SignatureInput } from "@/lib/signatures";
+import { ensureTermsVersion, type TermsVersionRow } from "@/lib/terms-versions";
+import { isHighValue } from "@/lib/legal/agreements-v1";
+import { itemAmounts } from "@/lib/item-pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { getPriceCents, getRatePerCard } from "@/lib/pricing";
@@ -27,17 +32,16 @@ const BodySchema = z.object({
   services: z.array(z.object({ id: z.string(), quantity: z.number().int().positive() })).optional(),
   cards: z.array(
     z.object({
-      card_name: z.string().min(1),
-      card_set: z.string().optional(),
-      card_year: z.string().optional(),
-      card_number: z.string().optional(),
-      estimated_value_cents: z.number().optional(),
+      card_name: z.string().trim().min(1).max(200),
+      // Required: every card needs its own declared value (Terms Section 4)
+      estimated_value_cents: z.number().int().positive(),
       notes: z.string().optional(),
       photo_urls: z.array(z.string()),
       service_ids: z.array(z.string()),
       tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite", "fast_pass"]).optional(),
       needs_slab_crack: z.boolean().optional(),
-    })
+      needs_pregrade: z.boolean().optional(),
+    }).extend(CardFieldsSchema.shape)
   ).min(1),
   customer: z.object({
     name: z.string().min(1),
@@ -59,14 +63,13 @@ const BodySchema = z.object({
   gift_card_code: z.string().optional(),
   instagram_feature: z.boolean().optional(),
   insurance_declared_value_cents: z.number().int().min(0).max(1_000_000).optional(),
-  insurance_type: z.enum(["inbound", "round_trip"]).optional(),
+  insurance_election: z.enum(["purchased", "declined"]).nullable().optional(),
+  insurance_type: z.enum(["inbound", "round_trip", "return"]).optional(),
   slab_crack_count: z.number().int().min(0).max(100).optional(),
   pregrade_count: z.number().int().min(0).max(100).optional(),
-  signature_path: z.string().optional(),
   add_signature_confirmation: z.boolean().optional(),
   tip_cents: z.number().int().min(0).max(50000).optional(),
-  agreements: AgreementsSchema,
-});
+}).extend(SigningSchema.shape);
 
 export async function POST(request: Request) {
   const userAgent = request.headers.get("user-agent") ?? "";
@@ -91,17 +94,45 @@ export async function POST(request: Request) {
   const data = parsed.data;
   const admin = createAdminClient();
 
-  // Slab cracking needs a signed Slab-Removal Authorization, and every card
-  // declared above $5,000 its own High-Value Card Agreement (lib/agreements.ts)
-  const slabCount = Math.min(data.slab_crack_count ?? 0, data.cards.length);
-  const slabNames = data.cards.filter((c) => c.needs_slab_crack).map((c) => c.card_name.trim());
-  const agreementCheck = requiredAgreements(
-    data.agreements,
-    slabNames.length === slabCount ? slabNames : slabCount,
-    data.cards.map((c) => ({ name: c.card_name.trim(), declaredValueCents: c.estimated_value_cents ?? 0 })),
-  );
-  if ("error" in agreementCheck) {
-    return Response.json({ error: agreementCheck.error, code: "AGREEMENT_REQUIRED" }, { status: 400 });
+  // Terms of Service v1.0 (lib/checkout-signing.ts): the master signature and
+  // e-sign consent are required; nothing below trusts the browser's totals.
+  const signingProblem = signingError(data);
+  if (signingProblem) return Response.json(signingProblem, { status: 400 });
+
+  // Shipping insurance is a required choice, bought or declined (Terms 15.2, 15.4)
+  const election = INSURANCE_ENABLED ? data.insurance_election : "declined";
+  if (election !== "purchased" && election !== "declined") {
+    return Response.json({ error: "Please choose whether to buy or decline shipping insurance.", code: "INSURANCE_ELECTION_REQUIRED" }, { status: 400 });
+  }
+  if (election === "purchased") {
+    if (!data.insurance_declared_value_cents || !data.insurance_type) {
+      return Response.json({ error: "Enter the amount to insure and pick a coverage, or decline shipping insurance.", code: "INSURANCE_INCOMPLETE" }, { status: 400 });
+    }
+    // We can only insure the trip to us when we buy that label
+    if (data.shipping_method !== "buy_label" && data.insurance_type !== "return") {
+      return Response.json({ error: "With your own shipping, only the trip back to you can be insured through us.", code: "INSURANCE_INVALID" }, { status: 400 });
+    }
+  } else {
+    data.insurance_declared_value_cents = undefined;
+    data.insurance_type = undefined;
+  }
+
+  // The paid Instagram feature needs the customer's photo permission (Terms 22.2)
+  if (data.instagram_feature && !data.marketing?.media) {
+    return Response.json({ error: "The Instagram feature needs your permission to feature photos/videos of your card. Check it under Optional permissions, or remove the feature.", code: "MEDIA_CONSENT_REQUIRED" }, { status: 400 });
+  }
+
+  // Slab removal goes ahead only for cards with their own signed authorization
+  // naming the cert number; any other slab selection is dropped, with its $7.
+  const slabSigned = data.cards.map((c, i) => (c.needs_slab_crack ? slabSignatureFor(data, i, c) : null));
+  const droppedSlabs = data.cards.filter((c, i) => c.needs_slab_crack && !slabSigned[i]).map((c) => c.card_name.trim());
+
+  let terms: TermsVersionRow;
+  try {
+    terms = await ensureTermsVersion(admin);
+  } catch (err) {
+    console.error("Terms version unavailable:", err);
+    return Response.json({ error: "We couldn't load the Terms of Service. Please try again in a moment.", code: "TERMS_UNAVAILABLE" }, { status: 500 });
   }
 
   // Diamond (elite) tier: enforce $5,000 minimum total declared value
@@ -137,6 +168,18 @@ export async function POST(request: Request) {
       .in("tier", uniqueTiers);
 
     settingsMap = Object.fromEntries((tierSettings ?? []).map((s) => [s.tier, s]));
+
+    // A tier's card-value cap is an eligibility condition (Terms 9.2): block, never upgrade silently
+    for (const [i, card] of data.cards.entries()) {
+      const tierId = cardTiers[i];
+      const max = tierId ? getTierById(tierId).max_card_value_cents : null;
+      if (tierId && max !== null && card.estimated_value_cents > max) {
+        return Response.json({
+          error: `${card.card_name.trim()} is declared at $${(card.estimated_value_cents / 100).toLocaleString()}, above the ${getTierById(tierId).name} tier's $${(max / 100).toLocaleString()} cap. Choose a higher tier for it.`,
+          code: "TIER_CAP",
+        }, { status: 400 });
+      }
+    }
 
     // Fetch once — used by every tier's slot check below
     const slotsOpenedAt = await getSlotsOpenedAt();
@@ -290,12 +333,14 @@ export async function POST(request: Request) {
   const TAX_RATE = 0.06625;
   const taxCents = Math.round((subtotalCents - discountCents) * TAX_RATE);
 
-  // Slab cracking — $7/slab, server-side, capped at card count
-  const slabCrackCount = Math.min(data.slab_crack_count ?? 0, data.cards.length);
+  // Slab cracking — $7 per signed slab authorization
+  const slabCrackCount = slabSigned.filter(Boolean).length;
   const slabCrackCents = slabCrackCount * 700;
 
-  // Pregrade — $25/card, server-side, capped at card count
-  const pregradeCount = Math.min(data.pregrade_count ?? 0, data.cards.length);
+  // Pregrade — $25/card, from the cards (or the older count), capped at card count
+  const pregradeCount = data.cards.some((c) => c.needs_pregrade !== undefined)
+    ? data.cards.filter((c) => c.needs_pregrade).length
+    : Math.min(data.pregrade_count ?? 0, data.cards.length);
   const pregradeCents = pregradeCount * 2500;
 
   // Compute insurance server-side — never trust client price
@@ -307,6 +352,9 @@ export async function POST(request: Request) {
     const shippoCost = Math.max(Math.round(data.insurance_declared_value_cents * SHIPPO_RATE), SHIPPO_MIN_CENTS);
     const perDirection = Math.round(shippoCost * MARKUP);
     insuranceChargeCents = data.insurance_type === "round_trip" ? perDirection * 2 : perDirection;
+  }
+  if (election === "purchased" && insuranceChargeCents === 0) {
+    return Response.json({ error: "Enter the amount to insure and pick a coverage, or decline shipping insurance.", code: "INSURANCE_INCOMPLETE" }, { status: 400 });
   }
 
   // Instagram feature add-on — $250 flat
@@ -369,6 +417,8 @@ export async function POST(request: Request) {
     payment_status: "pending",
     slab_crack_count: slabCrackCount,
     instagram_feature: data.instagram_feature ?? false,
+    terms_version_id: terms.id,
+    insurance_election: election,
     // Read by the admin breakdown, the admin new-order email and the affiliate pages.
     ...(data.shipping_rate?.carrier ? { inbound_carrier: data.shipping_rate.carrier } : {}),
     ...(data.shipping_rate?.service_level ? { inbound_service_level: data.shipping_rate.service_level } : {}),
@@ -477,27 +527,39 @@ export async function POST(request: Request) {
   }
   await admin.from("order_services").insert(orderServices);
 
-  // Insert cards — only include columns that likely exist; strip unknown ones defensively
-  const cardRows = data.cards.map((c) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const row: Record<string, any> = {
-      order_id: order.id,
-      card_name: c.card_name,
-      photo_urls: c.photo_urls,
-    };
-    if (c.card_set) row.card_set = c.card_set;
-    if (c.card_year) row.card_year = c.card_year;
-    if (c.card_number) row.card_number = c.card_number;
-    if (c.estimated_value_cents) row.estimated_value_cents = c.estimated_value_cents;
-    if (c.notes) row.notes = c.notes;
-    if (c.service_ids?.length) row.service_ids = c.service_ids;
-    return row;
+  // Insert cards (the order's items), each with what it cost: its service
+  // price and its share of the discount and tax, for per-card refunds
+  const cardPrices = data.cards.map((card, i) => {
+    const tierId = cardTiers[i];
+    if (!tierId) return getRatePerCard(data.cards.length);
+    return getCardPriceCents(applyDbOverride(getTierById(tierId), settingsMap[tierId] ?? null), card.estimated_value_cents);
   });
+  const amounts = itemAmounts(cardPrices, discountCents);
+  const cardIds = data.cards.map(() => randomUUID());
+  const cardRows = data.cards.map((c, i) => ({
+    id: cardIds[i],
+    order_id: order.id,
+    card_name: c.card_name.trim(),
+    photo_urls: c.photo_urls,
+    card_set: c.card_set ?? null,
+    card_year: c.card_year ?? null,
+    card_number: c.card_number ?? null,
+    variation: c.variation ?? null,
+    grading_company: c.grading_company ?? null,
+    grade: c.grade ?? null,
+    cert_number: c.cert_number ?? null,
+    known_defects: c.known_defects ?? null,
+    estimated_value_cents: c.estimated_value_cents,
+    notes: c.notes ?? null,
+    service_ids: c.service_ids?.length ? c.service_ids : null,
+    tier: cardTiers[i],
+    slab_removal_selected: !!slabSigned[i],
+    pregrade_selected: !!c.needs_pregrade,
+    // Over $5,000: no work until the High-Value Agreement is signed by both sides
+    status: isHighValue(c.estimated_value_cents) ? "on_hold_high_value" : "active",
+    ...amounts[i],
+  }));
   const { error: cardsErr } = await admin.from("cards").insert(cardRows);
-  if (cardsErr) {
-    console.error("Cards insert error:", JSON.stringify(cardsErr));
-    // Don't block checkout — order exists, cards can be added manually. Log and continue.
-  }
 
   // Insert event
   await admin.from("order_events").insert({
@@ -511,25 +573,43 @@ export async function POST(request: Request) {
     is_customer_visible: false,
   });
 
-  // Record signature if provided
-  if (data.signature_path) {
-    const { data: { publicUrl } } = admin.storage.from("card-photos").getPublicUrl(data.signature_path);
-    await admin.from("order_events").insert({
-      order_id: order.id,
-      event_type: "customer_signed",
-      description: `Customer signed the Terms of Service (last updated ${TERMS_UPDATED}) at checkout. Signature on file: ${publicUrl}`,
-      is_customer_visible: false,
-    });
-  }
-
-  // The signed agreements must be on file before payment
-  const agreementError = await recordAgreements(admin, order.id, agreementCheck.rows, request);
-  if (agreementError) {
+  // The signatures and consents must be on file before payment
+  const ctx = await signingContext(request, data.customer.email);
+  const signatureInputs: SignatureInput[] = [
+    masterSignatureInput(order.id, terms, data.terms!.signer_name),
+    ...data.cards.flatMap((c, i) => {
+      const sig = slabSigned[i];
+      return sig ? [slabSignatureInput(order.id, terms, cardIds[i], { ...c, declared_value_cents: c.estimated_value_cents }, sig.signer_name)] : [];
+    }),
+  ];
+  const signed = cardsErr ? { error: cardsErr.message } : await recordSignatures(admin, signatureInputs, ctx);
+  const consentError = "error" in signed ? null : await recordConsents(admin, checkoutConsents(order.id, data), ctx);
+  if ("error" in signed || consentError) {
+    console.error("Checkout records failed:", "error" in signed ? signed.error : consentError);
+    await admin.from("orders").update({ status: "cancelled", internal_notes: "Checkout stopped: the signed records could not be saved." }).eq("id", order.id);
     return Response.json({
-      error: "We couldn't save your signed agreements. Please try again or DM @the_card_doc on Instagram.",
-      code: "AGREEMENT_SAVE_FAILED",
+      error: "We couldn't save your signed order. Please try again or DM @the_card_doc on Instagram.",
+      code: "SIGNATURE_SAVE_FAILED",
     }, { status: 500 });
   }
+
+  // Each card over $5,000 waits for its own High-Value Agreement (emailed once paid)
+  const highValueIds = cardIds.filter((_, i) => isHighValue(data.cards[i].estimated_value_cents));
+  if (highValueIds.length) {
+    await admin.from("high_value_agreements").insert(highValueIds.map((id) => ({ order_id: order.id, order_item_id: id })));
+  }
+  await admin.from("order_events").insert({
+    order_id: order.id,
+    event_type: "terms_signed",
+    description: [
+      `Terms of Service v${terms.version} signed by ${data.terms!.signer_name.trim()}`,
+      slabCrackCount ? `Slab Removal Authorization × ${slabCrackCount}` : "",
+      droppedSlabs.length ? `slab removal dropped (not authorized): ${droppedSlabs.join(", ")}` : "",
+      highValueIds.length ? `${highValueIds.length} card(s) on hold for a High-Value Agreement` : "",
+      `shipping insurance ${election}`,
+    ].filter(Boolean).join("; "),
+    is_customer_visible: false,
+  });
 
   // Build Stripe line items — one per tier (or one flat line for legacy/volume pricing)
   const lineItems: { price_data: { currency: string; product_data: { name: string }; unit_amount: number }; quantity: number }[] = [];
@@ -591,6 +671,8 @@ export async function POST(request: Request) {
   if (insuranceChargeCents > 0 && data.insurance_type) {
     const insLabel = data.insurance_type === "round_trip"
       ? "Package Insurance — Round Trip (both directions)"
+      : data.insurance_type === "return"
+      ? "Package Insurance — Return (The Card Doc → you)"
       : "Package Insurance — Inbound (you → The Card Doc)";
     lineItems.push({
       price_data: { currency: "usd", product_data: { name: insLabel }, unit_amount: insuranceChargeCents },

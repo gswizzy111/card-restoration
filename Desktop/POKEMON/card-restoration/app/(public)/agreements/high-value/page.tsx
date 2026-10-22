@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { AgreementPage } from "@/components/legal/agreement-page";
-import { highValueAgreement } from "@/lib/agreements";
+import { highValueAgreementDoc, HIGH_VALUE_TITLE, TEMPLATE_CARD } from "@/lib/legal/agreements-v1";
 
 export const metadata: Metadata = {
-  title: "High-Value Card Agreement | The Card Doc",
-  description: "The agreement you sign at checkout for each card with a declared value above $5,000.",
+  title: `${HIGH_VALUE_TITLE} | The Card Doc`,
+  description: "The agreement each card valued above $5,000 needs, signed by you and by us, before any work starts.",
 };
 
 export default function HighValueAgreementPage() {
-  return <AgreementPage agreement={highValueAgreement(null)} when="Signed at checkout for every card with a declared value above $5,000, one card at a time." />;
+  return (
+    <AgreementPage
+      doc={highValueAgreementDoc({ ...TEMPLATE_CARD, declared_value_cents: null }, { orderNumber: "[order number]", customerName: "[your name]" }, "[Anything we agree for this card, such as shipping, insurance or liability, is written here.]")}
+      when="Required for every card valued above $5,000. We email it after you order; the card stays on hold until you and we have both signed."
+      footnote="You sign with your typed full name from the link we email you; then we countersign. Both signatures are dated by our server, and you get the signed PDF by email."
+    />
+  );
 }

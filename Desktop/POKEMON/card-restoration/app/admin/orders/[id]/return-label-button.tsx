@@ -76,7 +76,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
     setErrorMsg("");
     setNeedsRepurchase(false);
     // Pre-fill insurance from round-trip if applicable
-    if (insuranceType === "round_trip" && insuranceDeclaredValueCents && insuranceDeclaredValueCents > 0) {
+    if ((insuranceType === "round_trip" || insuranceType === "return") && insuranceDeclaredValueCents && insuranceDeclaredValueCents > 0) {
       setAddInsurance(true);
       setInsuranceValue((insuranceDeclaredValueCents / 100).toFixed(0));
     }
@@ -129,7 +129,8 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
     }
   }
 
-  const hasRoundTripInsurance = insuranceType === "round_trip" && insuranceDeclaredValueCents && insuranceDeclaredValueCents > 0;
+  // The customer paid to insure the trip back (round trip, or return only)
+  const hasRoundTripInsurance = (insuranceType === "round_trip" || insuranceType === "return") && insuranceDeclaredValueCents && insuranceDeclaredValueCents > 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -221,7 +222,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
               <div className="flex items-center gap-2 bg-green-50 border border-green-300 rounded px-2 py-1.5">
                 <span className="text-green-800 font-bold text-xs">🛡 Insurance locked</span>
                 <span className="text-xs text-green-800">
-                  Customer paid round-trip — ${(insuranceDeclaredValueCents! / 100).toLocaleString()} declared value
+                  Customer paid {insuranceType === "return" ? "return" : "round-trip"} insurance — ${(insuranceDeclaredValueCents! / 100).toLocaleString()} declared value
                 </span>
               </div>
             ) : (
@@ -277,7 +278,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
         <div className="flex flex-col gap-2">
           {hasRoundTripInsurance && (
             <p className="text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
-              🛡 Round-trip insurance will auto-apply (${(insuranceDeclaredValueCents! / 100).toLocaleString()} declared)
+              🛡 {insuranceType === "return" ? "Return" : "Round-trip"} insurance will auto-apply (${(insuranceDeclaredValueCents! / 100).toLocaleString()} declared)
             </p>
           )}
           <button

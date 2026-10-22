@@ -15,6 +15,11 @@ export interface CardEntry {
   card_set: string;
   card_year: string;
   card_number: string;
+  variation?: string;
+  grading_company?: string;
+  grade?: string;
+  cert_number?: string;
+  known_defects?: string;
   estimated_value: string;
   notes: string;
   photo_urls: string[];
@@ -45,7 +50,8 @@ export interface ShippingRate {
   duration_terms: string;
 }
 
-export type InsuranceType = "none" | "inbound" | "round_trip";
+// "return" insures only the trip back (self-ship orders, where we don't buy the inbound label)
+export type InsuranceType = "none" | "inbound" | "round_trip" | "return";
 
 export interface InsuranceSelection {
   declaredValueCents: number;

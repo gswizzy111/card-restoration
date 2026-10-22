@@ -95,6 +95,16 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           {c.description && (
             <p className="text-sm text-foreground whitespace-pre-wrap bg-secondary/40 rounded-lg p-4 mb-4">{c.description}</p>
           )}
+          {(c.photo_urls?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {(c.photo_urls as string[]).map((u: string, i: number) => (
+                <a key={i} href={u} target="_blank" rel="noopener noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={u} alt={`Photo ${i + 1}`} className="w-24 h-24 object-cover rounded-lg border border-border" />
+                </a>
+              ))}
+            </div>
+          )}
 
           <StatusUpdater caseId={c.id} currentStatus={c.status} />
         </div>

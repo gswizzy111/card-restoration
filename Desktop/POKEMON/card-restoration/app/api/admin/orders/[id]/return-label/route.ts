@@ -157,7 +157,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const insuranceCents: number =
       (typeof adminInsuranceCents === "number" && adminInsuranceCents > 0)
         ? adminInsuranceCents
-        : (order.insurance_type === "round_trip" && (order.insurance_declared_value_cents ?? 0) > 0)
+        : ((order.insurance_type === "round_trip" || order.insurance_type === "return") && (order.insurance_declared_value_cents ?? 0) > 0)
           ? (order.insurance_declared_value_cents as number)
           : 0;
     const hasInsurance = insuranceCents > 0;

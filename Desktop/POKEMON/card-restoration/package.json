@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/legal-texts.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/legal-texts.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -20,6 +22,7 @@
     "date-fns": "^4.1.0",
     "lucide-react": "^1.14.0",
     "next": "16.2.4",
+    "pdf-lib": "^1.17.1",
     "qz-tray": "^2.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",

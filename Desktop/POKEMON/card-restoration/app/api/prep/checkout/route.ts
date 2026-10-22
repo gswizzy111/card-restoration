@@ -1,15 +1,21 @@
 import { z } from "zod";
-import { AgreementsSchema, requiredAgreements } from "@/lib/agreements";
-import { recordAgreements } from "@/lib/order-agreements";
-import { TERMS_UPDATED } from "@/lib/legal/terms";
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
+import {
+  CardFieldsSchema, SigningSchema, checkoutConsents, masterSignatureInput, signingError, slabSignatureFor, slabSignatureInput,
+} from "@/lib/checkout-signing";
+import { recordConsents, recordSignatures, signingContext, type SignatureInput } from "@/lib/signatures";
+import { ensureTermsVersion, type TermsVersionRow } from "@/lib/terms-versions";
+import { isHighValue } from "@/lib/legal/agreements-v1";
 
 const CardSchema = z.object({
-  card_name: z.string().min(1),
-  declared_value_cents: z.number().int().min(0).optional().default(0),
+  card_name: z.string().trim().min(1).max(200),
+  // Required: every card needs its own declared value (Terms Section 4)
+  declared_value_cents: z.number().int().positive(),
   photo_urls: z.array(z.string().url()).optional().default([]),
-});
+  needs_slab_crack: z.boolean().optional(),
+}).extend(CardFieldsSchema.shape);
 
 const NJ_TAX_RATE = 0.06625;
 const HIGH_VALUE_THRESHOLD_CENTS = 150000; // $1,500
@@ -20,7 +26,6 @@ const Body = z.object({
   customer_phone: z.string().min(7),
   cards: z.array(CardSchema).min(1, "Please add at least one card."),
   add_pre_grade: z.boolean().optional().default(false),
-  slab_crack_count: z.number().int().min(0).max(50).default(0),
   shipping_method: z.enum(["buy_label", "self_ship"]),
   // Client provides pre-fetched rate from /api/prep/rates — no Shippo re-fetch
   shipping_rate_object_id: z.string().optional(),
@@ -31,13 +36,12 @@ const Body = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   zip: z.string().optional(),
+  insurance_election: z.enum(["purchased", "declined"]).nullable().optional(),
   add_insurance: z.boolean().optional().default(false),
-  insurance_amount_cents: z.number().int().min(0).optional().default(0),
+  insurance_amount_cents: z.number().int().min(0).max(1_000_000).optional().default(0),
   social_handle: z.string().optional(),
   customer_notes: z.string().optional(),
-  agreed_to_terms: z.boolean().optional(),
-  agreements: AgreementsSchema,
-});
+}).extend(SigningSchema.shape);
 
 async function getPrepPrices(admin: ReturnType<typeof createAdminClient>) {
   try {
@@ -78,19 +82,25 @@ export async function POST(request: Request) {
 
   const d = parsed.data;
 
-  if (!d.agreed_to_terms) {
-    return Response.json({ error: "Please agree to the Terms of Service before checking out.", code: "TERMS_REQUIRED" }, { status: 400 });
+  // Terms of Service v1.0 (lib/checkout-signing.ts): the master signature and
+  // e-sign consent are required
+  const signingProblem = signingError(d);
+  if (signingProblem) return Response.json(signingProblem, { status: 400 });
+
+  // Shipping insurance is a required choice (Terms 15.2, 15.4). Through us it
+  // covers only our prepaid label's trip in.
+  if (d.insurance_election !== "purchased" && d.insurance_election !== "declined") {
+    return Response.json({ error: "Please choose whether to buy or decline shipping insurance.", code: "INSURANCE_ELECTION_REQUIRED" }, { status: 400 });
   }
-  // Slab cracking needs a signed Slab-Removal Authorization, and every card
-  // declared above $5,000 its own High-Value Card Agreement (lib/agreements.ts)
-  const agreementCheck = requiredAgreements(
-    d.agreements,
-    d.slab_crack_count,
-    d.cards.map((c) => ({ name: c.card_name.trim(), declaredValueCents: c.declared_value_cents })),
-  );
-  if ("error" in agreementCheck) {
-    return Response.json({ error: agreementCheck.error, code: "AGREEMENT_REQUIRED" }, { status: 400 });
+  if (d.insurance_election === "purchased" && (d.shipping_method !== "buy_label" || !(d.insurance_amount_cents > 0))) {
+    return Response.json({ error: "Insurance through us needs a prepaid label and an amount to insure. Enter one, or decline shipping insurance.", code: "INSURANCE_INCOMPLETE" }, { status: 400 });
   }
+
+  // Slab removal goes ahead only for cards with their own signed authorization
+  // naming the cert number; any other slab selection is dropped, with its fee.
+  const slabSigned = d.cards.map((c, i) => (c.needs_slab_crack ? slabSignatureFor(d, i, c) : null));
+  const slabCrackCount = slabSigned.filter(Boolean).length;
+  const droppedSlabs = d.cards.filter((c, i) => c.needs_slab_crack && !slabSigned[i]).map((c) => c.card_name.trim());
 
   const isInternational = (d.country ?? "US") !== "US";
 
@@ -107,6 +117,13 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
   const prices = await getPrepPrices(admin);
+  let terms: TermsVersionRow;
+  try {
+    terms = await ensureTermsVersion(admin);
+  } catch (err) {
+    console.error("Terms version unavailable:", err);
+    return Response.json({ error: "We couldn't load the Terms of Service. Please try again in a moment.", code: "TERMS_UNAVAILABLE" }, { status: 500 });
+  }
 
   if (!prices.isOpen) {
     return Response.json({ error: "Prep is currently paused. Please check back soon." }, { status: 400 });
@@ -115,7 +132,7 @@ export async function POST(request: Request) {
   // Calculate pricing using server-authoritative DB prices
   const prepSubtotal = d.cards.reduce((sum, c) => sum + cardPrepCents(c.declared_value_cents, prices.standardPriceCents), 0);
   const preGradeSubtotal = d.add_pre_grade ? d.cards.length * prices.preGradePriceCents : 0;
-  const slabCrackSubtotal = d.slab_crack_count * prices.slabCrackPriceCents;
+  const slabCrackSubtotal = slabCrackCount * prices.slabCrackPriceCents;
   const serviceSubtotal = prepSubtotal + preGradeSubtotal + slabCrackSubtotal;
   // NJ sales tax only applies to US domestic orders
   const taxCents = isInternational ? 0 : Math.round(serviceSubtotal * NJ_TAX_RATE);
@@ -123,7 +140,7 @@ export async function POST(request: Request) {
   const shippingRateObjectId: string | null = d.shipping_rate_object_id ?? null;
   const shippingAmountCents = d.shipping_method === "buy_label" ? (d.shipping_amount_cents ?? 0) : 0;
 
-  const hasInsurance = d.add_insurance && (d.insurance_amount_cents ?? 0) > 0;
+  const hasInsurance = d.insurance_election === "purchased" && (d.insurance_amount_cents ?? 0) > 0;
   const insuranceCents = hasInsurance ? estimateInsuranceCents(d.insurance_amount_cents ?? 0) : 0;
 
   const totalCents = serviceSubtotal + taxCents + shippingAmountCents + insuranceCents;
@@ -160,7 +177,9 @@ export async function POST(request: Request) {
     customer_notes: [d.customer_notes, d.social_handle ? `Social: @${d.social_handle}` : ""].filter(Boolean).join("\n\n") || null,
     status: "awaiting_payment",
     payment_status: "pending",
-    slab_crack_count: d.slab_crack_count,
+    slab_crack_count: slabCrackCount,
+    terms_version_id: terms.id,
+    insurance_election: d.insurance_election,
   }).select("id, order_number").single();
 
   if (orderErr || !order) {
@@ -168,28 +187,69 @@ export async function POST(request: Request) {
     return Response.json({ error: "Failed to create order. Please try again." }, { status: 500 });
   }
 
-  // Insert cards
-  await admin.from("cards").insert(
-    d.cards.map((c) => ({
-      order_id: order.id,
-      card_name: c.card_name,
-      estimated_value_cents: c.declared_value_cents,
-      photo_urls: c.photo_urls ?? [],
-      service_ids: [],
-    }))
+  // Insert cards (the order's items), each with its prep price and tax
+  const cardIds = d.cards.map(() => randomUUID());
+  const { error: cardsErr } = await admin.from("cards").insert(
+    d.cards.map((c, i) => {
+      const price = cardPrepCents(c.declared_value_cents, prices.standardPriceCents);
+      return {
+        id: cardIds[i],
+        order_id: order.id,
+        card_name: c.card_name.trim(),
+        card_set: c.card_set ?? null,
+        card_year: c.card_year ?? null,
+        card_number: c.card_number ?? null,
+        variation: c.variation ?? null,
+        grading_company: c.grading_company ?? null,
+        grade: c.grade ?? null,
+        cert_number: c.cert_number ?? null,
+        known_defects: c.known_defects ?? null,
+        estimated_value_cents: c.declared_value_cents,
+        photo_urls: c.photo_urls ?? [],
+        service_ids: [],
+        tier: "prep",
+        slab_removal_selected: !!slabSigned[i],
+        pregrade_selected: d.add_pre_grade,
+        status: isHighValue(c.declared_value_cents) ? "on_hold_high_value" : "active",
+        service_price_cents: price,
+        discount_cents: 0,
+        tax_cents: isInternational ? 0 : Math.round(price * NJ_TAX_RATE),
+      };
+    })
   );
 
-  // The Terms and any signed agreements must be on file before payment
+  // The signatures and consents must be on file before payment
+  const ctx = await signingContext(request, d.customer_email);
+  const signatureInputs: SignatureInput[] = [
+    masterSignatureInput(order.id, terms, d.terms!.signer_name),
+    ...d.cards.flatMap((c, i) => {
+      const sig = slabSigned[i];
+      return sig ? [slabSignatureInput(order.id, terms, cardIds[i], { ...c, declared_value_cents: c.declared_value_cents }, sig.signer_name)] : [];
+    }),
+  ];
+  const signed = cardsErr ? { error: cardsErr.message } : await recordSignatures(admin, signatureInputs, ctx);
+  const consentError = "error" in signed ? null : await recordConsents(admin, checkoutConsents(order.id, d), ctx);
+  if ("error" in signed || consentError) {
+    console.error("Prep checkout records failed:", "error" in signed ? signed.error : consentError);
+    await admin.from("orders").update({ status: "cancelled", internal_notes: "Checkout stopped: the signed records could not be saved." }).eq("id", order.id);
+    return Response.json({ error: "We couldn't save your signed order. Please try again." }, { status: 500 });
+  }
+  const highValueIds = cardIds.filter((_, i) => isHighValue(d.cards[i].declared_value_cents));
+  if (highValueIds.length) {
+    await admin.from("high_value_agreements").insert(highValueIds.map((id) => ({ order_id: order.id, order_item_id: id })));
+  }
   await admin.from("order_events").insert({
     order_id: order.id,
-    event_type: "terms_accepted",
-    description: `Customer agreed to the Terms of Service (last updated ${TERMS_UPDATED}) at checkout.`,
+    event_type: "terms_signed",
+    description: [
+      `Terms of Service v${terms.version} signed by ${d.terms!.signer_name.trim()}`,
+      slabCrackCount ? `Slab Removal Authorization × ${slabCrackCount}` : "",
+      droppedSlabs.length ? `slab removal dropped (not authorized): ${droppedSlabs.join(", ")}` : "",
+      highValueIds.length ? `${highValueIds.length} card(s) on hold for a High-Value Agreement` : "",
+      `shipping insurance ${d.insurance_election}`,
+    ].filter(Boolean).join("; "),
     is_customer_visible: false,
   });
-  const agreementError = await recordAgreements(admin, order.id, agreementCheck.rows, request);
-  if (agreementError) {
-    return Response.json({ error: "We couldn't save your signed agreements. Please try again." }, { status: 500 });
-  }
 
   // Insert pre-grade service row if selected
   if (d.add_pre_grade && d.cards.length > 0) {
@@ -238,7 +298,7 @@ export async function POST(request: Request) {
     lineItems.push({
       price_data: {
         currency: "usd",
-        product_data: { name: `Slab Crack Service × ${d.slab_crack_count}` },
+        product_data: { name: `Slab Crack Service × ${slabCrackCount}` },
         unit_amount: slabCrackSubtotal,
       },
       quantity: 1,
@@ -292,7 +352,7 @@ export async function POST(request: Request) {
       metadata: {
         service_type: "prep",
         order_id: order.id,
-        slab_crack_count: String(d.slab_crack_count),
+        slab_crack_count: String(slabCrackCount),
         add_pre_grade: d.add_pre_grade ? "true" : "false",
         is_international: isInternational ? "true" : "false",
         ...(shippingRateObjectId ? { shipping_rate_object_id: shippingRateObjectId } : {}),
@@ -304,7 +364,8 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("Stripe session creation failed:", err);
-    await admin.from("orders").delete().eq("id", order.id);
+    // Signed records are permanent, so the unpaid order is cancelled, not deleted
+    await admin.from("orders").update({ status: "cancelled", internal_notes: "Payment session could not be created." }).eq("id", order.id);
     return Response.json({ error: "Payment session could not be created. Please try again." }, { status: 500 });
   }
 

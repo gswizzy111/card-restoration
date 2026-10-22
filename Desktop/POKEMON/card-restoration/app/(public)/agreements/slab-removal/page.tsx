@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { AgreementPage } from "@/components/legal/agreement-page";
-import { slabRemovalAgreement } from "@/lib/agreements";
+import { slabAuthorization, SLAB_TITLE, TEMPLATE_CARD } from "@/lib/legal/agreements-v1";
 
 export const metadata: Metadata = {
-  title: "Slab-Removal Authorization | The Card Doc",
-  description: "The authorization you sign at checkout before we remove a card from its grading-company holder.",
+  title: `${SLAB_TITLE} | The Card Doc`,
+  description: "The card-specific authorization you sign at checkout before we open a graded holder.",
 };
 
 export default function SlabRemovalAgreementPage() {
-  return <AgreementPage agreement={slabRemovalAgreement(null)} when="Signed at checkout whenever your order includes slab cracking." />;
+  return (
+    <AgreementPage
+      doc={slabAuthorization(TEMPLATE_CARD)}
+      when="Signed at checkout for each slabbed card you want opened, one card at a time."
+      footnote="Signed with your typed full name. The date and time come from our server when you place the order, and you get a signed PDF by email."
+    />
+  );
 }

@@ -1,15 +1,22 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { AgreementSignatures, agreementsComplete, submittedAgreements, type AgreementState } from "@/components/agreements/agreement-signatures";
+import { Hammer } from "lucide-react";
+import { SigningSection, emptySigning, signingReady, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
+import { CardIdentityFields, emptyIdentity, identityPayload, type CardIdentity } from "@/components/checkout/card-identity-fields";
+import { InsuranceElectionBox, type InsuranceElection } from "@/components/checkout/insurance-election";
+import { HIGH_VALUE_NOTICE, SIGN_BUTTON_LABEL, VALUE_HELP } from "@/lib/legal/current-terms";
+import { isHighValue } from "@/lib/legal/agreements-v1";
 import Link from "next/link";
 import { PhotoUploader } from "@/components/order-builder/photo-uploader";
 
-type CardRow = {
+type CardRow = CardIdentity & {
   id: string;
   name: string;
   declaredValueDollars: string;
   photoUrls: string[];
+  /** Open this card's graded holder ($7, needs its own signed authorization) */
+  slab: boolean;
 };
 
 type ShippingRate = {
@@ -91,7 +98,7 @@ function fmt(cents: number) {
 }
 
 function emptyCard(): CardRow {
-  return { id: crypto.randomUUID(), name: "", declaredValueDollars: "", photoUrls: [] };
+  return { id: crypto.randomUUID(), name: "", declaredValueDollars: "", photoUrls: [], slab: false, ...emptyIdentity() };
 }
 
 function etaLabel(rate: ShippingRate): string {
@@ -121,11 +128,11 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
   // Add-ons
   const [addPreGrade, setAddPreGrade] = useState(false);
-  const [slabCrackCount, setSlabCrackCount] = useState(0);
 
-  // Terms, plus the Slab-Removal Authorization and High-Value Card Agreements (lib/agreements.ts)
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [agreementState, setAgreementState] = useState<AgreementState>({});
+  // The signatures and consents for the Terms of Service v1.0 (components/checkout/signing-section.tsx)
+  const [signing, setSigning] = useState<SigningState>(emptySigning());
+  const [skippedSlabs, setSkippedSlabs] = useState<string[]>([]);
+  const [insuranceElection, setInsuranceElection] = useState<InsuranceElection>(null);
 
   // Shipping
   const [shippingMethod, setShippingMethod] = useState<"buy_label" | "self_ship">("buy_label");
@@ -143,8 +150,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   const [ratesFetchedFor, setRatesFetchedFor] = useState("");
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
 
-  // Insurance
-  const [addInsurance, setAddInsurance] = useState(false);
+  // Insurance (only the prepaid label's trip to us can be insured through us)
   const [insuranceValueDollars, setInsuranceValueDollars] = useState("");
 
   const [notes, setNotes] = useState("");
@@ -163,9 +169,22 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   function updateCardName(id: string, v: string) { setCards((p) => p.map((c) => c.id === id ? { ...c, name: v } : c)); }
   function updateCardValue(id: string, v: string) { setCards((p) => p.map((c) => c.id === id ? { ...c, declaredValueDollars: v } : c)); }
   function updateCardPhotos(id: string, urls: string[]) { setCards((p) => p.map((c) => c.id === id ? { ...c, photoUrls: urls } : c)); }
+  function updateCard(id: string, patch: Partial<CardRow>) { setCards((p) => p.map((c) => c.id === id ? { ...c, ...patch } : c)); }
 
   const filledCards = cards.filter((c) => c.name.trim());
-  const agreementCards = filledCards.map((c) => ({ name: c.name.trim(), declaredValueCents: cardValueCents(c) }));
+  const addInsurance = shippingMethod === "buy_label" && insuranceElection === "purchased";
+  const slabCards: SlabCard[] = filledCards.flatMap((c, i) => (c.slab ? [{
+    index: i,
+    details: { card_name: c.name.trim(), ...identityPayload(c), declared_value_cents: cardValueCents(c) },
+  }] : []));
+  const slabCrackCount = slabCards.length;
+  const highValueCards = filledCards.filter((c) => isHighValue(cardValueCents(c))).map((c) => ({ name: c.name.trim(), valueCents: cardValueCents(c) }));
+  function skipSlab(index: number) {
+    const card = filledCards[index];
+    if (!card) return;
+    updateCard(card.id, { slab: false });
+    setSkippedSlabs((s) => [...s, card.name.trim()]);
+  }
 
   function cardValueCents(card: CardRow): number {
     return Math.round((parseFloat(card.declaredValueDollars.replace(/[^0-9.]/g, "")) || 0) * 100);
@@ -250,6 +269,11 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
     setError("");
 
     if (filledCards.length < 1) { setError("Please add at least one card."); return; }
+    if (filledCards.some((c) => cardValueCents(c) <= 0)) { setError("Please enter a declared value for every card."); return; }
+    if (filledCards.some((c) => c.slab && (!c.grading_company || !c.cert_number.trim()))) {
+      setError("Slab removal needs each card's grading company and certification number.");
+      return;
+    }
     if (!name.trim()) { setError("Name is required."); return; }
     if (!email.trim()) { setError("Email is required."); return; }
     if (!phone.trim()) { setError("Phone is required."); return; }
@@ -268,12 +292,10 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
       }
     }
 
-    if (!agreementsComplete(agreementState, slabCrackCount, agreementCards)) {
-      setError("Please sign the agreements above before checking out.");
-      return;
-    }
-    if (!agreedToTerms) {
-      setError("Please agree to the Terms of Service before checking out.");
+    if (insuranceElection === null) { setError("Please choose whether to buy or decline shipping insurance."); return; }
+    if (addInsurance && insuranceDeclaredValueCents <= 0) { setError("Enter the amount to insure, or decline shipping insurance."); return; }
+    if (!signingReady(signing, slabCards)) {
+      setError("Please sign or skip each slab authorization, consent to electronic records, check the Terms box and type your full legal name.");
       return;
     }
 
@@ -288,11 +310,13 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
           customer_phone: phone.trim(),
           cards: filledCards.map((c) => ({
             card_name: c.name.trim(),
+            ...identityPayload(c),
             declared_value_cents: cardValueCents(c),
             photo_urls: c.photoUrls,
+            needs_slab_crack: c.slab || undefined,
           })),
           add_pre_grade: addPreGrade,
-          slab_crack_count: slabCrackCount,
+          insurance_election: insuranceElection,
           shipping_method: shippingMethod,
           ...(shippingMethod === "buy_label" ? {
             country,
@@ -308,8 +332,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
           } : {}),
           social_handle: socialHandle.trim() || undefined,
           customer_notes: notes.trim() || undefined,
-          agreed_to_terms: agreedToTerms,
-          agreements: submittedAgreements(agreementState, slabCrackCount, agreementCards),
+          ...submittedSigning(signing, slabCards),
         }),
       });
       const data = await res.json();
@@ -410,7 +433,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                     type="number" min="0" step="1"
                     value={card.declaredValueDollars}
                     onChange={(e) => updateCardValue(card.id, e.target.value)}
-                    placeholder="Declared value (optional — required if $1,500+)"
+                    placeholder="Declared value (required)"
                   />
                 </div>
                 {card.name.trim() && (
@@ -419,6 +442,22 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                   </span>
                 )}
               </div>
+              <div className="pl-7 flex flex-col gap-2">
+                <p className="text-xs text-muted-foreground">{VALUE_HELP}</p>
+                {isHighValue(cardValueCents(card)) && (
+                  <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-md px-3 py-2 font-medium">{HIGH_VALUE_NOTICE}</p>
+                )}
+              </div>
+              <div className="pl-7">
+                <CardIdentityFields idPrefix={`prep-${card.id}`} value={card} onChange={(patch) => updateCard(card.id, patch)} needsCert={card.slab} />
+              </div>
+              <label className="ml-7 flex items-start gap-3 bg-white border border-border rounded-md px-3 py-2.5 cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 mt-0.5 accent-primary shrink-0" checked={card.slab} onChange={(e) => updateCard(card.id, { slab: e.target.checked })} />
+                <span className="text-sm">
+                  <span className="font-semibold text-foreground">Open this card&apos;s slab? +{fmt(slabCrackPriceCents)}</span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">For a card in a PSA, BGS or other graded slab. You&apos;ll sign a separate authorization for it at the end.</span>
+                </span>
+              </label>
               <div className="pl-7">
                 <p className="text-xs text-muted-foreground mb-1.5">Photos <span className="text-muted-foreground/60">(optional)</span></p>
                 <PhotoUploader photoUrls={card.photoUrls} onChange={(urls) => updateCardPhotos(card.id, urls)} max={4} />
@@ -458,30 +497,12 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
             )}
           </button>
 
-          <div className="border border-border rounded-xl p-4">
-            <div className="flex items-start gap-3 mb-3">
-              <span className="text-lg">🪨</span>
-              <div className="flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-sm font-bold text-foreground">Slab Crack</span>
-                  <span className="text-xs font-bold text-primary">+{fmt(slabCrackPriceCents)}/card</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">Need us to crack graded slabs before prepping? Enter how many.</p>
-              </div>
+          {slabCrackCount > 0 && (
+            <div className="flex items-center gap-3 border border-border rounded-xl p-4">
+              <Hammer className="h-5 w-5 shrink-0 text-primary" strokeWidth={1.75} />
+              <span className="text-sm text-foreground">Slab removal: {slabCrackCount} × {fmt(slabCrackPriceCents)} = <span className="font-semibold">{fmt(slabCrackSubtotal)}</span></span>
             </div>
-            <div className="flex items-center gap-4">
-              <input
-                className={`${input} w-24`}
-                type="number" min="0" max="50"
-                value={slabCrackCount || ""}
-                onChange={(e) => setSlabCrackCount(Math.max(0, parseInt(e.target.value) || 0))}
-                placeholder="0"
-              />
-              {slabCrackCount > 0 && (
-                <span className="text-sm font-semibold text-primary">{slabCrackCount} × {fmt(slabCrackPriceCents)} = {fmt(slabCrackSubtotal)}</span>
-              )}
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Shipping */}
@@ -616,42 +637,40 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                 </div>
               )}
 
-              <div className="border border-border rounded-xl p-4">
-                <button type="button"
-                  onClick={() => {
-                    setAddInsurance((v) => !v);
-                    if (!addInsurance && insuranceValueDollars === "" && totalDeclaredValueCents > 0) {
-                      setInsuranceValueDollars((totalDeclaredValueCents / 100).toFixed(0));
-                    }
-                  }}
-                  className="w-full flex items-center gap-3 text-left">
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${addInsurance ? "border-primary bg-primary" : "border-border"}`}>
-                    {addInsurance && <span className="text-white text-xs font-black">✓</span>}
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-foreground">Insure my shipment</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">Covers loss or damage while your cards are in transit to us. We do not currently insure customer cards while they are in our possession.</div>
-                  </div>
-                </button>
-                {addInsurance && (
-                  <div className="mt-3 pt-3 border-t border-border">
-                    <label className={labelCls}>Declared Insurance Value (USD) *</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                      <input className={`${input} pl-7`} type="number" min="0" step="1"
-                        value={insuranceValueDollars} onChange={(e) => setInsuranceValueDollars(e.target.value)}
-                        placeholder="Total value of cards in this shipment (USD)" />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">Insurance cost is included in your total at checkout.</p>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
           {shippingMethod === "self_ship" && (
             <p className="text-xs text-muted-foreground">After checkout you&apos;ll receive our mailing address. Ship using any tracked, insured method and include your order number inside the package.</p>
           )}
+        </div>
+
+        {/* Shipping insurance: a required choice, buy or decline (Terms 15.2, 15.4) */}
+        <div className="bg-white rounded-lg border border-border p-6">
+          <InsuranceElectionBox
+            election={insuranceElection}
+            onElection={(e) => {
+              setInsuranceElection(e);
+              if (e === "purchased" && insuranceValueDollars === "" && totalDeclaredValueCents > 0) {
+                setInsuranceValueDollars((totalDeclaredValueCents / 100).toFixed(0));
+              }
+            }}
+            purchaseAvailable={shippingMethod === "buy_label"}
+            unavailableNote="Insurance through us covers our prepaid label's trip to us. Shipping it yourself, you can insure the package with your carrier."
+          >
+            <div>
+              <label className={labelCls}>Amount to insure (USD) *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <input className={`${input} pl-7`} type="number" min="0" max="10000" step="1"
+                  value={insuranceValueDollars} onChange={(e) => setInsuranceValueDollars(e.target.value)}
+                  placeholder="Total value of cards in this shipment (USD)" />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Covers the trip to us. Price: {insuranceDeclaredValueCents > 0 ? fmt(estimatedInsuranceCents) : "~1.5% of the amount"}, included in your total.
+              </p>
+            </div>
+          </InsuranceElectionBox>
         </div>
 
         {/* Feature suggestion */}
@@ -661,7 +680,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
             <div>
               <p className="text-sm font-black text-slate-800 leading-tight">Want to be featured?</p>
               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                Drop your Instagram or Facebook handle and we may share your before &amp; after results with the community.
+                Drop your Instagram or Facebook handle. If you allow photos and tagging below, we may share your before &amp; after results and tag you.
               </p>
             </div>
           </div>
@@ -745,20 +764,16 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
           </div>
         </div>
 
-        <AgreementSignatures slabCards={slabCrackCount} cards={agreementCards} state={agreementState} onChange={setAgreementState} />
-
-        <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
-          <input
-            type="checkbox"
-            checked={agreedToTerms}
-            onChange={(e) => setAgreedToTerms(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-primary cursor-pointer"
+        <div className="bg-white rounded-lg border border-border p-6">
+          <SigningSection
+            slabCards={slabCards}
+            highValueCards={highValueCards}
+            state={signing}
+            onChange={setSigning}
+            onSkipSlab={skipSlab}
+            skippedSlabs={skippedSlabs}
           />
-          <span>
-            I have read and agree to the{" "}
-            <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline underline-offset-2">Terms of Service</a>.
-          </span>
-        </label>
+        </div>
 
         {error && (
           <div className="text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">{error}</div>
@@ -766,7 +781,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
         <button type="submit" disabled={submitting}
           className="h-12 bg-primary text-primary-foreground rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50">
-          {submitting ? "Redirecting to checkout…" : "Proceed to Checkout →"}
+          {submitting ? "Redirecting to checkout…" : SIGN_BUTTON_LABEL}
         </button>
       </form>
     </div>

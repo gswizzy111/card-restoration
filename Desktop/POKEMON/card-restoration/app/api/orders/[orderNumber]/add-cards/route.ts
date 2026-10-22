@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { AgreementsSchema, requiredAgreements } from "@/lib/agreements";
-import { recordAgreements } from "@/lib/order-agreements";
+import { CardFieldsSchema, SigningSchema, checkoutConsents, masterSignatureInput, signingError } from "@/lib/checkout-signing";
+import { recordConsents, recordSignatures, signingContext } from "@/lib/signatures";
+import { ensureTermsVersion } from "@/lib/terms-versions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { RESTORATION_TIERS, getCardPriceCents } from "@/lib/restoration-tiers";
@@ -9,18 +10,16 @@ import type { RestorationTierId } from "@/lib/restoration-tiers";
 const TAX_RATE = 0.06625;
 
 const CardSchema = z.object({
-  name: z.string().min(1),
-  set: z.string().optional().default(""),
-  year: z.string().optional().default(""),
-  declaredValueCents: z.number().int().min(0).optional().default(0),
+  name: z.string().trim().min(1).max(200),
+  // Required: every card needs its own declared value (Terms Section 4)
+  declaredValueCents: z.number().int().positive(),
   photoUrls: z.array(z.string()).optional().default([]),
-});
+}).extend(CardFieldsSchema.shape);
 
 const Body = z.object({
   email: z.string().email(),
   cards: z.array(CardSchema).min(1).max(20),
-  agreements: AgreementsSchema,
-});
+}).extend(SigningSchema.shape);
 
 export async function POST(
   request: Request,
@@ -38,13 +37,12 @@ export async function POST(
   const parsed = Body.safeParse(body);
   if (!parsed.success) return Response.json({ error: "Invalid request" }, { status: 400 });
 
-  const { email, cards, agreements } = parsed.data;
+  const { email, cards } = parsed.data;
 
-  // Every added card declared above $5,000 needs its own High-Value Card Agreement
-  const agreementCheck = requiredAgreements(agreements, 0, cards.map((c) => ({ name: c.name.trim(), declaredValueCents: c.declaredValueCents })));
-  if ("error" in agreementCheck) {
-    return Response.json({ error: agreementCheck.error, code: "AGREEMENT_REQUIRED" }, { status: 400 });
-  }
+  // The added cards are signed for like a new order: the Terms of Service v1.0
+  // and e-sign consent. Cards over $5,000 go on hold for a High-Value Agreement.
+  const signingProblem = signingError(parsed.data);
+  if (signingProblem) return Response.json(signingProblem, { status: 400 });
   const admin = createAdminClient();
 
   const { data: order } = await admin
@@ -61,10 +59,37 @@ export async function POST(
 
   const tier = RESTORATION_TIERS[order.restoration_tier as RestorationTierId] ?? RESTORATION_TIERS["regular"];
 
-  const agreementError = await recordAgreements(admin, order.id, agreementCheck.rows, request);
-  if (agreementError) {
-    return Response.json({ error: "We couldn't save your signed agreements. Please try again." }, { status: 500 });
+  // A tier's card-value cap is an eligibility condition (Terms 9.2)
+  const overCap = tier.max_card_value_cents === null ? undefined : cards.find((c) => c.declaredValueCents > tier.max_card_value_cents!);
+  if (overCap) {
+    return Response.json({
+      error: `${overCap.name} is declared above the ${tier.name} tier's $${(tier.max_card_value_cents! / 100).toLocaleString()} cap, so it can't be added to this order. Please place a new order for it with a higher tier.`,
+      code: "TIER_CAP",
+    }, { status: 400 });
   }
+
+  let terms;
+  try {
+    terms = await ensureTermsVersion(admin);
+  } catch (err) {
+    console.error("Terms version unavailable:", err);
+    return Response.json({ error: "We couldn't load the Terms of Service. Please try again in a moment.", code: "TERMS_UNAVAILABLE" }, { status: 500 });
+  }
+  const ctx = await signingContext(request, email);
+  const signed = await recordSignatures(admin, [masterSignatureInput(order.id, terms, parsed.data.terms!.signer_name)], ctx);
+  const consentError = "error" in signed ? null : await recordConsents(admin, checkoutConsents(order.id, parsed.data), ctx);
+  if ("error" in signed || consentError) {
+    return Response.json({ error: "We couldn't save your signature. Please try again." }, { status: 500 });
+  }
+
+  // The added cards' full details wait here until payment (Stripe metadata is too small for them)
+  const { data: pending } = await admin.from("order_events").insert({
+    order_id: order.id,
+    event_type: "add_cards_pending",
+    description: `Terms of Service v${terms.version} signed by ${parsed.data.terms!.signer_name.trim()} to add ${cards.length} card${cards.length !== 1 ? "s" : ""} (awaiting payment)`,
+    is_customer_visible: false,
+    metadata: { cards, terms_version_id: terms.id },
+  }).select("id").single();
 
   const cardPrices = cards.map((c) => getCardPriceCents(tier, c.declaredValueCents));
   const subtotalCents = cardPrices.reduce((a, b) => a + b, 0);
@@ -80,8 +105,8 @@ export async function POST(
   cards.forEach((c, i) => {
     cardMetadata[`card_${i}`] = JSON.stringify({
       n: c.name,
-      s: c.set || undefined,
-      y: c.year || undefined,
+      s: c.card_set || undefined,
+      y: c.card_year || undefined,
       v: c.declaredValueCents || undefined,
       p: c.photoUrls.length ? c.photoUrls : undefined,
     });
@@ -122,6 +147,7 @@ export async function POST(
       order_number: String(orderNumber),
       tier: tier.id,
       card_count: String(cards.length),
+      ...(pending ? { pending_event_id: pending.id } : {}),
       subtotal_cents: String(subtotalCents),
       ...cardMetadata,
     },
