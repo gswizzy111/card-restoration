@@ -33,9 +33,12 @@ export function parseLegalMarkdown(md: string): DocBlock[] {
   return blocks;
 }
 
-/** A numbered section ("7") with its heading, up to the next heading. */
-export function sectionBlocks(blocks: DocBlock[], num: string): DocBlock[] {
-  const start = blocks.findIndex((b) => b.kind === "heading" && b.num === num);
+type Heading = Extract<DocBlock, { kind: "heading" }>;
+
+/** A section with its heading, up to the next heading: by number ("7") or by a test on the heading. */
+export function sectionBlocks(blocks: DocBlock[], num: string | ((h: Heading) => boolean)): DocBlock[] {
+  const match = typeof num === "string" ? (h: Heading) => h.num === num : num;
+  const start = blocks.findIndex((b) => b.kind === "heading" && match(b));
   if (start < 0) return [];
   const end = blocks.findIndex((b, i) => i > start && b.kind === "heading");
   return blocks.slice(start, end < 0 ? undefined : end);
@@ -45,6 +48,11 @@ export function sectionBlocks(blocks: DocBlock[], num: string): DocBlock[] {
 export function findClause(blocks: DocBlock[], test: RegExp): string | null {
   for (const b of blocks) if (b.kind === "para" && b.clause && test.test(b.text)) return b.clause;
   return null;
+}
+
+/** The clauses whose text matches, word for word. */
+export function clauseBlocks(blocks: DocBlock[], test: RegExp): DocBlock[] {
+  return blocks.filter((b) => b.kind === "para" && b.clause !== null && test.test(b.text));
 }
 
 /** The value after "Label:" on a front-matter line, e.g. "Effective date". */

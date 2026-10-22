@@ -1,5 +1,5 @@
 import { blocksToText, type DocBlock } from "./legal-doc";
-import { SLAB_SECTION_BLOCKS, TERMS_VERSION } from "./current-terms";
+import { HIGH_VALUE_CLAUSE, HIGH_VALUE_SECTION_BLOCKS, HIGH_VALUE_SHIPPING_BLOCKS, SLAB_SECTION_BLOCKS, TERMS_VERSION } from "./current-terms";
 
 /**
  * The two card-specific documents the Terms of Service v1.0 require besides
@@ -9,7 +9,8 @@ import { SLAB_SECTION_BLOCKS, TERMS_VERSION } from "./current-terms";
  *   - High-Value Card Restoration & Custody Agreement (Section 4.2): one per
  *     card valued above $5,000, signed after the order by the customer and
  *     then by The Card Doc. The card stays on hold until both have signed.
- * Each is stored word for word with its signature (lib/signatures.ts).
+ * Each names its card and quotes the Terms that govern it, word for word, and
+ * is stored word for word with its signature (lib/signatures.ts).
  * Browser-safe; shared by both sites.
  */
 
@@ -76,16 +77,7 @@ export function slabAuthorization(c: CardDetails): AgreementDoc {
     title: SLAB_TITLE,
     blocks: [
       para(`Card: ${cardTitle(c)}. Holder: ${holderLine(c)}.`),
-      para(`I authorize The Card Doc LLC to open the graded holder of this card, and only this card, for the ${usd(SLAB_FEE_CENTS)} slab-removal service, under Section 7 of the Terms of Service v${TERMS_VERSION}. In short:`),
-      {
-        kind: "list",
-        items: [
-          "The holder has to be broken open. It can crack or shatter, and tools, pressure or fragments can scratch, dent, bend, crease, chip or otherwise damage the card, even by accident.",
-          "Opening ends the holder's protection. The old grade and certificate are not a present-day grade for the raw card.",
-          "The holder, label, hologram and inserts may not be saved or returned.",
-          "The card can be partly or completely destroyed or lose value. The fee is not insurance.",
-        ],
-      },
+      para(`I authorize The Card Doc LLC to open the graded holder of this card, and only this card, for the ${usd(SLAB_FEE_CENTS)} slab-removal service, under Section 7 of the Terms of Service v${TERMS_VERSION}.`),
       para("Section 7 of the Terms, in full:"),
       ...SLAB_SECTION_BLOCKS,
     ],
@@ -105,21 +97,13 @@ export function highValueAgreementDoc(
   return {
     title: HIGH_VALUE_TITLE,
     blocks: [
-      para(`Between The Card Doc LLC ("The Card Doc") and ${order.customerName} ("I"), for one card on order ${order.orderNumber}: ${cardTitle(c)}${c.cert_number?.trim() ? ` (${holderLine(c)})` : ""}, with a declared value of ${value}.`),
-      para(`This agreement is required by Section 4.2 of the Terms of Service v${TERMS_VERSION}. By signing it, I confirm and agree that:`),
-      {
-        kind: "list",
-        items: [
-          `${value} is my honest, good-faith estimate of this card's current market value in its present condition, based on recent completed sales of comparable cards, not asking prices. I own this card, or I have the owner's written permission to send it.`,
-          "No cleaning, treatment or slab opening will start until both The Card Doc and I have signed this agreement. Until then the card stays on hold. I may decline instead and have the card returned, paying only charges properly owed under the Terms.",
-          "The Card Doc does not carry business insurance covering this card while it is in The Card Doc's custody. Shipping insurance is optional and paid by me. I decide how the card is shipped and whether it is insured.",
-          "Results and grades are never guaranteed. Restoration can permanently worsen or destroy a card, change its grade or market value, or produce no visible improvement.",
-          "Except as the negotiated terms below say otherwise, The Card Doc's liability for this card is limited as set out in the Terms of Service (Section 19), not by its declared value.",
-          "This agreement covers this card only and is in addition to the Terms of Service. Where the negotiated terms below truly conflict with the Terms, they control for this card (Section 4.5).",
-        ],
-      },
+      para(`Between The Card Doc LLC ("The Card Doc") and ${order.customerName}, for one card on order ${order.orderNumber}: ${cardTitle(c)}${c.cert_number?.trim() ? ` (${holderLine(c)})` : ""}, with a declared value of ${value}.`),
+      para(`This is the High-Value Card Restoration & Custody Agreement that Section ${HIGH_VALUE_CLAUSE} of the Terms of Service v${TERMS_VERSION} requires for this card, and it covers this card only.`),
       para("Negotiated terms for this card:"),
       para(negotiated || `None. The Terms of Service v${TERMS_VERSION} apply unchanged.`),
+      para("Section 4 of the Terms, in full:"),
+      ...HIGH_VALUE_SECTION_BLOCKS,
+      ...HIGH_VALUE_SHIPPING_BLOCKS.flatMap((b) => [para(`Section ${b.kind === "para" ? b.clause : ""} of the Terms:`), b]),
     ],
   };
 }

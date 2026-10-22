@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 /** Typed-name signature for a High-Value Agreement (dated by the server). */
 export function HighValueSignForm({ token }: { token: string }) {
-  const router = useRouter();
+  const [signed, setSigned] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,7 +26,16 @@ export function HighValueSignForm({ token }: { token: string }) {
       setBusy(false);
       return;
     }
-    router.refresh();
+    // Signing retires the emailed link, so a reload would say the link is no longer valid
+    setSigned(true);
+  }
+
+  if (signed) {
+    return (
+      <p role="status" className="rounded-md border border-border bg-secondary/40 px-4 py-3 text-sm text-foreground">
+        Signed. We&apos;ll countersign and email you the fully signed copy.
+      </p>
+    );
   }
 
   return (
