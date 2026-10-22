@@ -1,6 +1,6 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
+import { isAdmin } from "@/lib/admin-auth";
 
 const Body = z.object({
   tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite", "fast_pass"]),
@@ -20,8 +20,7 @@ const Body = z.object({
 });
 
 export async function PATCH(request: Request) {
-  const jar = await cookies();
-  if (!process.env.ADMIN_PASSWORD || jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

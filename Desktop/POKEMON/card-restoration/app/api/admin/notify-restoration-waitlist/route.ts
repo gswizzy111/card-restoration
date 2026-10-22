@@ -1,6 +1,6 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resend, fromEmail, businessName } from "@/lib/resend";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const maxDuration = 60;
 
@@ -41,8 +41,7 @@ function bodyToHtml(body: string): string {
 }
 
 export async function POST(request: Request) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

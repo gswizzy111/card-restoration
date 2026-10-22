@@ -97,7 +97,7 @@ function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, role }: {
   );
 }
 
-export function AdminNav({ openCaseCount, openUpdateRequestCount, role }: { openCaseCount?: number; openUpdateRequestCount?: number; role?: string | null }) {
+export function AdminNav({ openCaseCount, openUpdateRequestCount, role, username }: { openCaseCount?: number; openUpdateRequestCount?: number; role?: string | null; username?: string | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -116,6 +116,11 @@ export function AdminNav({ openCaseCount, openUpdateRequestCount, role }: { open
           )}
         </nav>
         <div className="px-3 py-4 border-t border-border">
+          {username && (
+            <p className="px-3 pb-2 text-xs text-muted-foreground truncate">
+              Signed in as <span className="font-semibold text-foreground">{username}</span>
+            </p>
+          )}
           <form action="/api/admin/logout" method="POST">
             <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors text-left">
               <span>🚪</span>

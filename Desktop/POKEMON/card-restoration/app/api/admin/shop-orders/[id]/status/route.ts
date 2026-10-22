@@ -1,5 +1,5 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const KIT_STATUSES = {
   paid:        { label: "Payment Received" },
@@ -11,8 +11,7 @@ export const KIT_STATUSES = {
 export type KitStatus = keyof typeof KIT_STATUSES;
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

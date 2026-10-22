@@ -1,11 +1,10 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTestimonials, saveTestimonials } from "@/lib/testimonials";
 import type { TestimonialImage } from "@/lib/testimonials";
+import { isAdmin } from "@/lib/admin-auth";
 
 async function auth() {
-  const jar = await cookies();
-  return jar.get("admin_auth")?.value === process.env.ADMIN_PASSWORD;
+  return isAdmin();
 }
 
 export async function GET() {

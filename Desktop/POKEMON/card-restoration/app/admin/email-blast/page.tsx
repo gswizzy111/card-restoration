@@ -1,8 +1,8 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ComposeForm } from "./compose-form";
 import { ResendConfirmationsButton } from "@/app/admin/resend-confirmations-button";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +23,7 @@ const SOURCE_COLORS: Record<string, string> = {
 };
 
 export default async function EmailBlastPage() {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) redirect("/admin/login");
+  if (!(await isAdmin())) redirect("/admin/login");
 
   const admin = createAdminClient();
 

@@ -1,8 +1,8 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo, businessAddress } from "@/lib/shippo";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { WeightUnitEnum, DistanceUnitEnum } from "shippo/models/components";
+import { isAdmin } from "@/lib/admin-auth";
 
 const BOX_KEYWORDS = ["official", "essential", "clamp"];
 
@@ -45,8 +45,7 @@ function getExistingLabels(order: Record<string, unknown>): SavedLabel[] {
 }
 
 async function authed() {
-  const jar = await cookies();
-  return jar.get("admin_auth")?.value === process.env.ADMIN_PASSWORD;
+  return isAdmin();
 }
 
 // GET — return rates (always, so a new label can always be created)

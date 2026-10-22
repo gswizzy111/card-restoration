@@ -1,12 +1,11 @@
-import { cookies } from "next/headers";
+import { isAdmin } from "@/lib/admin-auth";
 
 export async function HEAD(req: Request) {
   return GET(req);
 }
 
 export async function GET(req: Request) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return new Response("Unauthorized", { status: 401 });
   }
 

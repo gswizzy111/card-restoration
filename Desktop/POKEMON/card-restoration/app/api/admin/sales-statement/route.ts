@@ -1,13 +1,12 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin } from "@/lib/admin-auth";
 
 function fmt(cents: number | null | undefined) {
   return ((cents ?? 0) / 100).toFixed(2);
 }
 
 export async function GET(request: Request) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return new Response("Unauthorized", { status: 401 });
   }
 

@@ -1,9 +1,9 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { refundEmailHtml } from "@/lib/refund-email";
 import { z } from "zod";
+import { isAdmin } from "@/lib/admin-auth";
 
 const Body = z.object({
   amountCents: z.number().int().min(1).optional(),
@@ -16,8 +16,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

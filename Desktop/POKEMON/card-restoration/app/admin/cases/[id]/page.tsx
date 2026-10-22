@@ -5,6 +5,7 @@ import Link from "next/link";
 import { StatusUpdater, AddNoteForm, CopyLinkButton } from "./case-actions";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/constants";
 import { INQUIRY_TYPE, orderLabel } from "@/lib/card-inquiries";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +24,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) redirect("/admin/login");
+  if (!(await isAdmin())) redirect("/admin/login");
 
   const { id } = await params;
   const admin = createAdminClient();

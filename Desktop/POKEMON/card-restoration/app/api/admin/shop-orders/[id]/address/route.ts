@@ -1,9 +1,8 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin } from "@/lib/admin-auth";
 
 async function authed() {
-  const jar = await cookies();
-  return jar.get("admin_auth")?.value === process.env.ADMIN_PASSWORD;
+  return isAdmin();
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {

@@ -1,12 +1,11 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdmin } from "@/lib/admin-auth";
 
 const VALID_METHODS = ["card", "gift_card", "cash", "venmo", "zelle", "check", "other"] as const;
 type PaymentMethod = typeof VALID_METHODS[number];
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

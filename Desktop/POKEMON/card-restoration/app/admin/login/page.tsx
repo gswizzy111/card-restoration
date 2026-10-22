@@ -4,6 +4,7 @@ import { useState } from "react";
 
 export default function AdminLoginPage() {
   const [mode, setMode] = useState<"admin" | "accountant">("admin");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -15,7 +16,7 @@ export default function AdminLoginPage() {
     setError("");
     const body = mode === "accountant"
       ? { email: email.trim(), password }
-      : { password };
+      : { username: username.trim(), password };
     const res = await fetch("/api/admin/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,12 +56,30 @@ export default function AdminLoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {mode === "accountant" && (
+          {mode === "accountant" ? (
             <input
+              key="email"
               type="email"
               placeholder="Email address"
+              aria-label="Email address"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              className="h-11 px-4 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              autoFocus
+              required
+            />
+          ) : (
+            <input
+              key="username"
+              type="text"
+              placeholder="Username"
+              aria-label="Username"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="h-11 px-4 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
               autoFocus
               required
@@ -69,10 +88,11 @@ export default function AdminLoginPage() {
           <input
             type="password"
             placeholder="Password"
+            aria-label="Password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="h-11 px-4 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            autoFocus={mode === "admin"}
             required
           />
           {error && <p className="text-sm text-red-500">{error}</p>}

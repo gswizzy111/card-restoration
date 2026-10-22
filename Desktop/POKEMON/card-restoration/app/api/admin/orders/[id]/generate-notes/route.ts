@@ -1,6 +1,6 @@
-import { cookies } from "next/headers";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { isAdmin } from "@/lib/admin-auth";
 
 const CardSchema = z.object({
   card_name: z.string(),
@@ -39,8 +39,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -1,6 +1,6 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
+import { isAdmin } from "@/lib/admin-auth";
 
 const PatchSchema = z.object({
   status: z.enum(["open", "in_progress", "resolved", "closed"]).optional(),
@@ -8,8 +8,7 @@ const PatchSchema = z.object({
 });
 
 async function requireAdmin() {
-  const jar = await cookies();
-  return jar.get("admin_auth")?.value === process.env.ADMIN_PASSWORD;
+  return isAdmin();
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

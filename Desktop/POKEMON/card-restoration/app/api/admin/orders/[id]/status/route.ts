@@ -1,7 +1,7 @@
-import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ORDER_STATUSES } from "@/lib/constants";
 import { resend, fromEmail, businessName } from "@/lib/resend";
+import { isAdmin } from "@/lib/admin-auth";
 
 const CUSTOMER_MESSAGES: Partial<Record<string, string>> = {
   received: "Great news — we've received your cards and they're checked in!",
@@ -13,8 +13,7 @@ const CUSTOMER_MESSAGES: Partial<Record<string, string>> = {
 };
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const jar = await cookies();
-  if (jar.get("admin_auth")?.value !== process.env.ADMIN_PASSWORD) {
+  if (!(await isAdmin())) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
