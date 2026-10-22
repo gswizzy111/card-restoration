@@ -137,7 +137,7 @@ export default async function HomePage() {
             {[
               { stat: "500+", label: "Cards Restored" },
               { stat: "4.9★", label: "Avg. Rating" },
-              { stat: "100%", label: "Documented" },
+              { stat: "Free", label: "Photo Review" },
             ].map((s) => (
               <div key={s.stat} className="text-center">
                 <div className="text-3xl md:text-4xl font-black text-white mb-1">{s.stat}</div>
@@ -222,7 +222,7 @@ export default async function HomePage() {
             ))}
           </div>
           <div className="mt-8 bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-amber-900 leading-relaxed">
-            <strong>Important:</strong> All sales are final. Turnaround times are estimates only and are not guaranteed.
+            <strong>Important:</strong> All sales are final once work begins. Turnaround times are estimates only and are not guaranteed.
             The Card Doc LLC is not responsible for loss or damage during transit. Restoration results vary by card condition.
             By submitting an order, you acknowledge and agree to the full{" "}
             <Link href="/terms" className="font-semibold underline hover:text-amber-700">Terms and Conditions</Link>.

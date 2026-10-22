@@ -331,7 +331,7 @@ export function StepReview({
       {/* Insured Shipping */}
       {INSURANCE_ENABLED && <div className="flex flex-col gap-3">
         <h3 className="font-medium text-foreground">Insured Shipping <span className="text-xs font-normal text-muted-foreground">(optional)</span></h3>
-        <p className="text-xs text-muted-foreground">Add insurance to your shipment in case of loss or damage in transit via Shippo / ShipSurance. Up to $10,000. This insures the shipping — not the restoration.</p>
+        <p className="text-xs text-muted-foreground">Add insurance to your shipment in case of loss or damage in transit via Shippo / ShipSurance. Up to $10,000. It covers the shipment only. We do not currently insure customer cards while they are in our possession.</p>
 
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Declared Value</label>

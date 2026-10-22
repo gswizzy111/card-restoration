@@ -47,7 +47,7 @@ export default async function PrepPage() {
             Get Your Cards Grade-Ready
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            We surface-clean and prep your cards so they&apos;re submission-ready. Prep is grader-legal and won&apos;t affect your numeric grade.
+            We surface-clean and prep your cards so they&apos;re submission-ready. Graders make their own call, so no grade is ever guaranteed.
           </p>
         </div>
 
