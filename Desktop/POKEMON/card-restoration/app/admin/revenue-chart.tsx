@@ -9,11 +9,19 @@ interface Entry {
   createdAt: string;
 }
 
+// Each restoration order contributes one BacklogEntry
+export interface BacklogEntry {
+  cardCount: number;
+  createdAt: string;       // when the order was created (proxy for "entered queue")
+  completedAt?: string | null; // when it left the queue (null = still active)
+}
+
 interface Bucket {
   label: string;
   revenue: number;   // net (gross − refunded)
-  refunded: number;  // refunded portion
+  refunded: number;
   orders: number;
+  backlog: number;   // card backlog count as of this bucket's end
   trend: number | null;
 }
 
@@ -26,7 +34,15 @@ const RANGES: { key: Range; label: string }[] = [
   { key: "all", label: "All Time" },
 ];
 
-function buildBuckets(entries: Entry[], range: Range): Bucket[] {
+function computeBacklog(backlogEntries: BacklogEntry[], asOf: number): number {
+  return backlogEntries.reduce((sum, e) => {
+    const entered = new Date(e.createdAt).getTime();
+    const left = e.completedAt ? new Date(e.completedAt).getTime() : Infinity;
+    return sum + (entered <= asOf && left > asOf ? e.cardCount : 0);
+  }, 0);
+}
+
+function buildBuckets(entries: Entry[], range: Range, backlogEntries: BacklogEntry[]): Bucket[] {
   const now = new Date();
 
   function bucketItems(items: Entry[]) {
@@ -52,24 +68,25 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
       });
       const h = hourStart.getHours();
       const label = h === 0 ? "12am" : h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`;
-      return { label, ...bucketItems(items), trend: null };
+      return { label, ...bucketItems(items), backlog: computeBacklog(backlogEntries, hourEnd.getTime()), trend: null };
     });
   }
 
   if (range === "7d") {
-    const raw = Array.from({ length: 7 }, (_, i) => {
+    return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - i));
       const items = entries.filter((e) => {
         const od = new Date(e.createdAt);
         return od.getFullYear() === d.getFullYear() && od.getMonth() === d.getMonth() && od.getDate() === d.getDate();
       });
+      const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
       return {
         label: d.toLocaleString("default", { weekday: "short", month: "short", day: "numeric" }),
         ...bucketItems(items),
+        backlog: computeBacklog(backlogEntries, dayEnd),
         trend: null as number | null,
       };
     });
-    return raw;
   }
 
   if (range === "30d") {
@@ -79,9 +96,11 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
         const od = new Date(e.createdAt);
         return od.getFullYear() === d.getFullYear() && od.getMonth() === d.getMonth() && od.getDate() === d.getDate();
       });
+      const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
       return {
         label: d.toLocaleString("default", { month: "short", day: "numeric" }),
         ...bucketItems(items),
+        backlog: computeBacklog(backlogEntries, dayEnd),
         trend: null as number | null,
       };
     });
@@ -94,8 +113,13 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
   }
 
   // all time — bucket by month
-  if (entries.length === 0) return [];
-  const oldest = entries.reduce((min, e) => (e.createdAt < min ? e.createdAt : min), entries[0].createdAt);
+  if (entries.length === 0 && backlogEntries.length === 0) return [];
+  const allDates = [
+    ...entries.map((e) => e.createdAt),
+    ...backlogEntries.map((e) => e.createdAt),
+  ];
+  if (allDates.length === 0) return [];
+  const oldest = allDates.reduce((min, d) => (d < min ? d : min), allDates[0]);
   const startDate = new Date(oldest);
   const startYear = startDate.getFullYear();
   const startMonth = startDate.getMonth();
@@ -110,8 +134,9 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
       const od = new Date(e.createdAt);
       return od.getFullYear() === year && od.getMonth() === month;
     });
+    const monthEnd = new Date(year, month + 1, 1).getTime();
     const label = new Date(year, month, 1).toLocaleString("default", { month: "short", year: "2-digit" });
-    return { label, ...bucketItems(items), trend: null as number | null };
+    return { label, ...bucketItems(items), backlog: computeBacklog(backlogEntries, monthEnd), trend: null as number | null };
   });
 
   return raw.map((d, i) => {
@@ -122,12 +147,19 @@ function buildBuckets(entries: Entry[], range: Range): Bucket[] {
   });
 }
 
-function CustomTooltip({ active, payload, label, range }: { active?: boolean; payload?: { name: string; value: number }[]; label?: string; range: Range }) {
+function CustomTooltip({ active, payload, label, range, hasBacklog }: {
+  active?: boolean;
+  payload?: { name: string; value: number }[];
+  label?: string;
+  range: Range;
+  hasBacklog: boolean;
+}) {
   if (!active || !payload?.length) return null;
   const revenue = payload.find((p) => p.name === "revenue");
   const refunded = payload.find((p) => p.name === "refunded");
   const orders = payload.find((p) => p.name === "orders");
   const trend = payload.find((p) => p.name === "trend");
+  const backlog = payload.find((p) => p.name === "backlog");
   const avgLabel = range === "all" ? "3-mo avg" : range === "7d" ? "3-day avg" : "7-day avg";
   return (
     <div className="bg-white border border-border rounded-lg p-3 shadow-md text-sm">
@@ -137,6 +169,9 @@ function CustomTooltip({ active, payload, label, range }: { active?: boolean; pa
         <p className="text-red-500 text-xs font-semibold">−${refunded.value.toFixed(2)} refunded</p>
       )}
       {orders && <p className="text-muted-foreground">{orders.value} order{orders.value !== 1 ? "s" : ""}</p>}
+      {hasBacklog && backlog != null && (
+        <p className="text-teal-600 text-xs font-semibold mt-1">{backlog.value} card{backlog.value !== 1 ? "s" : ""} in backlog</p>
+      )}
       {trend && trend.value != null && (
         <p className="text-orange-500 text-xs mt-1">{avgLabel}: ${trend.value.toFixed(2)}</p>
       )}
@@ -144,15 +179,26 @@ function CustomTooltip({ active, payload, label, range }: { active?: boolean; pa
   );
 }
 
-export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[]; label?: string }) {
+export function RevenueChart({
+  entries,
+  label = "Revenue",
+  backlogEntries,
+}: {
+  entries: Entry[];
+  label?: string;
+  backlogEntries?: BacklogEntry[];
+}) {
   const [range, setRange] = useState<Range>("30d");
 
-  const data = useMemo(() => buildBuckets(entries, range), [entries, range]);
+  const bl = backlogEntries ?? [];
+  const data = useMemo(() => buildBuckets(entries, range, bl), [entries, range, bl]);
 
   const totalRevenue = useMemo(() => data.reduce((s, d) => s + d.revenue, 0), [data]);
   const totalRefunded = useMemo(() => data.reduce((s, d) => s + d.refunded, 0), [data]);
   const totalOrders = useMemo(() => data.reduce((s, d) => s + d.orders, 0), [data]);
+  const currentBacklog = useMemo(() => data[data.length - 1]?.backlog ?? 0, [data]);
   const hasRefunds = totalRefunded > 0;
+  const hasBacklog = bl.length > 0;
 
   const showTrend = range !== "24h" && range !== "7d";
   const xInterval = range === "24h" ? 3 : range === "30d" ? 4 : 0;
@@ -163,6 +209,8 @@ export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[];
     "30d": "Last 30 Days",
     all: "All Time",
   };
+
+  const colCount = 2 + (hasRefunds ? 1 : 0) + (hasBacklog ? 1 : 0);
 
   return (
     <div className="bg-white rounded-xl border border-border p-6">
@@ -185,8 +233,8 @@ export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[];
         </div>
       </div>
 
-      {/* Totals for selected range */}
-      <div className={`grid gap-3 mb-6 ${hasRefunds ? "grid-cols-3" : "grid-cols-2"}`}>
+      {/* Summary tiles */}
+      <div className={`grid gap-3 mb-6`} style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
         <div className="bg-secondary/40 rounded-lg p-4">
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Net Revenue</p>
           <p className="font-heading font-black text-2xl text-primary">${totalRevenue.toFixed(2)}</p>
@@ -197,13 +245,19 @@ export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[];
             <p className="font-heading font-black text-2xl text-red-600">−${totalRefunded.toFixed(2)}</p>
           </div>
         )}
+        {hasBacklog && (
+          <div className="bg-teal-50 rounded-lg p-4 border border-teal-100">
+            <p className="text-xs font-bold uppercase tracking-widest text-teal-500 mb-1">Cards in Backlog</p>
+            <p className="font-heading font-black text-2xl text-teal-700">{currentBacklog}</p>
+          </div>
+        )}
         <div className="bg-secondary/40 rounded-lg p-4">
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Orders</p>
           <p className="font-heading font-black text-2xl text-foreground">{totalOrders}</p>
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer width="100%" height={280}>
         <ComposedChart data={data} barSize={range === "24h" ? 8 : range === "7d" ? 28 : range === "all" && data.length <= 12 ? 28 : 10}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
           <XAxis
@@ -214,18 +268,42 @@ export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[];
             interval={xInterval}
           />
           <YAxis
+            yAxisId="left"
             tick={{ fontSize: 12, fill: "#888" }}
             axisLine={false}
             tickLine={false}
             tickFormatter={(v) => `$${v}`}
           />
-          <Tooltip content={<CustomTooltip range={range} />} />
-          <Bar dataKey="revenue" fill="oklch(0.55 0.22 265)" stackId="rev" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="refunded" fill="#ef4444" stackId="rev" radius={[4, 4, 0, 0]} fillOpacity={0.85} />
-          <Bar dataKey="orders" fill="oklch(0.75 0.15 265)" radius={[4, 4, 0, 0]} />
+          {hasBacklog && (
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              tick={{ fontSize: 11, fill: "#0d9488" }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => `${v}`}
+              width={30}
+            />
+          )}
+          <Tooltip content={<CustomTooltip range={range} hasBacklog={hasBacklog} />} />
+          <Bar dataKey="revenue" yAxisId="left" fill="oklch(0.55 0.22 265)" stackId="rev" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="refunded" yAxisId="left" fill="#ef4444" stackId="rev" radius={[4, 4, 0, 0]} fillOpacity={0.85} />
+          <Bar dataKey="orders" yAxisId="left" fill="oklch(0.75 0.15 265)" radius={[4, 4, 0, 0]} />
+          {hasBacklog && (
+            <Line
+              dataKey="backlog"
+              yAxisId="right"
+              type="monotone"
+              stroke="#0d9488"
+              strokeWidth={2}
+              dot={false}
+              connectNulls
+            />
+          )}
           {showTrend && (
             <Line
               dataKey="trend"
+              yAxisId="left"
               type="monotone"
               stroke="#f97316"
               strokeWidth={2}
@@ -248,6 +326,11 @@ export function RevenueChart({ entries, label = "Revenue" }: { entries: Entry[];
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="w-3 h-3 rounded-sm inline-block" style={{ background: "oklch(0.75 0.15 265)" }} />Orders
         </div>
+        {hasBacklog && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="w-3 h-0.5 inline-block" style={{ background: "#0d9488" }} />Card Backlog
+          </div>
+        )}
         {showTrend && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="w-3 h-0.5 bg-orange-500 inline-block" />

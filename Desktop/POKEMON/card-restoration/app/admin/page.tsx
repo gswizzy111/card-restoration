@@ -262,7 +262,7 @@ export default async function AdminPage({
   ] = await Promise.all([
     admin
       .from("orders")
-      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, refunded_cents, status, created_at, inbound_method, restoration_tier, admin_notes, payment_method, instagram_feature")
+      .select("id, order_number, customer_name, customer_email, customer_phone, total_cents, refunded_cents, status, created_at, updated_at, inbound_method, restoration_tier, admin_notes, payment_method, instagram_feature")
       .neq("status", "awaiting_payment")
       .order("created_at", { ascending: false }),
     admin
@@ -400,6 +400,13 @@ export default async function AdminPage({
     if (row.completed) completedCountByOrder[row.order_id] = (completedCountByOrder[row.order_id] ?? 0) + 1;
   }
 
+  // All card order_ids for backlog-over-time computation
+  const { data: allCardRows } = await admin.from("cards").select("order_id");
+  const allCardCountByOrder: Record<string, number> = {};
+  for (const row of allCardRows ?? []) {
+    allCardCountByOrder[row.order_id] = (allCardCountByOrder[row.order_id] ?? 0) + 1;
+  }
+
   // Find when each fulfillment order was marked received (for accurate "days since received")
   const { data: receivedEvents } = fulfillmentIds.length > 0
     ? await admin.from("order_events")
@@ -466,6 +473,16 @@ export default async function AdminPage({
   const thisMonthOrderCount = thisMonthRevenue.length;
   const revenueEntries = allRevenue.map((o) => ({ cents: o.total_cents, refundedCents: o.refunded_cents, createdAt: o.created_at }));
   const kitRevenueEntries = (shopOrders ?? []).map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o as any).refunded_cents ?? 0, createdAt: o.created_at }));
+
+  // Backlog history: one entry per restoration order with card count
+  const BACKLOG_EXIT_STATUSES = ["completed", "shipped_back", "delivered", "cancelled"];
+  const backlogEntries = (orders ?? [])
+    .filter((o) => (allCardCountByOrder[o.id] ?? 0) > 0)
+    .map((o) => ({
+      cardCount: allCardCountByOrder[o.id] ?? 0,
+      createdAt: o.created_at,
+      completedAt: BACKLOG_EXIT_STATUSES.includes(o.status) ? ((o as any).updated_at ?? null) : null,
+    }));
 
   const fulfillmentCount = fulfillmentCards?.length ?? 0;
   const shippedCount = shippedRaw?.length ?? 0;
@@ -664,7 +681,7 @@ export default async function AdminPage({
 
             {/* Charts */}
             <div className="mb-8 flex flex-col gap-6">
-              <RevenueChart entries={revenueEntries} label="Total Revenue" />
+              <RevenueChart entries={revenueEntries} label="Total Revenue" backlogEntries={backlogEntries} />
               <RevenueChart entries={kitRevenueEntries} label="Kit Sales" />
             </div>
 
