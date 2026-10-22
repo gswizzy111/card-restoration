@@ -50,7 +50,7 @@ export function Footer() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
           <p className="text-xs text-white/40">
-            All cards are insured during transit. Results may vary by card condition.
+            Shipping insurance is optional and isn&apos;t included automatically. Results may vary by card condition.
           </p>
           <div className="flex items-center gap-4">
             <Link href="/terms" className="text-xs text-white/60 hover:text-white transition-colors">

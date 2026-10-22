@@ -27,6 +27,8 @@ export function NewCouponForm() {
           name: `Coupon ${code.trim().toUpperCase()}`,
           code: code.trim().toUpperCase(),
           discount_percent: pct,
+          // Coupons aren't creators: no commission unless the admin sets one
+          commission_percent: 0,
         }),
       });
       const data = await res.json();
