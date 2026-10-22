@@ -24,9 +24,6 @@ export const TERMS_EFFECTIVE_ISO = (() => {
   return Number.isNaN(d.getTime()) ? "2026-10-22" : d.toISOString().slice(0, 10);
 })();
 
-/** The Terms' own summary ("READ THIS FIRST — IMPORTANT CUSTOMER NOTICES" in v1.0), shown as the Key Terms at checkout. */
-export const KEY_TERMS_BLOCKS = sectionBlocks(TERMS_BLOCKS, (h) => /^READ THIS FIRST/i.test(h.text));
-
 /**
  * The E-SIGN consent: the Terms' own words (35.3, 35.7 in v1.0) and the
  * disclosures Section 35.4 says to give, from legal/esign-consent-v<version>.md.
@@ -64,16 +61,18 @@ export const INSURANCE_DECLINED_TEXT = "You've declined shipping insurance. No c
 export const NOT_INSURED_TEXT = "We do not currently insure customer cards while they are in our possession. Optional shipping insurance is available at checkout.";
 
 /**
- * What the master signature covers besides the Terms themselves: the Key
- * Terms (quoted from the Terms), the certification and the box the customer checked. Stored
- * with the signature; its hash covers the Terms text too (lib/signatures.ts).
+ * What the master signature covers besides the Terms themselves: the
+ * certification, the consent to electronic records and the two boxes the
+ * customer checked. Stored with the signature; its hash covers the Terms
+ * text too (lib/signatures.ts).
  */
 export function masterSignatureText(): string {
   return [
-    blocksToText(KEY_TERMS_BLOCKS),
     `Customer certification (Section ${CERTIFICATION_CLAUSE}):`,
     CERTIFICATION_TEXT,
+    blocksToText(ESIGN_BLOCKS),
     `[x] ${AGREE_LABEL}`,
+    `[x] ${ESIGN_LABEL}`,
   ].join("\n\n");
 }
 

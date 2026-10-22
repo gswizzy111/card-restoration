@@ -62,7 +62,7 @@ export async function signaturePdf(
   elements.push({ type: "rule" });
   if (sig.type === "master_terms" && terms) {
     elements.push(
-      { type: "small", text: "The document signed: the Terms of Service below, then the Key Terms, certification, box checked and the services authorized." },
+      { type: "small", text: "The document signed: the Terms of Service below, then the certification, the consent to electronic records, the boxes checked, the services authorized and the optional choices." },
       ...blocksToPdf(parseLegalMarkdown(terms.content_markdown)),
       { type: "rule" },
     );

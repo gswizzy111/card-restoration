@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { SigningSection, emptySigning, signingReady, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
+import { SigningSection, emptySigning, signingReady, slabSigned, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
+import { SlabAuthorizationDialog, type HolderPatch } from "@/components/checkout/slab-authorization-dialog";
 import { emptyIdentity, identityPayload } from "@/components/checkout/card-identity-fields";
 import type { InsuranceElection } from "@/components/checkout/insurance-election";
 import { SIGN_BUTTON_LABEL } from "@/lib/legal/current-terms";
@@ -76,6 +77,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   // The signatures and consents for the Terms of Service v1.0 (components/checkout/signing-section.tsx)
   const [signing, setSigning] = useState<SigningState>(emptySigning());
   const [skippedSlabs, setSkippedSlabs] = useState<string[]>([]);
+  // The card whose slab authorization pop-up is open
+  const [slabDialogId, setSlabDialogId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [insuranceElection, setInsuranceElection] = useState<InsuranceElection>(null);
   const [insurance, setInsurance] = useState<InsuranceSelection>({ declaredValueCents: 0, type: "none", chargeCents: 0 });
@@ -97,19 +100,27 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
     const v = c.estimated_value ? Math.round(parseFloat(c.estimated_value.replace(/[$,]/g, "")) * 100) : 0;
     return isNaN(v) ? 0 : v;
   };
-  const slabCards: SlabCard[] = cards.flatMap((c, i) => (c.needs_slab_crack ? [{
+  const slabCardOf = (c: CardEntry, i: number): SlabCard => ({
     index: i,
+    id: c.id,
     details: { card_name: c.card_name.trim(), ...identityPayload(c), declared_value_cents: cardValueCents(c) },
-  }] : []));
+  });
+  const slabCards: SlabCard[] = cards.flatMap((c, i) => (c.needs_slab_crack ? [slabCardOf(c, i)] : []));
+  const slabDialogIndex = cards.findIndex((c) => c.id === slabDialogId);
+  const slabDialogCard = slabDialogIndex >= 0 ? slabCardOf(cards[slabDialogIndex], slabDialogIndex) : null;
+  const slabStatus = (cardId: string) => {
+    const i = cards.findIndex((c) => c.id === cardId);
+    return i >= 0 && slabSigned(signing, slabCardOf(cards[i], i));
+  };
   const highValueCards = cards.filter((c) => isHighValue(cardValueCents(c))).map((c) => ({ name: c.card_name.trim(), valueCents: cardValueCents(c) }));
   const insuranceOk = insuranceElection === "declined"
     || (insuranceElection === "purchased" && insurance.declaredValueCents > 0 && insurance.type !== "none");
   const readyToSign = signingReady(signing, slabCards) && insuranceOk;
   const stillNeeded = [
     insuranceElection === null ? "choose to buy or decline shipping insurance" : !insuranceOk ? "enter the amount to insure and pick a coverage" : null,
-    ...slabCards.filter((c) => !submittedSigning(signing, [c]).slab_authorizations?.length).map((c) => `sign or skip the slab authorization for ${c.details.card_name || `card ${c.index + 1}`}`),
-    !signing.esign ? "consent to electronic records" : null,
+    ...slabCards.filter((c) => !slabSigned(signing, c)).map((c) => `sign or skip the slab authorization for ${c.details.card_name || `card ${c.index + 1}`}`),
     !signing.agreed ? "check the box agreeing to the Terms" : null,
+    !signing.esign ? "check the electronic records box" : null,
     signing.signerName.trim().length < 2 ? "type your full legal name" : null,
   ].filter(Boolean) as string[];
 
@@ -121,6 +132,14 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   function changeSigning(next: SigningState) {
     setSigning(next);
     if (!next.media && instagramFeature) setInstagramFeature(false);
+  }
+  // Picking slab cracking opens its authorization; closing it unsigned takes the slab off
+  function closeSlabDialog(signed: boolean) {
+    if (!signed && slabDialogId) setCards((cs) => cs.map((c) => (c.id === slabDialogId ? { ...c, needs_slab_crack: false } : c)));
+    setSlabDialogId(null);
+  }
+  function changeSlabHolder(patch: HolderPatch) {
+    setCards((cs) => cs.map((c) => (c.id === slabDialogId ? { ...c, ...patch } : c)));
   }
   function skipSlab(index: number) {
     const name = cards[index]?.card_name.trim() || `Card ${index + 1}`;
@@ -247,6 +266,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   return (
     <div className="max-w-6xl mx-auto px-6 md:px-8 py-12">
       <InAppBrowserBanner />
+      <SlabAuthorizationDialog card={slabDialogCard} state={signing} onChange={changeSigning} onHolderChange={changeSlabHolder} onClose={closeSlabDialog} />
       <div className="mb-10">
         <ProgressIndicator currentStep={step} />
       </div>
@@ -260,6 +280,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               selectedServiceIds={[serviceId]}
               onChange={setCards}
               defaultTier={selectedTier}
+              slabSigned={slabStatus}
+              onOpenSlab={setSlabDialogId}
             />
           )}
           {step === 2 && <StepCustomer customer={customer} onChange={setCustomer} />}
@@ -297,6 +319,7 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
                   state={signing}
                   onChange={changeSigning}
                   onSkipSlab={skipSlab}
+                  onOpenSlab={(i) => setSlabDialogId(cards[i]?.id ?? null)}
                   skippedSlabs={skippedSlabs}
                   mediaRequiredNote={instagramFeature ? "The Instagram feature you added needs the first permission; unchecking it removes the feature." : undefined}
                 />
