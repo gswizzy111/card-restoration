@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { INQUIRY_TYPE } from "@/lib/card-inquiries";
+import { PROBLEM_TYPE } from "@/lib/problem-reports";
 import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
   internal:       { label: "Internal",     cls: "bg-gray-100 text-gray-600" },
   support:        { label: "Support",      cls: "bg-purple-100 text-purple-700" },
   [INQUIRY_TYPE]: { label: "Update Request", cls: "bg-primary text-primary-foreground" },
+  [PROBLEM_TYPE]: { label: "Problem Report", cls: "bg-red-100 text-red-800" },
 };
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -42,6 +44,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
   if (typeFilter === "internal") query = query.eq("type", "internal");
   else if (typeFilter === "support") query = query.eq("type", "support");
   else if (typeFilter === "inquiry") query = query.eq("type", INQUIRY_TYPE);
+  else if (typeFilter === "problem") query = query.eq("type", PROBLEM_TYPE);
 
   const { data: cases } = await query;
   const list = cases ?? [];
@@ -86,6 +89,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
             {filterBtn("Internal", "internal", "type", typeFilter)}
             {filterBtn("Support", "support", "type", typeFilter)}
             {filterBtn("Update Requests", "inquiry", "type", typeFilter)}
+            {filterBtn("Problem Reports", "problem", "type", typeFilter)}
           </div>
         </div>
 

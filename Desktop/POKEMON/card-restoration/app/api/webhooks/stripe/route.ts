@@ -4,6 +4,20 @@ import { stripe, invoiceSubscriptionId } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
 import { resend, fromEmail, businessName } from "@/lib/resend";
+import { randomUUID } from "node:crypto";
+import { isHighValue } from "@/lib/legal/agreements-v1";
+import { itemAmounts } from "@/lib/item-pricing";
+import { signedPdfAttachments } from "@/lib/signed-pdfs";
+import { startHighValueAgreements } from "@/lib/high-value";
+
+/** A card added to a paid order, as the add-cards route saved it. */
+type AddedCard = {
+  name: string;
+  declaredValueCents: number;
+  photoUrls?: string[];
+  card_set?: string; card_year?: string; card_number?: string; variation?: string;
+  grading_company?: string; grade?: string; cert_number?: string; known_defects?: string;
+};
 import { buyKitLabel, type KitLabel } from "@/lib/kit-label";
 import { RESTORATION_TIERS, getCardPriceCents, getTierById } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
@@ -364,8 +378,37 @@ export async function POST(request: Request) {
 
       if (addOrderId && cardCount > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newCardRows: Record<string, any>[] = [];
-        for (let i = 0; i < cardCount; i++) {
+        let newCardRows: Record<string, any>[] = [];
+        // The full card details saved when the customer signed (add-cards route)
+        const pendingId = session.metadata.pending_event_id;
+        const { data: pending } = pendingId
+          ? await admin.from("order_events").select("metadata").eq("id", pendingId).maybeSingle()
+          : { data: null };
+        const pendingCards = (pending?.metadata as { cards?: AddedCard[] } | null)?.cards;
+        if (pendingCards?.length) {
+          const addTier = RESTORATION_TIERS[tierName as RestorationTierId] ?? RESTORATION_TIERS.regular;
+          const prices = pendingCards.map((c) => getCardPriceCents(addTier, c.declaredValueCents));
+          const amounts = itemAmounts(prices, parseInt(session.metadata.bulk_discount_cents ?? "0", 10) || 0);
+          newCardRows = pendingCards.map((c, i) => ({
+            id: randomUUID(),
+            order_id: addOrderId,
+            card_name: c.name,
+            photo_urls: c.photoUrls ?? [],
+            card_set: c.card_set ?? null,
+            card_year: c.card_year ?? null,
+            card_number: c.card_number ?? null,
+            variation: c.variation ?? null,
+            grading_company: c.grading_company ?? null,
+            grade: c.grade ?? null,
+            cert_number: c.cert_number ?? null,
+            known_defects: c.known_defects ?? null,
+            estimated_value_cents: c.declaredValueCents,
+            tier: addTier.id,
+            status: isHighValue(c.declaredValueCents) ? "on_hold_high_value" : "active",
+            ...amounts[i],
+          }));
+        }
+        for (let i = 0; i < cardCount && !pendingCards?.length; i++) {
           const raw = session.metadata[`card_${i}`];
           if (!raw) continue;
           try {
@@ -385,6 +428,11 @@ export async function POST(request: Request) {
 
         if (newCardRows.length > 0) {
           await admin.from("cards").insert(newCardRows);
+          // Cards over $5,000 wait for their own High-Value Agreement
+          const heldIds = newCardRows.filter((r) => r.status === "on_hold_high_value").map((r) => r.id as string);
+          if (heldIds.length) {
+            await admin.from("high_value_agreements").insert(heldIds.map((id) => ({ order_id: addOrderId, order_item_id: id })));
+          }
 
           // Service lines for the added cards, priced the way the add-cards route charged them
           const addTier = RESTORATION_TIERS[tierName as RestorationTierId] ?? RESTORATION_TIERS.regular;
@@ -424,6 +472,21 @@ export async function POST(request: Request) {
           description: `Customer added ${newCardRows.length} card${newCardRows.length !== 1 ? "s" : ""} — additional payment of $${(paidCents / 100).toFixed(2)} received`,
           is_customer_visible: true,
         });
+
+        // The signature given for these cards, emailed as a PDF; then any high-value agreements
+        const { data: addSig } = await admin.from("signatures").select("id").eq("order_id", addOrderId).eq("type", "master_terms").order("signed_at", { ascending: false }).limit(1);
+        const docs = addSig?.length ? await signedPdfAttachments(admin, addOrderId, [addSig[0].id]).catch(() => []) : [];
+        const { data: addOrder } = await admin.from("orders").select("order_number, customer_email").eq("id", addOrderId).single();
+        if (docs.length && addOrder) {
+          await resend.emails.send({
+            from: fromEmail,
+            to: addOrder.customer_email,
+            subject: `Cards added — ${businessName} #${addOrder.order_number}`,
+            html: `<div style="font-family:Helvetica,Arial,sans-serif;max-width:580px;margin:0 auto;color:#333;font-size:15px;line-height:1.6"><p>Thanks! We added ${newCardRows.length} card${newCardRows.length !== 1 ? "s" : ""} to order #${addOrder.order_number}. Your signed copy of the Terms of Service for them is attached as a PDF.</p></div>`,
+            attachments: docs,
+          }).catch((err) => console.error("Add-cards documents email failed:", err));
+        }
+        await startHighValueAgreements(admin, addOrderId).catch((err) => console.error("High-value agreements failed:", err));
       }
       return Response.json({ received: true });
     }
@@ -499,7 +562,8 @@ export async function POST(request: Request) {
       // avoids depending on DB columns that may not be migrated yet)
       const insuranceCents = parseInt(session.metadata?.insurance_declared_value_cents ?? "0", 10);
       const insuranceType = session.metadata?.insurance_type ?? "";
-      const hasInboundInsurance = insuranceCents > 0 && insuranceType !== "" && insuranceType !== "none";
+      // "return" insures only the trip back, applied when the return label is bought
+      const hasInboundInsurance = insuranceCents > 0 && insuranceType !== "" && insuranceType !== "none" && insuranceType !== "return";
       const wantsSignature = session.metadata?.add_signature_confirmation === "true";
       try {
         // The Shippo SDK's TransactionCreateRequest has no `extra` field — it strips it silently.
@@ -564,6 +628,9 @@ export async function POST(request: Request) {
     const autoPaymentMethod = gcId && gcDiscount > 0 && amountCharged === 0 ? "gift_card" : "card";
 
     const updatePayload: Record<string, unknown> = { status: "awaiting_cards", payment_status: "paid", payment_method: autoPaymentMethod };
+    // The payment to refund against (per-card refunds, lib/work-gates.ts)
+    const paidIntent = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+    if (paidIntent) updatePayload.stripe_payment_intent_id = paidIntent;
     if (shippingLabelUrl) updatePayload.shipping_label_url = shippingLabelUrl;
     if (inboundTrackingNumber) updatePayload.inbound_tracking_number = inboundTrackingNumber;
     if (inboundCustomsFormUrl) updatePayload.inbound_customs_form_url = inboundCustomsFormUrl;
@@ -686,6 +753,11 @@ export async function POST(request: Request) {
     const trackingUrl = `${appUrl}/orders/${order.order_number}`;
 
     const firstName = order.customer_name?.split(" ")[0] ?? "there";
+    // The signed Terms and slab authorizations, stored and attached (lib/signed-pdfs.ts)
+    const signedDocs = await signedPdfAttachments(admin, orderId!).catch((err) => {
+      console.error("Signed PDFs failed:", err);
+      return [];
+    });
     const shippingSection = shippingLabelUrl
       ? `<div style="background:#eff6ff;border:2px solid #93c5fd;border-radius:12px;padding:24px;margin:24px 0">
           <p style="margin:0 0 6px;font-size:18px;font-weight:900;color:#1e3a8a">📦 Your Prepaid Shipping Label Is Ready</p>
@@ -735,6 +807,7 @@ export async function POST(request: Request) {
               <p style="margin:0 0 20px;font-size:22px;font-weight:900;color:#111">#${order.order_number}</p>
               <p style="margin:0 0 20px;font-size:15px;color:#333;line-height:1.6">Hi ${firstName}! 👋 Thank you for your ${isPrep ? "prep" : "restoration"} order. Here's what to do next to get your cards to us.</p>
               ${shippingSection}
+              ${signedDocs.length ? `<p style="margin:0 0 16px;font-size:14px;color:#333;line-height:1.6">Your signed copy of the Terms of Service${signedDocs.length > 1 ? " and slab removal authorizations are" : " is"} attached as PDF${signedDocs.length > 1 ? "s" : ""}. Please keep ${signedDocs.length > 1 ? "them" : "it"} for your records.</p>` : ""}
               <div style="text-align:center;margin:24px 0">
                 <a href="${trackingUrl}" style="display:inline-block;background:#111;color:#fff;padding:13px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">View Your Order Status →</a>
               </div>
@@ -744,10 +817,13 @@ export async function POST(request: Request) {
             </div>
           </div>
         `,
+        ...(signedDocs.length ? { attachments: signedDocs } : {}),
       });
     } catch (err) {
       console.error("Failed to send confirmation email:", err);
     }
+    // Cards over $5,000: email their High-Value Agreements and tell the owner
+    await startHighValueAgreements(admin, orderId!).catch((err) => console.error("High-value agreements failed:", err));
   }
 
   // ── Invoice paid (recurring subscription billing) ─────────────────────

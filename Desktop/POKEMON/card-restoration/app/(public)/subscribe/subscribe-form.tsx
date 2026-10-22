@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { US_STATES } from "@/lib/constants";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
+import { subscriptionDisclosures, subscriptionEnrollLabel } from "@/lib/subscription-terms";
 
 function formatPrice(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -13,6 +14,8 @@ export function SubscribeForm({ priceCents }: { priceCents: number }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Enrolling is its own affirmative choice, never pre-checked (Terms Section 26)
+  const [enroll, setEnroll] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -37,7 +40,7 @@ export function SubscribeForm({ priceCents }: { priceCents: number }) {
       const res = await fetch("/api/subscribe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, enroll }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Something went wrong. Please try again."); return; }
@@ -131,13 +134,24 @@ export function SubscribeForm({ priceCents }: { priceCents: number }) {
               </div>
             </div>
 
-            <button type="submit" disabled={loading}
+            <div className="mt-2 rounded-lg border border-border bg-secondary/30 p-4">
+              <p className="text-sm font-semibold text-foreground mb-2">Before you subscribe</p>
+              <ul className="flex flex-col gap-1.5 text-sm text-muted-foreground list-disc pl-5">
+                {subscriptionDisclosures(priceCents).map((d) => <li key={d}>{d}</li>)}
+              </ul>
+            </div>
+            <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+              <input type="checkbox" checked={enroll} onChange={(e) => setEnroll(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-primary" />
+              <span className="font-semibold text-foreground">{subscriptionEnrollLabel(priceCents)}</span>
+            </label>
+
+            <button type="submit" disabled={loading || !enroll}
               className="mt-2 w-full rounded-lg bg-primary px-6 py-3.5 text-base font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60">
               {loading ? "Redirecting to checkout…" : `Subscribe — ${priceLabel}/mo`}
             </button>
 
             <p className="text-center text-xs text-muted-foreground">
-              Secured by Stripe. Cancel anytime by emailing us.
+              Secured by Stripe. Cancel anytime online or by email.
             </p>
           </form>
         </div>

@@ -215,8 +215,8 @@ export default async function AboutPage() {
                 body: "Full payment is collected at checkout. Service fees are non-refundable once work has begun, except as our Terms provide (for example, when we can't improve a card).",
               },
               {
-                title: "Report problems within 14 days",
-                body: "Tell us about any problem with your returned cards in writing within 14 days of delivery, with photos.",
+                title: "Report problems within 5 days",
+                body: "Tell us about any problem with your returned cards within 5 days of delivery, with photos, and keep the packaging. Use Report a problem on your order page or email thecarddoc1@gmail.com.",
               },
               {
                 title: "Submit only authentic cards",

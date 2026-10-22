@@ -10,7 +10,15 @@ import { getTierById, getCardPriceCents, formatCents } from "@/lib/restoration-t
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import { INSURANCE_ENABLED } from "@/lib/site-config";
-import { SignaturePad } from "./signature-pad";
+import { InsuranceElectionBox, type InsuranceElection } from "@/components/checkout/insurance-election";
+import type { InsuranceType } from "@/lib/types";
+
+const INSURANCE_OPTION_LABELS: Record<Exclude<InsuranceType, "none">, { label: string; sub: string }> = {
+  inbound: { label: "Insure the trip to us", sub: "Covers the prepaid label's package from you to The Card Doc" },
+  round_trip: { label: "Insure both ways", sub: "Covers the trip to us and the trip back to you" },
+  return: { label: "Insure the trip back to you", sub: "Covers the return package from The Card Doc to you" },
+};
+export const insuranceTypeLabel = (t: InsuranceType) => (t === "round_trip" ? "round trip" : t === "return" ? "return" : "inbound");
 
 interface StepReviewProps {
   services: Service[];
@@ -31,12 +39,12 @@ interface StepReviewProps {
   onGiftCardAmountChange: (cents: number) => void;
   instagramFeature: boolean;
   onInstagramFeatureChange: (v: boolean) => void;
-  signatureDataUrl: string;
-  onSignatureChange: (v: string) => void;
   onEditStep: (step: number) => void;
   selectedTier?: RestorationTierId;
-  /** The Slab-Removal Authorization and High-Value Card Agreements, shown above the order signature */
-  agreementsSlot?: React.ReactNode;
+  /** The slab authorizations, permissions, e-sign consent and master signature (components/checkout/signing-section.tsx) */
+  signingSlot?: React.ReactNode;
+  insuranceElection: InsuranceElection;
+  onInsuranceElectionChange: (e: Exclude<InsuranceElection, null>) => void;
   insurance: InsuranceSelection;
   onInsuranceChange: (ins: InsuranceSelection) => void;
   addSignatureConfirmation: boolean;
@@ -65,12 +73,12 @@ export function StepReview({
   onGiftCardAmountChange,
   instagramFeature,
   onInstagramFeatureChange,
-  signatureDataUrl,
-  onSignatureChange,
   onEditStep,
   selectedTier,
   insurance,
-  agreementsSlot,
+  signingSlot,
+  insuranceElection,
+  onInsuranceElectionChange,
   onInsuranceChange,
   addSignatureConfirmation,
   onSignatureConfirmationChange,
@@ -111,11 +119,11 @@ export function StepReview({
       const data = await res.json();
       if (res.ok) {
         setInsuranceQuote({ customerChargeCents: data.customerChargeCents, roundTripChargeCents: data.roundTripChargeCents });
-        if (insurance.type !== "none") {
+        if (insurance.type !== "none" && insuranceOptions.includes(insurance.type)) {
           const charge = insurance.type === "round_trip" ? data.roundTripChargeCents : data.customerChargeCents;
           onInsuranceChange({ ...insurance, declaredValueCents, chargeCents: charge });
         } else {
-          onInsuranceChange({ ...insurance, declaredValueCents });
+          onInsuranceChange({ declaredValueCents, type: "none", chargeCents: 0 });
         }
       }
     } finally {
@@ -143,7 +151,7 @@ export function StepReview({
     fetchInsuranceQuote(clamped * 100);
   }
 
-  function handleInsuranceTypeChange(type: "none" | "inbound" | "round_trip") {
+  function handleInsuranceTypeChange(type: InsuranceType) {
     if (type === "none") {
       onInsuranceChange({ declaredValueCents: insurance.declaredValueCents, type: "none", chargeCents: 0 });
     } else if (insuranceQuote) {
@@ -185,6 +193,8 @@ export function StepReview({
   }
 
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
+  // We can only insure the trip to us when we buy that label
+  const insuranceOptions: Exclude<InsuranceType, "none">[] = shippingMethod === "buy_label" ? ["inbound", "round_trip"] : ["return"];
 
   const effectiveDiscountPct = Math.max(discountPercent, loyaltyDiscountPercent);
   const totals = computeOrderTotals({
@@ -328,61 +338,60 @@ export function StepReview({
         </div>
       )}
 
-      {/* Insured Shipping */}
-      {INSURANCE_ENABLED && <div className="flex flex-col gap-3">
-        <h3 className="font-medium text-foreground">Insured Shipping <span className="text-xs font-normal text-muted-foreground">(optional)</span></h3>
-        <p className="text-xs text-muted-foreground">Add insurance to your shipment in case of loss or damage in transit via Shippo / ShipSurance. Up to $10,000. It covers the shipment only. We do not currently insure customer cards while they are in our possession.</p>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Declared Value</label>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">$</span>
-            <input
-              type="number"
-              min={1}
-              max={10000}
-              step={1}
-              value={insuranceDollars}
-              onChange={(e) => setInsuranceDollars(e.target.value)}
-              onBlur={handleDeclaredValueBlur}
-              placeholder="e.g. 500"
-              className="w-36 h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:border-primary transition-colors"
-            />
-            {quotingInsurance && <span className="text-xs text-muted-foreground">Getting rate...</span>}
+      {/* Shipping insurance: a required choice, buy or decline (Terms 15.2, 15.4) */}
+      {INSURANCE_ENABLED && (
+        <InsuranceElectionBox election={insuranceElection} onElection={onInsuranceElectionChange}>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide" htmlFor="insurance-amount">Amount to insure</label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">$</span>
+              <input
+                id="insurance-amount"
+                type="number"
+                min={1}
+                max={10000}
+                step={1}
+                value={insuranceDollars}
+                onChange={(e) => setInsuranceDollars(e.target.value)}
+                onBlur={handleDeclaredValueBlur}
+                placeholder="e.g. 500"
+                className="w-36 h-9 border border-border rounded-lg px-3 text-sm focus:outline-none focus:border-primary transition-colors"
+              />
+              {quotingInsurance && <span className="text-xs text-muted-foreground">Getting rate...</span>}
+            </div>
+            <p className="text-xs text-muted-foreground">The value of the cards in the package ($1 to $10,000)</p>
           </div>
-          <p className="text-xs text-muted-foreground">Enter the value of cards you&apos;re sending ($1–$10,000)</p>
-        </div>
 
-        {insuranceQuote && insurance.declaredValueCents > 0 && (
-          <div className="flex flex-col gap-2">
-            {(["none", "inbound", "round_trip"] as const).map((type) => {
-              const label = type === "none" ? "No insured shipping" : type === "inbound" ? "Insured shipping (inbound)" : "Insured shipping (round trip)";
-              const sublabel = type === "none" ? "" : type === "inbound" ? "Covers your package from you to The Card Doc" : "Covers both ways — you to us, and back to you";
-              const price = type === "none" ? null : type === "inbound" ? insuranceQuote.customerChargeCents : insuranceQuote.roundTripChargeCents;
-              return (
-                <label key={type} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${insurance.type === type ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
-                  <input
-                    type="radio"
-                    name="insurance-type"
-                    checked={insurance.type === type}
-                    onChange={() => handleInsuranceTypeChange(type)}
-                    className="mt-0.5 accent-primary"
-                  />
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-foreground">{label}</span>
-                    {price !== null && <span className="text-sm font-semibold text-primary ml-2">{formatCurrency(price)}</span>}
-                    {sublabel && <p className="text-xs text-muted-foreground mt-0.5">{sublabel}</p>}
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        )}
+          {insuranceQuote && insurance.declaredValueCents > 0 && (
+            <div className="flex flex-col gap-2">
+              {insuranceOptions.map((type) => {
+                const { label, sub } = INSURANCE_OPTION_LABELS[type];
+                const price = type === "round_trip" ? insuranceQuote.roundTripChargeCents : insuranceQuote.customerChargeCents;
+                return (
+                  <label key={type} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${insurance.type === type ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
+                    <input
+                      type="radio"
+                      name="insurance-type"
+                      checked={insurance.type === type}
+                      onChange={() => handleInsuranceTypeChange(type)}
+                      className="mt-0.5 accent-primary"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-foreground">{label}</span>
+                      <span className="text-sm font-semibold text-primary ml-2">{formatCurrency(price)}</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
 
-        {!insuranceQuote && insurance.declaredValueCents === 0 && (
-          <p className="text-xs text-muted-foreground italic">Enter a declared value above to see insurance pricing.</p>
-        )}
-      </div>}
+          {!insuranceQuote && insurance.declaredValueCents === 0 && (
+            <p className="text-xs text-muted-foreground italic">Enter the amount to insure to see the price.</p>
+          )}
+        </InsuranceElectionBox>
+      )}
 
       {/* Instagram Feature Add-on */}
       <div className={`border-2 rounded-xl p-5 transition-colors ${instagramFeature ? "border-[#1a8fe0] bg-blue-50" : "border-border"}`}>
@@ -502,7 +511,7 @@ export function StepReview({
         )}
         {INSURANCE_ENABLED && insurance.chargeCents > 0 && (
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Insured Shipping ({insurance.type === "round_trip" ? "round trip" : "inbound"})</span>
+            <span>Shipping Insurance ({insuranceTypeLabel(insurance.type)})</span>
             <span>{formatCurrency(insurance.chargeCents)}</span>
           </div>
         )}
@@ -620,33 +629,7 @@ export function StepReview({
         {gcStatus === "invalid" && <p className="text-sm text-red-500">Invalid or already used gift card.</p>}
       </div>
 
-      {agreementsSlot}
-
-      {/* Signature */}
-      <div className="flex flex-col gap-3">
-        <div>
-          <h3 className="font-medium text-foreground">Sign to confirm your order</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            By signing below you confirm you have read and agree to the{" "}
-            <a
-              href="/terms"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline underline-offset-2 hover:opacity-80"
-            >
-              Terms of Service
-            </a>
-            , including The Card Doc&apos;s limitations of liability regarding restoration outcomes and card condition.
-          </p>
-        </div>
-        <SignaturePad
-          onSign={onSignatureChange}
-          onClear={() => onSignatureChange("")}
-        />
-        {!signatureDataUrl && (
-          <p className="text-xs text-red-500">A signature is required to place your order.</p>
-        )}
-      </div>
+      {signingSlot}
     </div>
   );
 }

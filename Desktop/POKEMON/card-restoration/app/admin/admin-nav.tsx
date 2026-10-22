@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/admin/shop-orders",  label: "Kit Orders",   icon: "📦" },
   { href: "/admin/incoming",    label: "Incoming",   icon: "📬" },
   { href: "/admin/ship-queue",  label: "Ship Queue", icon: "🚚" },
+  { href: "/admin/unclaimed",   label: "Unclaimed",  icon: "⏳" },
   { href: "/admin/partners",    label: "Partners",   icon: "🤝" },
   { href: "/admin/products",    label: "Products",   icon: "🛍️" },
   { href: "/admin/store-settings", label: "Store Settings",       icon: "⚙️" },

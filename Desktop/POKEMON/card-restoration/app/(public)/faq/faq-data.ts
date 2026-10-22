@@ -44,7 +44,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "Do you work on slabbed (already graded) cards?",
-        a: "Yes — add slab cracking at checkout ($7/card) and we'll remove the card before work. You'll sign a separate Slab-Removal Authorization at checkout.",
+        a: "Yes — add slab cracking at checkout ($7/card) and we'll remove the card before work. You'll sign a separate Slab Removal Authorization for each slab at checkout, naming the card and its certification number.",
       },
     ],
   },
@@ -66,11 +66,11 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "Do you charge extra to crack a slab?",
-        a: "Slab cracking is a $7 per-card add-on, selected at checkout. You'll sign a separate Slab-Removal Authorization for it at checkout.",
+        a: "Slab cracking is a $7 per-card add-on, selected at checkout. You'll sign a separate Slab Removal Authorization for each slab at checkout.",
       },
       {
         q: "Do you take cards worth more than $5,000?",
-        a: "Yes. Every card declared above $5,000 needs its own High-Value Card Agreement, signed at checkout, and we strongly recommend insured, tracked shipping with signature confirmation for it.",
+        a: "Yes. Every card declared above $5,000 needs its own High-Value Agreement before we begin work. We email it after you order, and the card stays on hold until both of us sign. We strongly recommend insured, tracked shipping with signature confirmation for it.",
       },
     ],
   },
@@ -140,7 +140,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "Can I cancel my order?",
-        a: "Cancellations are handled by a person — contact us directly @the_card_doc and we'll take care of you.",
+        a: "Yes, before we start cleaning your card. Email thecarddoc1@gmail.com with your order number and we'll take care of you. Once cleaning has started, the service fee is generally non-refundable.",
       },
     ],
   },

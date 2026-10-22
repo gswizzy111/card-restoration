@@ -9,6 +9,8 @@ import type { Track } from "shippo/models/components";
 import { UpgradeSection } from "./upgrade-section";
 import { AddCardsSection } from "./add-cards-section";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
+import { ReportProblem } from "@/components/orders/report-problem";
+import { FileDown, Hourglass } from "lucide-react";
 
 function EmailMismatch() {
   return (
@@ -165,6 +167,8 @@ async function KitOrderView({ kitNumber, email }: { kitNumber: string; email: st
         </div>
       </div>
 
+      <ReportProblem orderRef={`K${order.order_number}`} email={email} />
+
       <p className="text-center text-sm text-muted-foreground">
         Questions? Email us at{" "}
         <a href={`mailto:${process.env.CONTACT_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL}`} className="text-primary font-medium">
@@ -237,6 +241,13 @@ export default async function OrderDetailPage({
   const cardNames = new Set((cards ?? []).map((c) => String(c.card_name).trim()));
   const signedAgreements = ((signedRows ?? []) as SignedAgreement[]).filter((a) => a.kind !== "high_value" || cardNames.has(a.card_name ?? ""));
   const { data: services } = await admin.from("order_services").select("*").eq("order_id", order.id);
+  // Documents signed under the Terms of Service v1.0, and each high-value card's agreement
+  const [{ data: signatures }, { data: highValue }] = await Promise.all([
+    admin.from("signatures").select("id, type, document_title, typed_full_name, signed_at, card_snapshot").eq("order_id", order.id).order("signed_at"),
+    admin.from("high_value_agreements").select("id, order_item_id, status, customer_signature_id").eq("order_id", order.id),
+  ]);
+  const docUrl = (id: string, executed = false) => `/api/orders/${encodeURIComponent(String(order.order_number))}/documents/${id}?email=${encodeURIComponent(email)}${executed ? "&executed=1" : ""}`;
+  const signedDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" });
 
   // Fetch live inbound tracking from Shippo (only while awaiting cards)
   let inboundTrack: Track | null = null;
@@ -414,10 +425,44 @@ export default async function OrderDetailPage({
             <div key={card.id} className="text-sm p-3 rounded-lg bg-secondary/40">
               <p className="font-semibold text-foreground">{i + 1}. {card.card_name}</p>
               {card.card_set && <p className="text-muted-foreground">{card.card_set}</p>}
+              {card.status === "on_hold_high_value" && (
+                <p className="mt-1 text-xs font-semibold text-amber-900 flex items-center gap-1.5"><Hourglass className="h-3.5 w-3.5" />On hold until the High-Value Agreement is signed by you and by us</p>
+              )}
             </div>
           ))}
         </div>
       </div>
+
+      {((signatures?.length ?? 0) > 0 || (highValue?.length ?? 0) > 0) && (
+        <div className="bg-white rounded-xl border border-border p-6 mb-5">
+          <h2 className="font-heading font-black text-lg text-foreground mb-4">Documents You Signed</h2>
+          <ul className="flex flex-col gap-2.5 text-sm">
+            {(signatures ?? []).filter((s) => s.type !== "high_value").map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-foreground">
+                  {s.document_title}{s.card_snapshot?.card_name ? `: ${s.card_snapshot.card_name}` : ""}
+                  <span className="text-muted-foreground"> · signed by {s.typed_full_name}, {signedDate(s.signed_at)}</span>
+                </span>
+                <a href={docUrl(s.id)} className="inline-flex items-center gap-1 text-primary font-semibold underline underline-offset-2"><FileDown className="h-3.5 w-3.5" />PDF</a>
+              </li>
+            ))}
+            {(highValue ?? []).map((h) => {
+              const card = (cards ?? []).find((c) => c.id === h.order_item_id);
+              return (
+                <li key={h.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-foreground">
+                    High-Value Agreement{card ? `: ${card.card_name}` : ""}
+                    <span className="text-muted-foreground"> · {h.status === "executed" ? "signed by you and by us" : h.status === "declined" ? "declined" : h.customer_signature_id ? "waiting for our countersignature" : "waiting for your signature (check your email)"}</span>
+                  </span>
+                  {h.customer_signature_id && (
+                    <a href={docUrl(h.customer_signature_id, h.status === "executed")} className="inline-flex items-center gap-1 text-primary font-semibold underline underline-offset-2"><FileDown className="h-3.5 w-3.5" />PDF</a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {signedAgreements.length > 0 && (
         <div className="bg-white rounded-xl border border-border p-6 mb-5">
@@ -442,6 +487,8 @@ export default async function OrderDetailPage({
           </div>
         </div>
       </div>
+
+      <ReportProblem orderRef={String(order.order_number)} email={email} />
 
       <p className="text-center text-sm text-muted-foreground">
         Questions? Email us at <a href={`mailto:${process.env.CONTACT_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL}`} className="text-primary font-medium">{process.env.CONTACT_EMAIL ?? process.env.BUSINESS_SHIPPING_EMAIL}</a>

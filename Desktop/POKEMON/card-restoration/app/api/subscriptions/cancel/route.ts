@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { z } from "zod";
+import { sendCancellationEmail } from "@/lib/subscription-emails";
 
 const Schema = z.object({
   email: z.string().email(),
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   // Verify the subscription belongs to this email
   const { data: sub, error } = await admin
     .from("subscriptions")
-    .select("id, stripe_subscription_id, status, customer_email")
+    .select("id, stripe_subscription_id, status, customer_email, customer_name")
     .eq("id", subscriptionId)
     .single();
 
@@ -35,10 +36,12 @@ export async function POST(request: Request) {
     return Response.json({ error: msg }, { status: 500 });
   }
 
+  const cancelledAt = new Date();
   await admin
     .from("subscriptions")
-    .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+    .update({ status: "cancelled", cancelled_at: cancelledAt.toISOString() })
     .eq("id", subscriptionId);
+  await sendCancellationEmail(sub.customer_email, sub.customer_name, cancelledAt);
 
   return Response.json({ ok: true });
 }

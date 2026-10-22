@@ -14,9 +14,10 @@ export function DeleteOrderButton({ orderId, orderNumber }: { orderId: string; o
     if (res.ok) {
       router.push("/admin");
     } else {
+      const data = await res.json().catch(() => ({}));
       setDeleting(false);
       setConfirming(false);
-      alert("Failed to delete order. Try again.");
+      alert(data.error ?? "Failed to delete order. Try again.");
     }
   }
 

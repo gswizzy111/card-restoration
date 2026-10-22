@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { isAdmin } from "@/lib/admin-auth";
+import { sendCancellationEmail } from "@/lib/subscription-emails";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!(await isAdmin())) {
@@ -12,7 +13,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const { data: sub, error } = await admin
     .from("subscriptions")
-    .select("stripe_subscription_id, status")
+    .select("stripe_subscription_id, status, customer_email, customer_name")
     .eq("id", id)
     .single();
 
@@ -26,10 +27,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return Response.json({ error: msg }, { status: 500 });
   }
 
+  const cancelledAt = new Date();
   await admin
     .from("subscriptions")
-    .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+    .update({ status: "cancelled", cancelled_at: cancelledAt.toISOString() })
     .eq("id", id);
+  await sendCancellationEmail(sub.customer_email, sub.customer_name, cancelledAt);
 
   return Response.json({ ok: true });
 }

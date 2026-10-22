@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default function PrivacyPage() {
-  const EFFECTIVE_DATE = "September 22, 2026";
+  const EFFECTIVE_DATE = "October 22, 2026";
   const CONTACT_EMAIL = "thecarddoc1@gmail.com";
 
   return (
@@ -91,6 +91,31 @@ export default function PrivacyPage() {
                 <strong>Contact and order details:</strong> your name, email address, phone number,
                 shipping address, order number, and any other information you provide in the course
                 of placing or tracking a restoration order
+              </li>
+              <li>
+                <strong>Card details:</strong> for each card you send, its name, set, year,
+                number and variation, grading company, grade and certification number, known
+                defects, the value you declare, the services you choose, and the photos you upload
+              </li>
+              <li>
+                <strong>Order history:</strong> your past and current orders, purchases, gift
+                cards, subscriptions, problem reports and our messages about them
+              </li>
+              <li>
+                <strong>Signing records:</strong> when you sign our Terms of Service or a
+                card-specific agreement (such as a Slab Removal Authorization or High-Value
+                Agreement), we record your typed full name, the exact document and version you
+                signed, the date and time from our server, your email address and whether it was
+                verified, and the <strong>IP address</strong> and{" "}
+                <strong>browser and device information</strong> (user agent) of the device you
+                signed from. We also record the choices you make at checkout: your consent to
+                electronic records, any optional photo or tagging permission, and whether you
+                bought or declined shipping insurance
+              </li>
+              <li>
+                <strong>Payment references:</strong> payments are processed by Stripe. We receive
+                references to your payment (such as Stripe payment and session IDs, amounts and
+                refunds), never your full card number
               </li>
             </ul>
 
@@ -183,6 +208,12 @@ export default function PrivacyPage() {
                 shipping address, and order details are used to process your card restoration
                 order, communicate its status, ship completed cards, and issue receipts and
                 refunds.
+              </li>
+              <li>
+                <strong>Keeping signed records:</strong> your signing records and checkout choices
+                are used to show what you agreed to and when, to make sure no work starts on a card
+                before the required signatures are in place, to send you signed copies, and to
+                handle questions, disputes, chargebacks and legal claims.
               </li>
               <li>
                 <strong>Improving reply accuracy:</strong> aggregated and anonymized data about
@@ -321,6 +352,27 @@ export default function PrivacyPage() {
                 in Supabase&rsquo;s managed PostgreSQL database.
               </li>
               <li>
+                <strong>Stripe</strong> processes card payments, refunds and subscriptions.
+              </li>
+              <li>
+                <strong>Resend</strong> delivers our emails (order confirmations, signed copies,
+                notices and password links).
+              </li>
+              <li>
+                <strong>Netlify</strong> hosts our website and the server code that runs it,
+                including the logs of requests to it.
+              </li>
+              <li>
+                <strong>Shippo and the shipping carriers</strong> (such as USPS, UPS and FedEx)
+                receive the names and addresses needed to create labels and tracking, and the
+                insurer behind any shipping insurance you buy receives what it needs to cover and
+                settle a claim.
+              </li>
+              <li>
+                <strong>Google</strong> suggests addresses as you type at checkout (Google Maps
+                Platform), in addition to Google Analytics described above.
+              </li>
+              <li>
                 <strong>Pushover</strong> — we use Pushover to send internal push notifications
                 to our team when certain events occur (for example, a new order or a message
                 requiring human review). Limited message content may be included in these
@@ -356,6 +408,12 @@ export default function PrivacyPage() {
               <li>
                 <strong>Order records:</strong> retained for at least 7 years as required for tax
                 and accounting compliance, regardless of the conversation retention period.
+              </li>
+              <li>
+                <strong>Signed agreements and signing records:</strong> kept with the order record,
+                for at least 7 years and for as long as any question, claim or dispute about the
+                order is open. They cannot be changed, and we can&rsquo;t delete them on request
+                during that time, because they are the record of what was agreed.
               </li>
               <li>
                 <strong>Exceptions:</strong> we retain data longer when required by applicable law,
@@ -423,7 +481,7 @@ export default function PrivacyPage() {
             <ul className="list-disc pl-6 space-y-2 text-sm">
               <li>
                 <strong>Access:</strong> request a copy of the personal information we hold about
-                you.
+                you, including copies of anything you signed with us.
               </li>
               <li>
                 <strong>Correction:</strong> request that we correct inaccurate or incomplete

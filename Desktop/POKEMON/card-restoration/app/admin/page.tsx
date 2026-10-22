@@ -1330,7 +1330,7 @@ export default async function AdminPage({
                           </td>
                           <td className="px-4 py-3">
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${insuranceType === "round_trip" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
-                              {insuranceType === "round_trip" ? "Round Trip" : "Inbound"}
+                              {insuranceType === "round_trip" ? "Round Trip" : insuranceType === "return" ? "Return" : "Inbound"}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
