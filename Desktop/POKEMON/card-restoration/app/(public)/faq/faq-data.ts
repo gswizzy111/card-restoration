@@ -106,7 +106,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "Will PSA detect the restoration? Will it come back \"altered\"?",
-        a: "There is always an inherent risk — low, but not zero. We stay within grading limits, add no material, and only manipulate what's already there.",
+        a: "There is always an inherent risk — low, but not zero. We add no material and only manipulate what's already there.",
       },
       {
         q: "Can you guarantee a grade — or a PSA 10?",
@@ -129,6 +129,10 @@ export const FAQ_SECTIONS: FaqSection[] = [
       {
         q: "How will my cards be shipped back?",
         a: "In a fresh penny sleeve and Card Saver, wrapped in a bubble mailer between two protective \"ding defender\" plates. Your return tracking number appears on your order when it ships.",
+      },
+      {
+        q: "Are my cards insured while you have them?",
+        a: "We do not currently insure customer cards while they are in our possession. Optional shipping insurance is available at checkout.",
       },
       {
         q: "What if you can't fix my card?",

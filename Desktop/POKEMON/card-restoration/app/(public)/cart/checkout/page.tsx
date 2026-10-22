@@ -6,6 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -461,6 +462,10 @@ function CheckoutInner() {
                 Enter your address above and click Calculate Exact Shipping before paying.
               </p>
             )}
+            <p className="flex items-start gap-2 text-sm text-foreground mb-4">
+              <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" strokeWidth={1.75} />
+              All sales final. Defective or missing items are replaced or refunded.
+            </p>
             <Button
               onClick={handleCheckout}
               disabled={submitting || !canPay()}

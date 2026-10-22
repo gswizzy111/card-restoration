@@ -630,7 +630,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                   </div>
                   <div>
                     <div className="text-sm font-bold text-foreground">Insure my shipment</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">Covers loss or damage while your cards are in transit to us.</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Covers loss or damage while your cards are in transit to us. We do not currently insure customer cards while they are in our possession.</div>
                   </div>
                 </button>
                 {addInsurance && (

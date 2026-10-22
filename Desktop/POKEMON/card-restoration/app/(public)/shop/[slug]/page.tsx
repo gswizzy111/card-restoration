@@ -3,7 +3,7 @@ import { formatCurrency } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AddToCartButtonLarge } from "./add-to-cart-button-large";
-import { RefreshCw } from "lucide-react";
+import { Info, RefreshCw } from "lucide-react";
 import { isSoldOut } from "@/lib/site-config";
 import { PixelViewContent } from "@/components/pixel-view-content";
 
@@ -145,6 +145,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 Subscribe — $62.99/mo · Save every month
               </Link>
             )}
+
+            <p className="flex items-start gap-2 text-sm text-foreground">
+              <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" strokeWidth={1.75} />
+              All sales final. Defective or missing items are replaced or refunded.
+            </p>
           </div>
         </div>
       </div>
