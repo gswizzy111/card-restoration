@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import {
-  CardFieldsSchema, SigningSchema, checkoutConsents, masterSignatureInput, signingError, slabSignatureFor, slabSignatureInput,
+  CardFieldsSchema, SigningSchema, cardDetails, checkoutConsents, masterSignatureInput, signingError, slabSignatureFor, slabSignatureInput, usd,
+  type AuthorizedOrder,
 } from "@/lib/checkout-signing";
 import { recordConsents, recordSignatures, signingContext, type SignatureInput } from "@/lib/signatures";
 import { ensureTermsVersion, type TermsVersionRow } from "@/lib/terms-versions";
@@ -573,10 +574,41 @@ export async function POST(request: Request) {
     is_customer_visible: false,
   });
 
+  // Exactly what the customer is authorizing, recorded with the master signature
+  const perCardPregrade = data.cards.some((c) => c.needs_pregrade !== undefined);
+  const insuranceTrip = data.insurance_type === "round_trip" ? "to us and back" : data.insurance_type === "return" ? "return trip" : "trip to us";
+  const authorized: AuthorizedOrder = {
+    order_number: order.order_number,
+    cards: data.cards.map((c, i) => ({
+      ...cardDetails(c, c.estimated_value_cents),
+      services: [
+        { name: cardTiers[i] ? `${getTierById(cardTiers[i]!).name} - Full Restoration & PSA Prep` : serviceName, cents: cardPrices[i] },
+        ...(slabSigned[i] ? [{ name: "Slab removal (signed authorization)", cents: 700 }] : []),
+        ...(perCardPregrade && c.needs_pregrade ? [{ name: "Pregrade", cents: 2500 }] : []),
+      ],
+    })),
+    order_lines: [
+      ...(!perCardPregrade && pregradeCount > 0 ? [{ name: `Pregrade x ${pregradeCount}`, cents: pregradeCents }] : []),
+      ...(discountCents > 0 ? [{ name: "Discount", cents: -discountCents }] : []),
+      ...(instagramFeeCents > 0 ? [{ name: "Instagram Feature (card in a video)", cents: instagramFeeCents }] : []),
+      data.shipping_method === "buy_label"
+        ? { name: "Prepaid shipping label, to us and back", cents: shippingCents }
+        : { name: "Shipping: you send the cards yourself" },
+      ...(signatureFeeCents > 0 ? [{ name: "Signature confirmation", cents: signatureFeeCents }] : []),
+      election === "purchased"
+        ? { name: `Shipping insurance (${insuranceTrip}), coverage ${usd(data.insurance_declared_value_cents ?? 0)}`, cents: insuranceChargeCents }
+        : { name: "Shipping insurance: declined" },
+      { name: "Sales tax", cents: taxCents },
+      ...(giftCardDiscountCents > 0 ? [{ name: "Gift card", cents: -giftCardDiscountCents }] : []),
+      ...(tipCents > 0 ? [{ name: "Tip", cents: tipCents }] : []),
+    ],
+    total_cents: totalCents,
+  };
+
   // The signatures and consents must be on file before payment
   const ctx = await signingContext(request, data.customer.email);
   const signatureInputs: SignatureInput[] = [
-    masterSignatureInput(order.id, terms, data.terms!.signer_name),
+    masterSignatureInput(order.id, terms, data.terms!.signer_name, authorized),
     ...data.cards.flatMap((c, i) => {
       const sig = slabSigned[i];
       return sig ? [slabSignatureInput(order.id, terms, cardIds[i], { ...c, declared_value_cents: c.estimated_value_cents }, sig.signer_name)] : [];

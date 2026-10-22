@@ -218,7 +218,7 @@ Required online acceptance: Before ordering, each customer must deliberately acc
 
 17.3. This informed-risk acknowledgment does not authorize unauthorized treatments or waive rights for fraud, intentional misconduct, reckless or grossly negligent conduct where nonwaivable, or other conduct that applicable law does not permit a business to disclaim.
 
-## 18. Limited release for ordinary negligence — attorney review required
+## 18. Limited release for ordinary negligence
 
 18.1. TO THE FULLEST EXTENT PERMITTED BY NEW JERSEY AND OTHER APPLICABLE LAW, AND IN CONSIDERATION OF OUR AGREEMENT TO ACCEPT AND TREAT AN ITEM, YOU RELEASE THE CARD DOC LLC FROM CLAIMS FOR ORDINARY NEGLIGENCE ARISING FROM THE INHERENT PHYSICAL RISKS OF A SPECIFICALLY AUTHORIZED RESTORATION OR SLAB-REMOVAL PROCEDURE THAT WERE CLEARLY DISCLOSED BEFORE YOU CONSENTED. This is not a release for conduct, losses, or legal obligations that cannot lawfully be released.
 
@@ -226,7 +226,7 @@ Required online acceptance: Before ordering, each customer must deliberately acc
 
 18.3. Because releases involving another person's valuable property receive substantial legal scrutiny, the scope and enforceability of this clause must be independently evaluated by qualified New Jersey counsel before public use. Do not assume that bold text or a clickbox guarantees enforcement.
 
-## 19. Disclaimers and limitation of damages — attorney review required
+## 19. Disclaimers and limitation of damages
 
 19.1. Except for warranties expressly provided in writing and nonwaivable rights, Services are provided without any promise of a particular appearance, grade, authenticity conclusion, investment result, resale price, or restoration success. Product warranties are addressed separately in Section 25.
 

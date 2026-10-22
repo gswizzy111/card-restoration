@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import {
-  CardFieldsSchema, SigningSchema, checkoutConsents, masterSignatureInput, signingError, slabSignatureFor, slabSignatureInput,
+  CardFieldsSchema, SigningSchema, cardDetails, checkoutConsents, masterSignatureInput, signingError, slabSignatureFor, slabSignatureInput, usd,
+  type AuthorizedOrder,
 } from "@/lib/checkout-signing";
 import { recordConsents, recordSignatures, signingContext, type SignatureInput } from "@/lib/signatures";
 import { ensureTermsVersion, type TermsVersionRow } from "@/lib/terms-versions";
@@ -218,10 +219,33 @@ export async function POST(request: Request) {
     })
   );
 
+  // Exactly what the customer is authorizing, recorded with the master signature
+  const authorized: AuthorizedOrder = {
+    order_number: order.order_number,
+    cards: d.cards.map((c, i) => ({
+      ...cardDetails(c, c.declared_value_cents),
+      services: [
+        { name: "Grading prep", cents: cardPrepCents(c.declared_value_cents, prices.standardPriceCents) },
+        ...(d.add_pre_grade ? [{ name: "Pre-Grade Assessment", cents: prices.preGradePriceCents }] : []),
+        ...(slabSigned[i] ? [{ name: "Slab removal (signed authorization)", cents: prices.slabCrackPriceCents }] : []),
+      ],
+    })),
+    order_lines: [
+      d.shipping_method === "buy_label"
+        ? { name: "Prepaid shipping label", cents: shippingAmountCents }
+        : { name: "Shipping: you send the cards yourself" },
+      hasInsurance
+        ? { name: `Shipping insurance, coverage ${usd(d.insurance_amount_cents ?? 0)}`, cents: insuranceCents }
+        : { name: "Shipping insurance: declined" },
+      { name: "Sales tax", cents: taxCents },
+    ],
+    total_cents: totalCents,
+  };
+
   // The signatures and consents must be on file before payment
   const ctx = await signingContext(request, d.customer_email);
   const signatureInputs: SignatureInput[] = [
-    masterSignatureInput(order.id, terms, d.terms!.signer_name),
+    masterSignatureInput(order.id, terms, d.terms!.signer_name, authorized),
     ...d.cards.flatMap((c, i) => {
       const sig = slabSigned[i];
       return sig ? [slabSignatureInput(order.id, terms, cardIds[i], { ...c, declared_value_cents: c.declared_value_cents }, sig.signer_name)] : [];
