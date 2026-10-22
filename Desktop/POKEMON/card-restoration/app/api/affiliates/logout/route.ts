@@ -1,8 +1,8 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { endCreatorSession } from "@/lib/creator-portal";
 
+// A 303 so the browser follows the form post with a GET, and a relative
+// Location so it stays on the domain it is on
 export async function POST() {
-  const jar = await cookies();
-  jar.delete("affiliate_session");
-  redirect("/affiliates");
+  await endCreatorSession();
+  return new Response(null, { status: 303, headers: { Location: "/affiliates" } });
 }

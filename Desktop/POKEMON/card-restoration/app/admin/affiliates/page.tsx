@@ -3,9 +3,11 @@ import { redirect } from "next/navigation";
 import { NewAffiliateForm } from "./new-affiliate-form";
 import { NewCouponForm } from "./new-coupon-form";
 import { EditAffiliateForm } from "./edit-affiliate-form";
+import { PortalAccess } from "./portal-access";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import { isAdmin } from "@/lib/admin-auth";
+import { COMMISSION_PERCENT, commissionCents, countsForCommission, netCents } from "@/lib/creator-portal";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,9 @@ type Affiliate = {
   code: string;
   discount_percent: number;
   created_at: string;
+  portal_set_up: boolean;
+  portal_last_login_at: string | null;
+  setup_link_pending: boolean;
 };
 
 type Sale = {
@@ -38,43 +43,51 @@ export default async function AdminAffiliatesPage({
 
   const admin = createAdminClient();
 
+  // Named columns: the portal password and setup link hashes never leave the server
   const { data: affiliates } = await admin
     .from("affiliates")
-    .select("*")
+    .select("id, name, code, discount_percent, created_at, password_hash, portal_last_login_at, setup_token_expires_at")
     .order("created_at", { ascending: false });
 
-  const allAffiliates: Affiliate[] = affiliates ?? [];
+  const now = new Date().toISOString();
+  const allAffiliates: Affiliate[] = (affiliates ?? []).map(({ password_hash, setup_token_expires_at, ...a }) => ({
+    ...a,
+    portal_set_up: !!password_hash,
+    setup_link_pending: !!setup_token_expires_at && setup_token_expires_at > now,
+  }));
 
   // Fetch kit orders with affiliate codes
   const { data: kitOrders } = await admin
     .from("shop_orders")
-    .select("id, items, total_cents, created_at, status, customer_name, affiliate_code")
+    .select("id, items, total_cents, refunded_cents, created_at, status, customer_name, affiliate_code")
     .not("affiliate_code", "is", null)
     .order("created_at", { ascending: false });
 
   // Fetch restoration orders with affiliate codes
   const { data: restorationOrders } = await admin
     .from("orders")
-    .select("id, total_cents, created_at, customer_name, affiliate_code, status")
+    .select("id, total_cents, refunded_cents, created_at, customer_name, affiliate_code, status")
     .not("affiliate_code", "is", null)
-    .neq("status", "awaiting_payment")
     .order("created_at", { ascending: false });
 
   // Build sales map by code
   const salesByCode: Record<string, Sale[]> = {};
 
+  // Counted the same way as on the creator's own dashboard (lib/creator-portal.ts)
   for (const o of kitOrders ?? []) {
+    if (!countsForCommission("kit", o.status) || netCents(o.total_cents, o.refunded_cents) <= 0) continue;
     const code = (o.affiliate_code as string).toUpperCase();
     if (!salesByCode[code]) salesByCode[code] = [];
     const items = Array.isArray(o.items) ? o.items : [];
     const summary = items.map((i: { product_name: string; quantity: number }) => `${i.product_name} ×${i.quantity}`).join(", ") || "Kit order";
-    salesByCode[code].push({ id: o.id, total_cents: o.total_cents, created_at: o.created_at, customer_name: o.customer_name, type: "kit", summary });
+    salesByCode[code].push({ id: o.id, total_cents: netCents(o.total_cents, o.refunded_cents), created_at: o.created_at, customer_name: o.customer_name, type: "kit", summary });
   }
 
   for (const o of restorationOrders ?? []) {
+    if (!countsForCommission("restoration", o.status) || netCents(o.total_cents, o.refunded_cents) <= 0) continue;
     const code = (o.affiliate_code as string).toUpperCase();
     if (!salesByCode[code]) salesByCode[code] = [];
-    salesByCode[code].push({ id: o.id, total_cents: o.total_cents, created_at: o.created_at, customer_name: o.customer_name, type: "restoration", summary: "Restoration service" });
+    salesByCode[code].push({ id: o.id, total_cents: netCents(o.total_cents, o.refunded_cents), created_at: o.created_at, customer_name: o.customer_name, type: "restoration", summary: "Restoration service" });
   }
 
   return (
@@ -83,7 +96,7 @@ export default async function AdminAffiliatesPage({
         <div>
           <h1 className="font-heading font-black text-3xl text-foreground">Affiliates &amp; Coupons</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            {allAffiliates.length} code{allAffiliates.length !== 1 ? "s" : ""} · 10% of every sale
+            {allAffiliates.length} code{allAffiliates.length !== 1 ? "s" : ""} · {COMMISSION_PERCENT}% of every sale
           </p>
         </div>
       </div>
@@ -100,7 +113,7 @@ export default async function AdminAffiliatesPage({
           {allAffiliates.map((affiliate) => {
             const sales = salesByCode[affiliate.code.toUpperCase()] ?? [];
             const totalRevenue = sales.reduce((s, o) => s + o.total_cents, 0);
-            const earned = Math.round(totalRevenue * 0.1);
+            const earned = commissionCents(totalRevenue);
 
             return (
               <div key={affiliate.id} className="bg-white rounded-xl border border-border overflow-hidden">
@@ -141,12 +154,19 @@ export default async function AdminAffiliatesPage({
                     </div>
                     <div className="text-center">
                       <p className="font-heading font-black text-lg text-green-700">{formatCurrency(earned)}</p>
-                      <p className="text-xs text-muted-foreground">earned (10%)</p>
+                      <p className="text-xs text-muted-foreground">earned ({COMMISSION_PERCENT}%)</p>
                     </div>
                   </div>
                 </div>
 
                 {editingId === affiliate.id && <EditAffiliateForm affiliate={affiliate} />}
+
+                <PortalAccess
+                  affiliate={{ id: affiliate.id, name: affiliate.name }}
+                  setUp={affiliate.portal_set_up}
+                  lastLogin={affiliate.portal_last_login_at}
+                  linkPending={affiliate.setup_link_pending}
+                />
 
                 {sales.length > 0 && (
                   <div className="border-t border-border px-6 py-4">
@@ -164,7 +184,7 @@ export default async function AdminAffiliatesPage({
                           <div className="flex items-center gap-3 shrink-0">
                             <span className="text-xs text-muted-foreground">{new Date(sale.created_at).toLocaleDateString()}</span>
                             <span className="font-semibold text-foreground">{formatCurrency(sale.total_cents)}</span>
-                            <span className="text-xs text-green-700 font-semibold">+{formatCurrency(Math.round(sale.total_cents * 0.1))}</span>
+                            <span className="text-xs text-green-700 font-semibold">+{formatCurrency(commissionCents(sale.total_cents))}</span>
                           </div>
                         </div>
                       ))}

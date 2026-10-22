@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { PortalCard, PORTAL_BUTTON_CN, PORTAL_INPUT_CN, PORTAL_LABEL_CN } from "./portal-card";
 
 export default function AffiliateLoginPage() {
   const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -13,50 +15,59 @@ export default function AffiliateLoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    try {
-      const res = await fetch("/api/affiliates/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      router.push("/affiliates/dashboard");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid creator code");
+    const res = await fetch("/api/affiliates/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code.trim(), password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? "Something went wrong. Please try again.");
       setLoading(false);
+      return;
     }
+    router.push("/affiliates/dashboard");
+    router.refresh();
   }
 
   return (
-    <div className="min-h-screen bg-secondary/30 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl border border-border p-8 w-full max-w-sm shadow-sm">
-        <h1 className="font-heading font-black text-2xl text-foreground mb-1">Creator Portal</h1>
-        <p className="text-sm text-muted-foreground mb-6">The Card Doc</p>
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
-              Creator Code
-            </label>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Enter your creator code"
-              className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              required
-            />
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full h-11 bg-primary text-primary-foreground font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
-      </div>
-    </div>
+    <PortalCard title="Creator Portal">
+      <form onSubmit={handleLogin} className="flex flex-col gap-4">
+        <div>
+          <label htmlFor="creator-code" className={PORTAL_LABEL_CN}>Creator Code</label>
+          <input
+            id="creator-code"
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Enter your creator code"
+            autoComplete="username"
+            autoCapitalize="characters"
+            spellCheck={false}
+            className={`${PORTAL_INPUT_CN} font-mono uppercase placeholder:normal-case placeholder:font-sans`}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="creator-password" className={PORTAL_LABEL_CN}>Password</label>
+          <input
+            id="creator-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            className={PORTAL_INPUT_CN}
+            required
+          />
+        </div>
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        <button type="submit" disabled={loading} className={PORTAL_BUTTON_CN}>
+          {loading ? "Signing in..." : "Sign In"}
+        </button>
+        <p className="text-xs text-muted-foreground leading-relaxed text-center">
+          New here, or forgot your password? Ask The Card Doc for your setup link.
+        </p>
+      </form>
+    </PortalCard>
   );
 }
