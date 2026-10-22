@@ -12,6 +12,12 @@ import { SyncTrackingButton } from "./sync-tracking-button";
 import { SyncDeliveredButton } from "./sync-delivered-button";
 import { ResendConfirmationsButton } from "./resend-confirmations-button";
 import { requireAdmin } from "@/lib/admin-auth";
+import { INQUIRY_TYPE, OPEN_CASE_STATUSES, orderLabel } from "@/lib/card-inquiries";
+
+// Whole days since a customer asked for an update (the page renders per request)
+function daysWaiting(askedAt: string) {
+  return Math.floor((Date.now() - new Date(askedAt).getTime()) / 86_400_000);
+}
 
 const TIER_BADGES: Record<string, { label: string; color: string }> = {
   regular:       { label: "Bronze",    color: "bg-amber-100 text-amber-700" },
@@ -115,7 +121,7 @@ export default async function AdminPage({
   await requireAdmin();
   const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter, sort: sortMode, method: methodFilter } = await searchParams;
   const query = q?.trim() ?? "";
-  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : tab === "gift-cards" ? "gift-cards" : "orders";
+  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : tab === "gift-cards" ? "gift-cards" : tab === "updates" ? "updates" : "orders";
   const activePeriod = shippedPeriod === "week" ? "week" : shippedPeriod === "month" ? "month" : shippedPeriod === "all" ? "all" : "today";
 
   const admin = createAdminClient();
@@ -222,6 +228,26 @@ export default async function AdminPage({
       </div>
     );
   }
+
+  // Update requests: customers waiting on a reply, oldest first (Update Requests tab)
+  const { data: updateRequests } = await admin
+    .from("cases")
+    .select("id, created_at, customer_name, customer_email, order_ref")
+    .eq("type", INQUIRY_TYPE)
+    .in("status", OPEN_CASE_STATUSES)
+    .order("created_at", { ascending: true });
+  // Their orders, for the status and link (kit orders are filed as K<number>)
+  const updateRefs = activeTab === "updates" ? (updateRequests ?? []).map((u) => u.order_ref as string | null).filter((r): r is string => !!r) : [];
+  const restorationRefs = updateRefs.filter((r) => !/^K\d+$/.test(r));
+  const kitNumbers = updateRefs.filter((r) => /^K\d+$/.test(r)).map((r) => Number(r.slice(1)));
+  const { data: updateOrders } = restorationRefs.length
+    ? await admin.from("orders").select("id, order_number, status").in("order_number", restorationRefs)
+    : { data: [] };
+  const { data: updateKits } = kitNumbers.length
+    ? await admin.from("shop_orders").select("id, order_number, status").in("order_number", kitNumbers)
+    : { data: [] };
+  const updateOrderMap = new Map((updateOrders ?? []).map((o) => [String(o.order_number), o]));
+  const updateKitMap = new Map((updateKits ?? []).map((o) => [`K${o.order_number}`, o]));
 
   // ── Fetch data for all tabs in parallel ───────────────────────────────────
   const [
@@ -484,10 +510,10 @@ export default async function AdminPage({
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-7 border-b border-border">
+        <div className="relative flex gap-0.5 mb-7 overflow-x-auto after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-border">
           <Link
             href="/admin"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors ${
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors ${
               activeTab === "orders"
                 ? "bg-white border-border text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -496,8 +522,25 @@ export default async function AdminPage({
             All Orders
           </Link>
           <Link
+            href="/admin?tab=updates"
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors flex items-center gap-2 ${
+              activeTab === "updates"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Update Requests
+            {(updateRequests?.length ?? 0) > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeTab === "updates" ? "bg-red-100 text-red-700" : "bg-red-600 text-white"
+              }`}>
+                {updateRequests?.length}
+              </span>
+            )}
+          </Link>
+          <Link
             href="/admin?tab=awaiting"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors flex items-center gap-2 ${
               activeTab === "awaiting"
                 ? "bg-white border-border text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -514,7 +557,7 @@ export default async function AdminPage({
           </Link>
           <Link
             href="/admin?tab=fulfillment"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors flex items-center gap-2 ${
               activeTab === "fulfillment"
                 ? "bg-white border-border text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -531,7 +574,7 @@ export default async function AdminPage({
           </Link>
           <Link
             href="/admin?tab=shipped"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors flex items-center gap-2 ${
               activeTab === "shipped"
                 ? "bg-white border-border text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -548,7 +591,7 @@ export default async function AdminPage({
           </Link>
           <Link
             href="/admin?tab=insured"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors flex items-center gap-2 ${
               activeTab === "insured"
                 ? "bg-white border-border text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -565,7 +608,7 @@ export default async function AdminPage({
           </Link>
           <Link
             href="/admin?tab=videos"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors flex items-center gap-2 ${
               activeTab === "videos"
                 ? "bg-white border-border text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -582,7 +625,7 @@ export default async function AdminPage({
           </Link>
           <Link
             href="/admin?tab=gift-cards"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 -mb-px transition-colors flex items-center gap-2 ${
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors flex items-center gap-2 ${
               activeTab === "gift-cards"
                 ? "bg-white border-border text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1276,6 +1319,56 @@ export default async function AdminPage({
         )}
 
         {/* ── GIFT CARDS TAB ── */}
+        {/* ── UPDATE REQUESTS TAB ── */}
+        {activeTab === "updates" && (
+          <div className="bg-white rounded-xl border border-border overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-border">
+              <div>
+                <h2 className="font-heading font-black text-lg text-foreground">Customers waiting on an update</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Asked from their account, oldest first. Your reply is emailed to them and closes the request.</p>
+              </div>
+              <Link href="/admin/cases?filter=all&type=inquiry" className="text-sm font-semibold text-primary hover:underline">All update requests →</Link>
+            </div>
+            {(updateRequests ?? []).length === 0 ? (
+              <p className="px-5 py-12 text-center text-sm text-muted-foreground">No one is waiting on an update right now.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {(updateRequests ?? []).map((u) => {
+                  const ref = (u.order_ref as string | null) ?? "";
+                  const isKit = /^K\d+$/.test(ref);
+                  const order = isKit ? updateKitMap.get(ref) : updateOrderMap.get(ref);
+                  const statusLabel = order
+                    ? isKit ? order.status : ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status
+                    : null;
+                  const days = daysWaiting(u.created_at);
+                  return (
+                    <li key={u.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4">
+                      <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
+                        <p className="font-semibold text-foreground">
+                          {isKit ? `Kit order ${ref}` : `Order ${orderLabel(ref)}`}
+                          {statusLabel && <span className="ml-2 text-xs font-medium text-muted-foreground capitalize">{statusLabel}</span>}
+                        </p>
+                        <p className="text-sm text-muted-foreground truncate">{u.customer_name || "Customer"} · {u.customer_email}</p>
+                      </div>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${days >= 2 ? "bg-red-100 text-red-700" : "bg-secondary text-muted-foreground"}`}>
+                        {days === 0 ? "Asked today" : `Waiting ${days} day${days === 1 ? "" : "s"}`}
+                      </span>
+                      {order && (
+                        <Link href={isKit ? "/admin/shop-orders" : `/admin/orders/${order.id}`} className="text-sm font-semibold text-muted-foreground hover:text-foreground">
+                          Open order
+                        </Link>
+                      )}
+                      <Link href={`/admin/cases/${u.id}`} className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-bold flex items-center hover:bg-primary/90 transition-colors">
+                        Reply
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
         {activeTab === "gift-cards" && (() => {
           const gc = giftCards ?? [];
           const active = gc.filter((c) => c.status === "active");

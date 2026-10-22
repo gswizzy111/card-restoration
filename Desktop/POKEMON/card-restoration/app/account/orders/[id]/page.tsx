@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { UpdateRequestPanel } from "@/components/account/update-request-panel";
+import { getUpdateRequestState } from "@/lib/order-update-requests";
 import { shippo } from "@/lib/shippo";
 import { redirect, notFound } from "next/navigation";
 import { formatCurrency } from "@/lib/utils";
@@ -49,10 +51,13 @@ export default async function AccountOrderPage({
   if (!order) notFound();
   if (order.customer_email?.toLowerCase() !== user.email?.toLowerCase()) notFound();
 
-  const [cardsResult, servicesResult] = await Promise.all([
+  const [cardsResult, servicesResult, updateState] = await Promise.all([
     admin.from("cards").select("*").eq("order_id", id).order("created_at"),
     admin.from("order_services").select("*").eq("order_id", id),
+    getUpdateRequestState(admin, String(order.order_number)),
   ]);
+
+  const canAsk = !["cancelled", "awaiting_payment"].includes(order.status);
 
   const cards = (cardsResult.data ?? []) as Array<{
     id: string;
@@ -171,6 +176,18 @@ export default async function AccountOrderPage({
                 })}
               </div>
             </div>
+
+            {/* Request an update (once a week) */}
+            {canAsk && (
+              <UpdateRequestPanel
+                endpoint={`/api/account/orders/${id}/inquiry`}
+                email={order.customer_email}
+                askedAt={updateState.askedAt}
+                nextAllowedAt={updateState.nextAllowedAt}
+                lastReply={updateState.lastReply}
+                subject="card"
+              />
+            )}
 
             {/* Inbound tracking */}
             {order.inbound_tracking_number && (

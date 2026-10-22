@@ -3,6 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { StatusUpdater, AddNoteForm, CopyLinkButton } from "./case-actions";
+import { ORDER_STATUSES, type OrderStatus } from "@/lib/constants";
+import { INQUIRY_TYPE, orderLabel } from "@/lib/card-inquiries";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +42,27 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   if (!c) notFound();
 
   const isSupport = c.type === "support";
+  const isInquiry = c.type === INQUIRY_TYPE;
+  // Support cases and card inquiries both have a customer to write back to.
+  const hasCustomer = isSupport || isInquiry;
+
+  // Update requests: the order as it stands now, to answer from. Kit orders
+  // are filed as K<order number>.
+  const kitNumber = isInquiry && c.order_ref && /^K\d+$/.test(c.order_ref) ? Number(c.order_ref.slice(1)) : null;
+  const { data: order } = isInquiry && c.order_ref && kitNumber === null
+    ? await admin
+        .from("orders")
+        .select("id, order_number, status, created_at")
+        .eq("order_number", c.order_ref)
+        .maybeSingle()
+    : { data: null };
+  const { data: kitOrder } = kitNumber !== null
+    ? await admin
+        .from("shop_orders")
+        .select("id, order_number, status, created_at")
+        .eq("order_number", kitNumber)
+        .maybeSingle()
+    : { data: null };
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -52,8 +75,8 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         {/* Header card */}
         <div className="bg-white rounded-xl border border-border p-6 mb-5">
           <div className="flex flex-wrap items-start gap-2 mb-3">
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isSupport ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600"}`}>
-              {isSupport ? "Support" : "Internal"}
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isInquiry ? "bg-primary text-primary-foreground" : isSupport ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600"}`}>
+              {isInquiry ? "Update Request" : isSupport ? "Support" : "Internal"}
             </span>
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_STYLES[c.status] ?? "bg-gray-100 text-gray-500"}`}>
               {c.status.replace("_", " ").replace(/\b\w/g, (l: string) => l.toUpperCase())}
@@ -76,8 +99,8 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           <StatusUpdater caseId={c.id} currentStatus={c.status} />
         </div>
 
-        {/* Customer info + complaint link — support only */}
-        {isSupport && (
+        {/* Customer info + complaint link — support cases and card inquiries */}
+        {hasCustomer && (
           <div className="bg-white rounded-xl border border-border p-6 mb-5 flex flex-col gap-4">
             {(c.customer_name || c.customer_email || c.customer_phone) && (
               <div>
@@ -87,6 +110,33 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
                   {c.customer_email && <p className="text-muted-foreground">{c.customer_email}</p>}
                   {c.customer_phone && <p className="text-muted-foreground">{c.customer_phone}</p>}
                 </div>
+              </div>
+            )}
+
+            {isInquiry && (
+              <div>
+                <h2 className="font-heading font-black text-base mb-2">Order</h2>
+                {order ? (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                    <span className="font-heading font-black">{orderLabel(order.order_number)}</span>
+                    <span className="font-medium">{ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}</span>
+                    <span className="text-muted-foreground">
+                      {`Placed ${new Date(order.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
+                    </span>
+                    <Link href={`/admin/orders/${order.id}`} className="font-semibold text-primary hover:underline">Open order →</Link>
+                  </div>
+                ) : kitOrder ? (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                    <span className="font-heading font-black">Kit order K{kitOrder.order_number}</span>
+                    <span className="font-medium capitalize">{kitOrder.status}</span>
+                    <span className="text-muted-foreground">
+                      {`Placed ${new Date(kitOrder.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
+                    </span>
+                    <Link href="/admin/shop-orders" className="font-semibold text-primary hover:underline">Open Kit Orders →</Link>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Order #{c.order_ref} wasn&apos;t found.</p>
+                )}
               </div>
             )}
 
@@ -143,7 +193,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           )}
 
           <div className="px-6 py-5 border-t border-border bg-secondary/20">
-            <AddNoteForm caseId={c.id} isSupport={isSupport} hasEmail={!!c.customer_email} />
+            <AddNoteForm caseId={c.id} isSupport={hasCustomer} isInquiry={isInquiry} hasEmail={!!c.customer_email} />
           </div>
         </div>
 

@@ -66,9 +66,11 @@ export function StatusUpdater({ caseId, currentStatus }: { caseId: string; curre
   );
 }
 
-export function AddNoteForm({ caseId, isSupport, hasEmail }: { caseId: string; isSupport: boolean; hasEmail: boolean }) {
+export function AddNoteForm({ caseId, isSupport, isInquiry = false, hasEmail }: { caseId: string; isSupport: boolean; isInquiry?: boolean; hasEmail: boolean }) {
+  // A card inquiry is a customer waiting on an answer, so replies email them by default.
+  const emailByDefault = isInquiry && hasEmail;
   const [body, setBody] = useState("");
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(emailByDefault);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -87,7 +89,7 @@ export function AddNoteForm({ caseId, isSupport, hasEmail }: { caseId: string; i
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Failed to add note."); setSubmitting(false); return; }
       setBody("");
-      setVisible(false);
+      setVisible(emailByDefault);
       router.refresh();
     } catch {
       setError("Network error.");
@@ -102,7 +104,7 @@ export function AddNoteForm({ caseId, isSupport, hasEmail }: { caseId: string; i
         rows={3}
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        placeholder="Add a note or update..."
+        placeholder={isInquiry ? "Write the customer an update on their order..." : "Add a note or update..."}
       />
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -121,7 +123,7 @@ export function AddNoteForm({ caseId, isSupport, hasEmail }: { caseId: string; i
           disabled={submitting || !body.trim()}
           className="h-9 px-5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
-          {submitting ? "Saving..." : "Add Note"}
+          {submitting ? "Saving..." : visible ? "Send to Customer" : "Add Note"}
         </button>
       </div>
       {error && <p className="text-xs text-red-500">{error}</p>}

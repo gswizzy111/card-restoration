@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { UpdateRequestPanel } from "@/components/account/update-request-panel";
+import { getUpdateRequestState } from "@/lib/order-update-requests";
 import { redirect, notFound } from "next/navigation";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
@@ -68,6 +70,8 @@ export default async function KitOrderPage({
     .maybeSingle();
   const hasActiveSub = !!activeSub;
 
+  const updateState = await getUpdateRequestState(admin, `K${order.order_number}`);
+
   const currentIdx = STATUS_TIMELINE.indexOf(order.status);
   const trackUrl = order.tracking_number
     ? getTrackUrl((order as any).carrier ?? null, order.tracking_number)
@@ -129,6 +133,18 @@ export default async function KitOrderPage({
               })}
             </div>
           </div>
+        )}
+
+        {/* Request an update (once a week) */}
+        {order.status !== "cancelled" && (
+          <UpdateRequestPanel
+            endpoint={`/api/account/kit-orders/${order.id}/update-request`}
+            email={order.customer_email}
+            askedAt={updateState.askedAt}
+            nextAllowedAt={updateState.nextAllowedAt}
+            lastReply={updateState.lastReply}
+            subject="kit order"
+          />
         )}
 
         {/* Tracking */}

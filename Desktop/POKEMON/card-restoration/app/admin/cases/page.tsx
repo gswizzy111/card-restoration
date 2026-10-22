@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
+import { INQUIRY_TYPE } from "@/lib/card-inquiries";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,12 @@ const STATUS_STYLES: Record<string, string> = {
   in_progress: "bg-yellow-100 text-yellow-700",
   resolved:    "bg-green-100 text-green-700",
   closed:      "bg-gray-100 text-gray-500",
+};
+
+const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
+  internal:       { label: "Internal",     cls: "bg-gray-100 text-gray-600" },
+  support:        { label: "Support",      cls: "bg-purple-100 text-purple-700" },
+  [INQUIRY_TYPE]: { label: "Update Request", cls: "bg-primary text-primary-foreground" },
 };
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -35,6 +42,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
 
   if (typeFilter === "internal") query = query.eq("type", "internal");
   else if (typeFilter === "support") query = query.eq("type", "support");
+  else if (typeFilter === "inquiry") query = query.eq("type", INQUIRY_TYPE);
 
   const { data: cases } = await query;
   const list = cases ?? [];
@@ -46,7 +54,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
       <Link
         key={value}
         href={`/admin/cases?${sp2}`}
-        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${active ? "bg-primary text-primary-foreground border-primary" : "bg-white text-muted-foreground border-border hover:border-primary/40"}`}
+        className={`px-3 py-1.5 rounded-lg text-xs font-bold border whitespace-nowrap transition-colors ${active ? "bg-primary text-primary-foreground border-primary" : "bg-white text-muted-foreground border-border hover:border-primary/40"}`}
       >
         {label}
       </Link>
@@ -74,10 +82,11 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
             {filterBtn("Resolved", "resolved", "filter", filter)}
             {filterBtn("All", "all", "filter", filter)}
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {filterBtn("All Types", "all", "type", typeFilter)}
             {filterBtn("Internal", "internal", "type", typeFilter)}
             {filterBtn("Support", "support", "type", typeFilter)}
+            {filterBtn("Update Requests", "inquiry", "type", typeFilter)}
           </div>
         </div>
 
@@ -95,8 +104,8 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.type === "support" ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600"}`}>
-                        {c.type === "support" ? "Support" : "Internal"}
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TYPE_BADGE[c.type]?.cls ?? TYPE_BADGE.internal.cls}`}>
+                        {TYPE_BADGE[c.type]?.label ?? TYPE_BADGE.internal.label}
                       </span>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_STYLES[c.status] ?? ""}`}>
                         {c.status.replace("_", " ").replace(/\b\w/g, (l: string) => l.toUpperCase())}
@@ -107,7 +116,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
                       {c.order_ref && <span className="text-xs font-mono text-muted-foreground">#{c.order_ref}</span>}
                     </div>
                     <p className="font-heading font-black text-base text-foreground truncate">{c.title}</p>
-                    {c.type === "support" && c.customer_name && (
+                    {c.type !== "internal" && c.customer_name && (
                       <p className="text-xs text-muted-foreground mt-0.5">{c.customer_name}{c.customer_email ? ` · ${c.customer_email}` : ""}</p>
                     )}
                   </div>
