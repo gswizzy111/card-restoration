@@ -148,6 +148,12 @@ function LoginForm() {
                   : "Create Account"}
             </button>
 
+            {tab === "login" && (
+              <p className="text-sm text-center">
+                <Link href="/account/forgot-password" className="font-semibold text-primary hover:underline">Forgot your password?</Link>
+              </p>
+            )}
+
             {tab === "signup" && (
               <p className="text-xs text-center text-muted-foreground">
                 Use the same email you used when placing your order so your orders appear automatically.

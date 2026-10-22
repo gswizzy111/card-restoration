@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 export default function AdminLoginPage() {
   const [mode, setMode] = useState<"admin" | "accountant">("admin");
@@ -95,6 +96,9 @@ export default function AdminLoginPage() {
             className="h-11 px-4 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
             required
           />
+          <Link href="/admin/forgot-password" className="self-end -mt-2 text-xs font-semibold text-primary hover:underline">
+            Forgot password?
+          </Link>
           {error && <p className="text-sm text-red-500">{error}</p>}
           <button
             type="submit"

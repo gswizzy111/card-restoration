@@ -13,6 +13,9 @@ export async function middleware(request: NextRequest) {
   // Admin and accountant sign-in sessions (lib/admin-session.ts), looked up
   // only on admin paths. Each page and route checks the role again itself.
   const onAdminPath = pathname === "/admin" || pathname.startsWith("/admin/") || pathname.startsWith("/api/admin/");
+  // Signing in and recovering a forgotten password work without a session
+  const isAuthRoute = ["/api/admin/login", "/api/admin/logout", "/api/admin/forgot-password", "/api/admin/reset-password"].includes(pathname);
+  const isAuthPage = ["/admin/login", "/admin/forgot-password", "/admin/reset-password"].some((p) => pathname === p || pathname.startsWith(p + "/"));
   const adminSession = onAdminPath
     ? await lookupAdminSession(request.cookies.get(ADMIN_SESSION_COOKIE)?.value)
     : null;
@@ -24,11 +27,10 @@ export async function middleware(request: NextRequest) {
   // other admin API refuses them (the tax page re-checks the account itself).
   if (isAccountantSession) {
     const within = (base: string) => pathname === base || pathname.startsWith(base + "/");
-    const isAuthRoute = pathname === "/api/admin/login" || pathname === "/api/admin/logout";
     if (pathname.startsWith("/api/admin/") && !isAuthRoute && !within("/api/admin/tax/export")) {
       return NextResponse.json({ error: "Not available to accountants" }, { status: 403 });
     }
-    if (within("/admin") && !within("/admin/login") && !within("/admin/tax")) {
+    if (within("/admin") && !isAuthPage && !within("/admin/tax")) {
       return NextResponse.redirect(new URL("/admin/tax", request.url));
     }
   }
@@ -36,7 +38,6 @@ export async function middleware(request: NextRequest) {
   // Admin APIs: each route checks its own role too; this backstop keeps a
   // route that forgets from being open to everyone.
   if (pathname.startsWith("/api/admin/")) {
-    const isAuthRoute = pathname === "/api/admin/login" || pathname === "/api/admin/logout";
     const isAdminSession = isFullAdmin || isAccountantSession;
     if (!isAuthRoute && !isAdminSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -46,18 +47,20 @@ export async function middleware(request: NextRequest) {
 
   // Admin auth (always runs)
   if (pathname.startsWith("/admin")) {
-    if (pathname.startsWith("/admin/login")) return NextResponse.next();
+    if (isAuthPage) return NextResponse.next();
     if (!isFullAdmin && !isAccountantSession) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
     return NextResponse.next();
   }
 
-  // Account portal — protect all routes except login/signup
+  // Account portal — protect all routes except login/signup and password recovery
   if (
     (pathname === "/account" || pathname.startsWith("/account/")) &&
     !pathname.startsWith("/account/login") &&
-    !pathname.startsWith("/account/signup")
+    !pathname.startsWith("/account/signup") &&
+    !pathname.startsWith("/account/forgot-password") &&
+    !pathname.startsWith("/account/reset-password")
   ) {
     let response = NextResponse.next({ request });
 
