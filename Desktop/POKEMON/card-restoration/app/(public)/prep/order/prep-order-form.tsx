@@ -2,7 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { Hammer } from "lucide-react";
-import { SigningSection, emptySigning, signingReady, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
+import { SigningSection, emptySigning, signingReady, slabSigned, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
+import { SlabAuthorizationDialog, type HolderPatch } from "@/components/checkout/slab-authorization-dialog";
 import { CardIdentityFields, emptyIdentity, identityPayload, type CardIdentity } from "@/components/checkout/card-identity-fields";
 import { InsuranceElectionBox, type InsuranceElection } from "@/components/checkout/insurance-election";
 import { HIGH_VALUE_NOTICE, SIGN_BUTTON_LABEL, VALUE_HELP } from "@/lib/legal/current-terms";
@@ -132,6 +133,8 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   // The signatures and consents for the Terms of Service v1.0 (components/checkout/signing-section.tsx)
   const [signing, setSigning] = useState<SigningState>(emptySigning());
   const [skippedSlabs, setSkippedSlabs] = useState<string[]>([]);
+  // The card whose slab authorization pop-up is open
+  const [slabDialogId, setSlabDialogId] = useState<string | null>(null);
   const [insuranceElection, setInsuranceElection] = useState<InsuranceElection>(null);
 
   // Shipping
@@ -173,10 +176,22 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
   const filledCards = cards.filter((c) => c.name.trim());
   const addInsurance = shippingMethod === "buy_label" && insuranceElection === "purchased";
-  const slabCards: SlabCard[] = filledCards.flatMap((c, i) => (c.slab ? [{
-    index: i,
+  const slabCardOf = (c: CardRow): SlabCard => ({
+    index: filledCards.indexOf(c),
+    id: c.id,
     details: { card_name: c.name.trim(), ...identityPayload(c), declared_value_cents: cardValueCents(c) },
-  }] : []));
+  });
+  const slabCards: SlabCard[] = filledCards.flatMap((c) => (c.slab ? [slabCardOf(c)] : []));
+  const slabDialogRow = cards.find((c) => c.id === slabDialogId);
+  const slabDialogCard = slabDialogRow ? slabCardOf(slabDialogRow) : null;
+  // Picking slab removal opens its authorization; closing it unsigned takes the slab off
+  function closeSlabDialog(signed: boolean) {
+    if (!signed && slabDialogId) updateCard(slabDialogId, { slab: false });
+    setSlabDialogId(null);
+  }
+  function changeSlabHolder(patch: HolderPatch) {
+    if (slabDialogId) updateCard(slabDialogId, patch);
+  }
   const slabCrackCount = slabCards.length;
   const highValueCards = filledCards.filter((c) => isHighValue(cardValueCents(c))).map((c) => ({ name: c.name.trim(), valueCents: cardValueCents(c) }));
   function skipSlab(index: number) {
@@ -295,7 +310,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
     if (insuranceElection === null) { setError("Please choose whether to buy or decline shipping insurance."); return; }
     if (addInsurance && insuranceDeclaredValueCents <= 0) { setError("Enter the amount to insure, or decline shipping insurance."); return; }
     if (!signingReady(signing, slabCards)) {
-      setError("Please sign or skip each slab authorization, consent to electronic records, check the Terms box and type your full legal name.");
+      setError("Please sign or skip each slab authorization, check both boxes under Sign to confirm your order, and type your full legal name.");
       return;
     }
 
@@ -354,6 +369,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
   return (
     <div className="max-w-xl mx-auto px-6 py-12 md:py-16">
+      <SlabAuthorizationDialog card={slabDialogCard} state={signing} onChange={setSigning} onHolderChange={changeSlabHolder} onClose={closeSlabDialog} />
       <div className="mb-8">
         <Link href="/prep" className="text-xs text-primary font-semibold hover:underline">← Back to Prep Pricing</Link>
         <h1 className="font-heading text-3xl font-black text-foreground mt-3 mb-1">Prep Order</h1>
@@ -452,12 +468,29 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                 <CardIdentityFields idPrefix={`prep-${card.id}`} value={card} onChange={(patch) => updateCard(card.id, patch)} needsCert={card.slab} />
               </div>
               <label className="ml-7 flex items-start gap-3 bg-white border border-border rounded-md px-3 py-2.5 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 mt-0.5 accent-primary shrink-0" checked={card.slab} onChange={(e) => updateCard(card.id, { slab: e.target.checked })} />
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 mt-0.5 accent-primary shrink-0"
+                  checked={card.slab}
+                  onChange={(e) => {
+                    updateCard(card.id, { slab: e.target.checked });
+                    // Its authorization pops up right away
+                    if (e.target.checked) setSlabDialogId(card.id);
+                  }}
+                />
                 <span className="text-sm">
                   <span className="font-semibold text-foreground">Open this card&apos;s slab? +{fmt(slabCrackPriceCents)}</span>
-                  <span className="block text-xs text-muted-foreground mt-0.5">For a card in a PSA, BGS or other graded slab. You&apos;ll sign a separate authorization for it at the end.</span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">For a card in a PSA, BGS or other graded slab. You&apos;ll sign a separate authorization for it.</span>
                 </span>
               </label>
+              {card.slab && (
+                <p className="ml-7 -mt-2 text-xs text-muted-foreground">
+                  {slabSigned(signing, slabCardOf(card)) ? "Slab removal authorization signed. " : "Slab removal authorization not signed yet. "}
+                  <button type="button" onClick={() => setSlabDialogId(card.id)} className="font-semibold text-primary underline underline-offset-2">
+                    {slabSigned(signing, slabCardOf(card)) ? "Review" : "Sign it"}
+                  </button>
+                </p>
+              )}
               <div className="pl-7">
                 <p className="text-xs text-muted-foreground mb-1.5">Photos <span className="text-muted-foreground/60">(optional)</span></p>
                 <PhotoUploader photoUrls={card.photoUrls} onChange={(urls) => updateCardPhotos(card.id, urls)} max={4} />
@@ -771,6 +804,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
             state={signing}
             onChange={setSigning}
             onSkipSlab={skipSlab}
+            onOpenSlab={(i) => setSlabDialogId(filledCards[i]?.id ?? null)}
             skippedSlabs={skippedSlabs}
           />
         </div>

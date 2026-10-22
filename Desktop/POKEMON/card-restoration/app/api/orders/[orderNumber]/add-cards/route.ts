@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CardFieldsSchema, SigningSchema, cardDetails, checkoutConsents, masterSignatureInput, signingError, type AuthorizedOrder } from "@/lib/checkout-signing";
+import { CardFieldsSchema, SigningSchema, cardDetails, checkoutConsents, signingChoices, masterSignatureInput, signingError, type AuthorizedOrder } from "@/lib/checkout-signing";
 import { recordConsents, recordSignatures, signingContext } from "@/lib/signatures";
 import { ensureTermsVersion } from "@/lib/terms-versions";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -91,6 +91,7 @@ export async function POST(
     })),
     order_lines: [{ name: "Sales tax", cents: taxCents }],
     total_cents: totalCents,
+    choices: signingChoices(parsed.data),
   };
   const ctx = await signingContext(request, email);
   const signed = await recordSignatures(admin, [masterSignatureInput(order.id, terms, parsed.data.terms!.signer_name, authorized)], ctx);

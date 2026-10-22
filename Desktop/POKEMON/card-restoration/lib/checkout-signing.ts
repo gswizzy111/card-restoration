@@ -65,6 +65,8 @@ export type AuthorizedOrder = {
   cards: (CardDetails & { services: AuthorizedLine[] })[];
   order_lines: AuthorizedLine[];
   total_cents: number;
+  /** The optional permissions, as chosen */
+  choices: string[];
 };
 
 export const usd = (cents: number) =>
@@ -99,6 +101,7 @@ export function authorizedOrderText(a: AuthorizedOrder): string {
   });
   if (a.order_lines.length) blocks.push("Order:", a.order_lines.map(line).join("\n"));
   blocks.push(`Order total: ${usd(a.total_cents)}`);
+  if (a.choices.length) blocks.push("Your choices:", a.choices.map((c) => `- ${c}`).join("\n"));
   return blocks.join("\n\n");
 }
 
@@ -130,6 +133,15 @@ export function slabSignatureInput(orderId: string, terms: TermsVersionRow, card
     card_snapshot: card,
     typed_full_name: signerName,
   };
+}
+
+/** The optional permissions as the customer left them, for the signed record. */
+export function signingChoices(s: SubmittedSigning): string[] {
+  const media = !!s.marketing?.media;
+  return [
+    `${MEDIA_LABEL} ${media ? "Yes" : "No"}`,
+    `${TAG_LABEL} ${media && s.marketing?.tag_name ? "Yes" : "No"}`,
+  ];
 }
 
 /** The consents recorded with an order: e-sign (required) and the two optional permissions. */

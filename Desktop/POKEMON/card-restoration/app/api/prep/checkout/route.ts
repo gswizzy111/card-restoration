@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import {
-  CardFieldsSchema, SigningSchema, cardDetails, checkoutConsents, masterSignatureInput, signingError, slabSignatureFor, slabSignatureInput, usd,
+  CardFieldsSchema, SigningSchema, cardDetails, checkoutConsents, signingChoices, masterSignatureInput, signingError, slabSignatureFor, slabSignatureInput, usd,
   type AuthorizedOrder,
 } from "@/lib/checkout-signing";
 import { recordConsents, recordSignatures, signingContext, type SignatureInput } from "@/lib/signatures";
@@ -240,6 +240,7 @@ export async function POST(request: Request) {
       { name: "Sales tax", cents: taxCents },
     ],
     total_cents: totalCents,
+    choices: signingChoices(d),
   };
 
   // The signatures and consents must be on file before payment
