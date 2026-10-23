@@ -2,11 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { SigningSection, emptySigning, signingReady, slabSigned, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
-<<<<<<< HEAD
 import { SlabAuthorizationDialog } from "@/components/checkout/slab-authorization-dialog";
-=======
-import { SlabAuthorizationDialog, type HolderPatch } from "@/components/checkout/slab-authorization-dialog";
->>>>>>> origin/main
 import { MissingNote, Need, revealMissing } from "@/components/checkout/required";
 import { emptyIdentity, identityPayload } from "@/components/checkout/card-identity-fields";
 import type { InsuranceElection } from "@/components/checkout/insurance-election";
