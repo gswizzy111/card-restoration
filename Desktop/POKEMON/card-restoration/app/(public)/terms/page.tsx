@@ -14,7 +14,10 @@ export default function TermsPage() {
       version={TERMS_VERSION}
       effectiveLabel={TERMS_EFFECTIVE_LABEL}
       blocks={TERMS_BLOCKS}
-      otherVersions={[{ version: "0.9", label: "Version 0.9 (in effect before v1.0)" }]}
+      otherVersions={[
+        { version: "1.0", label: "Version 1.0 (effective October 22, 2026)" },
+        { version: "0.9", label: "Version 0.9 (in effect before v1.0)" },
+      ]}
     />
   );
 }

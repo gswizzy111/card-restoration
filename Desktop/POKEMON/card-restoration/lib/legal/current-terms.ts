@@ -1,5 +1,5 @@
 import { LEGAL_TEXTS } from "./generated-texts";
-import { blocksToText, clauseBlocks, findClause, frontMatter, parseLegalMarkdown, quotedStatement, sectionBlocks } from "./legal-doc";
+import { blocksToText, findClause, frontMatter, parseLegalMarkdown, quotedStatement, sectionBlocks } from "./legal-doc";
 
 /**
  * The Terms of Service in effect for new orders, and the checkout wording that
@@ -10,13 +10,25 @@ import { blocksToText, clauseBlocks, findClause, frontMatter, parseLegalMarkdown
  * readable at /terms/v<version> (terms_versions keeps each one, unchanged).
  * Browser-safe; shared by both sites.
  */
-export const TERMS_VERSION = "1.0";
+export const TERMS_VERSION = "1.1";
 const termsMarkdown = LEGAL_TEXTS[`terms-v${TERMS_VERSION}`];
 const esignMarkdown = LEGAL_TEXTS[`esign-consent-v${TERMS_VERSION}`];
 export const TERMS_MARKDOWN = termsMarkdown;
 export const TERMS_BLOCKS = parseLegalMarkdown(termsMarkdown);
 
-/** "October 22, 2026", from the Terms' own "Effective date:" line. */
+/**
+ * Any published version's text from legal/terms-v<version>.md, with its
+ * effective date as YYYY-MM-DD (for terms_versions), or null.
+ */
+export function termsSource(version: string): { markdown: string; effectiveIso: string } | null {
+  const markdown = (LEGAL_TEXTS as Record<string, string>)[`terms-v${version}`];
+  if (!markdown) return null;
+  const label = frontMatter(parseLegalMarkdown(markdown), "Effective date") ?? "";
+  const d = new Date(`${label} 12:00 UTC`);
+  return { markdown, effectiveIso: Number.isNaN(d.getTime()) ? "2026-10-22" : d.toISOString().slice(0, 10) };
+}
+
+/** "October 23, 2026", from the Terms' own "Effective date:" line. */
 export const TERMS_EFFECTIVE_LABEL = frontMatter(TERMS_BLOCKS, "Effective date") ?? "";
 /** The same date as YYYY-MM-DD, for terms_versions. */
 export const TERMS_EFFECTIVE_ISO = (() => {
@@ -40,15 +52,6 @@ export const NONREFUNDABLE_CLAUSE = findClause(TERMS_BLOCKS, /After cleaning has
 /** The slab-removal section (Section 7 in v1.0), shown with each card's authorization. */
 export const SLAB_SECTION_BLOCKS = sectionBlocks(TERMS_BLOCKS, "7");
 
-/**
- * What the Terms say about high-value cards, quoted in each High-Value
- * Agreement: the $5,000 section (Section 4 in v1.0) and the high-value
- * shipping clause (15.5).
- */
-export const HIGH_VALUE_SECTION_BLOCKS = sectionBlocks(TERMS_BLOCKS, "4");
-export const HIGH_VALUE_SHIPPING_BLOCKS = clauseBlocks(TERMS_BLOCKS, /^\d+\.\d+\. Any separate high-value agreement may specify/);
-export const HIGH_VALUE_CLAUSE = findClause(TERMS_BLOCKS, /High-Value Card Restoration & Custody Agreement executed/) ?? "4.2";
-
 // ── Checkout wording ────────────────────────────────────────────────────────
 export const AGREE_LABEL = `I have read and agree to the Terms of Service v${TERMS_VERSION}`;
 export const SIGN_BUTTON_LABEL = "Electronically sign & place order";
@@ -56,7 +59,6 @@ export const ESIGN_LABEL = "I consent to use electronic records and signatures f
 export const MEDIA_LABEL = "You may feature photos/videos of my card(s) on social media.";
 export const TAG_LABEL = "You may tag or name me.";
 export const VALUE_HELP = "Use recent completed sales for comparable cards, not asking prices.";
-export const HIGH_VALUE_NOTICE = "Cards over $5,000 need a separate High-Value Agreement before we begin work. We'll email it after you order. The card stays on hold until both of us sign.";
 export const INSURANCE_DECLINED_TEXT = "You've declined shipping insurance. No coverage will apply to this shipment.";
 export const NOT_INSURED_TEXT = "We do not currently insure customer cards while they are in our possession. Optional shipping insurance is available at checkout.";
 

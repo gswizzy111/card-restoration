@@ -18,5 +18,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
   if (!order || String(order.order_number).replace(/^(CD-?|R)/i, "") !== number || order.customer_email?.trim().toLowerCase() !== email) {
     return new Response("Not found", { status: 404 });
   }
-  return signedPdfResponse(admin, signatureId, url.searchParams.get("executed") === "1");
+  return signedPdfResponse(admin, signatureId);
 }

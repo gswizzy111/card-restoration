@@ -27,18 +27,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const d = parsed.data;
   const admin = createAdminClient();
 
-  // A card with a signed authorization or agreement stays on the order (refund it instead)
+  // A card with a signed authorization stays on the order (refund it instead)
   {
     const keep = new Set(d.cards.map((c) => c.id).filter(Boolean));
     const { data: current } = await admin.from("cards").select("id").eq("order_id", orderId);
     const removing = (current ?? []).map((c) => c.id).filter((cardId) => !keep.has(cardId));
     if (removing.length) {
-      const [{ count: signed }, { count: held }] = await Promise.all([
-        admin.from("signatures").select("id", { count: "exact", head: true }).in("order_item_id", removing),
-        admin.from("high_value_agreements").select("id", { count: "exact", head: true }).in("order_item_id", removing),
-      ]);
-      if ((signed ?? 0) + (held ?? 0) > 0) {
-        return Response.json({ error: "A card you removed has a signed authorization or High-Value Agreement, so it stays on the order. Use its Refund button instead." }, { status: 409 });
+      const { count: signed } = await admin.from("signatures").select("id", { count: "exact", head: true }).in("order_item_id", removing);
+      if ((signed ?? 0) > 0) {
+        return Response.json({ error: "A card you removed has a signed authorization, so it stays on the order. Use its Refund button instead." }, { status: 409 });
       }
     }
   }

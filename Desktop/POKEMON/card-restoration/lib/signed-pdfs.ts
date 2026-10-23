@@ -18,8 +18,6 @@ const utc = (iso: string) => new Date(iso).toISOString().replace("T", " ").repla
 const displayOrder = (n: string | number) => (/^\d+$/.test(String(n)) ? `R${n}` : String(n));
 const fileSafe = (s: string) => s.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 
-export type CompanySignature = { signed_by: string; signed_at: string };
-
 function signatureFields(sig: SignatureRow, orderNumber: string | number): [string, string][] {
   // A master signature's snapshot is the whole order (printed in its text), not one card
   const card = sig.type === "master_terms" ? null : (sig.card_snapshot as CardDetails | null);
@@ -76,12 +74,11 @@ function documentElements(text: string, title: string): PdfElement[] {
   return out;
 }
 
-/** The PDF of one signed document. `company` adds The Card Doc's countersignature (high-value agreements). */
+/** The PDF of one signed document. */
 export async function signaturePdf(
   admin: Admin,
   sig: SignatureRow,
   order: { order_number: string | number },
-  company?: CompanySignature | null,
 ): Promise<Uint8Array> {
   const { data: terms } = await admin.from("terms_versions").select("version, content_markdown").eq("id", sig.terms_version_id).single();
   const version = terms?.version ?? "";
@@ -103,17 +100,9 @@ export async function signaturePdf(
     { type: "rule" },
     { type: "heading", text: "Signatures" },
     { type: "small", text: "Signed electronically: each name below was typed by the person signing. Dates and times are our server's (UTC)." },
-    { type: "signatures", parties: [
-      { role: "Customer", name: sig.typed_full_name, date: utc(sig.signed_at) },
-      ...(company
-        ? [{ role: "The Card Doc LLC", name: company.signed_by, date: utc(company.signed_at) }]
-        : sig.type === "high_value" ? [{ role: "The Card Doc LLC", name: null, date: null, pendingNote: "Countersignature to follow" }] : []),
-    ] },
+    { type: "signatures", parties: [{ role: "Customer", name: sig.typed_full_name, date: utc(sig.signed_at) }] },
     { type: "heading", text: "Signing record" },
-    { type: "table", rows: [
-      ...signatureFields(sig, order.order_number),
-      ...(company ? [["Countersigned by", `${company.signed_by} for The Card Doc LLC`], ["Countersigned at", utc(company.signed_at)]] as [string, string][] : []),
-    ] },
+    { type: "table", rows: signatureFields(sig, order.order_number) },
   );
   return buildLegalPdf({
     title: `${sig.document_title} - order ${displayOrder(order.order_number)}`,
@@ -122,10 +111,10 @@ export async function signaturePdf(
   });
 }
 
-export function signedPdfFilename(sig: SignatureRow, orderNumber: string | number, executed = false) {
+export function signedPdfFilename(sig: SignatureRow, orderNumber: string | number) {
   const card = (sig.card_snapshot as CardDetails | null)?.card_name;
   const what = sig.type === "master_terms" ? sig.document_title : `${sig.document_title}${card ? ` ${card}` : ""}`;
-  return `${displayOrder(orderNumber)}-${fileSafe(what)}${executed ? "-executed" : ""}-signed.pdf`;
+  return `${displayOrder(orderNumber)}-${fileSafe(what)}-signed.pdf`;
 }
 
 /** Stores a PDF once; an existing file is left as it is. */
@@ -144,7 +133,7 @@ export async function signedPdfAttachments(admin: Admin, orderId: string, ids?: 
     admin.from("signatures").select("*").eq("order_id", orderId).order("signed_at"),
   ]);
   if (!order) return [];
-  const sigs = ((rows ?? []) as SignatureRow[]).filter((s) => s.type !== "high_value" && (!ids || ids.includes(s.id)));
+  const sigs = ((rows ?? []) as SignatureRow[]).filter((s) => !ids || ids.includes(s.id));
   const out: { filename: string; content: Buffer }[] = [];
   for (const sig of sigs) {
     try {
