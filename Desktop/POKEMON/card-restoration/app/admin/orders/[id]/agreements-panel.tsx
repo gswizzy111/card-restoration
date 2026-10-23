@@ -45,6 +45,7 @@ export type PanelAgreement = {
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }) + " ET";
 const usd = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const BTN = "h-8 px-3 rounded-md text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
+const UNDO = "font-semibold text-primary underline underline-offset-2 hover:text-primary/80 disabled:opacity-40 disabled:cursor-not-allowed";
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   active: { label: "Ready", cls: "bg-green-100 text-green-800" },
@@ -179,6 +180,22 @@ export function AgreementsPanel({
     }
   }
 
+  // Undoes a Start pressed by mistake (the card goes back to how it was; the undo is logged)
+  async function undoWork(card: PanelCard, action: "undo_cleaning" | "undo_slab_opening") {
+    const what = action === "undo_cleaning" ? "cleaning" : "slab opening";
+    if (!confirm(`Undo "Start ${what}" on ${card.name}? Only do this if the ${action === "undo_cleaning" ? "cleaning hasn't actually started" : "slab hasn't actually been opened"}.`)) return;
+    setBusy(card.id + action);
+    try {
+      await post(`/api/admin/cards/${card.id}/work`, { action });
+      toast.success(`Start ${what} undone`);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function refund(card: PanelCard) {
     if (!confirm(`Refund ${usd(card.refundableCents)} for ${card.name} and cancel it? This can't be undone.`)) return;
     setBusy(card.id + "refund");
@@ -243,14 +260,20 @@ export function AgreementsPanel({
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 {c.slabSelected && c.status !== "refunded" && (c.slabOpenedAt ? (
-                  <span className="text-xs text-muted-foreground">Slab opened {when(c.slabOpenedAt)}{c.slabBy ? ` by ${c.slabBy}` : ""}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Slab opened {when(c.slabOpenedAt)}{c.slabBy ? ` by ${c.slabBy}` : ""}{" "}
+                    <button type="button" disabled={busy !== null} onClick={() => undoWork(c, "undo_slab_opening")} className={UNDO}>Undo</button>
+                  </span>
                 ) : (
                   <button type="button" disabled={!c.canStartSlab || busy !== null} onClick={() => startWork(c, "start_slab_opening")} className={`${BTN} border border-foreground/60 text-foreground`}>
                     Start slab opening
                   </button>
                 ))}
                 {c.cleaningStartedAt ? (
-                  <span className="text-xs text-muted-foreground">Cleaning started {when(c.cleaningStartedAt)}{c.cleaningBy ? ` by ${c.cleaningBy}` : ""}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Cleaning started {when(c.cleaningStartedAt)}{c.cleaningBy ? ` by ${c.cleaningBy}` : ""}
+                    {c.status !== "refunded" && <>{" "}<button type="button" disabled={busy !== null} onClick={() => undoWork(c, "undo_cleaning")} className={UNDO}>Undo</button></>}
+                  </span>
                 ) : c.status !== "refunded" && (
                   <button type="button" disabled={!c.canStartCleaning || busy !== null} onClick={() => startWork(c, "start_cleaning")} className={`${BTN} bg-foreground text-background`}>
                     Start cleaning
