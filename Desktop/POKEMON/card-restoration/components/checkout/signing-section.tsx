@@ -37,8 +37,9 @@ export const emptySigning = (): SigningState => ({ slab: {}, media: false, tagNa
 export type SlabCard = { index: number; id?: string; details: CardDetails };
 
 // A slab authorization belongs to the exact card details it was signed for:
-// editing the holder or the card afterwards asks for it again.
-const slabKey = (c: SlabCard) => [c.id ?? c.index, c.details.card_name, c.details.grading_company, c.details.grade, c.details.cert_number].join("\u0001");
+// editing the card afterwards asks for it again.
+const slabKey = (c: SlabCard) =>
+  [c.id ?? c.index, c.details.card_name, c.details.card_year, c.details.card_set, c.details.card_number, c.details.variation, c.details.grading_company, c.details.grade, c.details.cert_number].join("\u0001");
 const named = (n: string | undefined) => (n ?? "").trim().length >= 2;
 
 export function slabSignature(state: SigningState, c: SlabCard) {
@@ -47,7 +48,7 @@ export function slabSignature(state: SigningState, c: SlabCard) {
 
 export function slabSigned(state: SigningState, c: SlabCard) {
   const s = slabSignature(state, c);
-  return !!s && s.agreed && named(s.signer_name) && !!c.details.cert_number?.trim();
+  return !!s && s.agreed && named(s.signer_name);
 }
 
 export function signSlab(state: SigningState, c: SlabCard, signerName: string): SigningState {
@@ -117,7 +118,7 @@ export function SigningSection({
               <div className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border px-4 py-3 text-sm ${signed ? "border-border bg-card" : "border-amber-300 bg-amber-50"}`}>
                 <p className="text-foreground min-w-0">
                   {signed ? <Check className="inline h-4 w-4 mr-1.5 -mt-0.5 text-primary" strokeWidth={2.25} /> : null}
-                  <strong className="font-semibold">{cardTitle(c.details) || `Card ${c.index + 1}`}</strong> ({holderLine(c.details)}):{" "}
+                  <strong className="font-semibold">{cardTitle(c.details) || `Card ${c.index + 1}`}</strong>{c.details.grading_company || c.details.cert_number ? ` (${holderLine(c.details)})` : ""}:{" "}
                   {signed ? `authorization signed by ${slabSignature(state, c)!.signer_name.trim()}.` : "the slab authorization isn't signed yet."}
                 </p>
                 <span className="flex gap-4">

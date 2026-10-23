@@ -64,7 +64,7 @@ function identityOf(c: CardEntry): CardIdentity {
   };
 }
 
-/** A card is ready when it has a name, photos and a value within its tier's cap; a slab to open also needs its cert. */
+/** A card is ready when it has a name, photos and a value within its tier's cap. */
 export function cardProblems(c: CardEntry, defaultTier?: RestorationTierId): string[] {
   const problems: string[] = [];
   const value = parseCents(c.estimated_value ?? "");
@@ -73,7 +73,6 @@ export function cardProblems(c: CardEntry, defaultTier?: RestorationTierId): str
   if (c.photo_urls.length === 0) problems.push("photos");
   if (value <= 0) problems.push("value");
   if (tier && tier.max_card_value_cents !== null && value > tier.max_card_value_cents) problems.push("tier");
-  if (c.needs_slab_crack && (!c.grading_company || !c.cert_number?.trim())) problems.push("cert");
   return problems;
 }
 
@@ -162,8 +161,6 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                     idPrefix={`card-${card.id}`}
                     value={identityOf(card)}
                     onChange={(patch) => updateCard(card.id, patch)}
-                    needsCert={card.needs_slab_crack}
-                    showMissing={showMissing}
                   />
                 </div>
 

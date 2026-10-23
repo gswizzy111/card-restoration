@@ -315,7 +315,7 @@ export function StepReview({
             ? selectedRate
               ? `Prepaid label — ${selectedRate.carrier} ${selectedRate.service_level} — ${formatCurrency(selectedRate.amount_cents)}`
               : "Prepaid label"
-            : "Self-ship — you'll receive our address after checkout"}
+            : `Self-ship — you'll receive our address after checkout${selectedRate ? `. Return shipping: ${selectedRate.carrier} ${selectedRate.service_level}, ${formatCurrency(selectedRate.amount_cents)}` : ""}`}
         </p>
       </div>
 
@@ -509,8 +509,8 @@ export function StepReview({
           <span>{formatCurrency(taxCents)}</span>
         </div>
         <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Shipping</span>
-          <span>{shippingMethod === "self_ship" ? "Self-ship" : formatCurrency(shipping)}</span>
+          <span>{shippingMethod === "self_ship" ? "Return shipping" : "Shipping"}</span>
+          <span>{formatCurrency(shipping)}</span>
         </div>
         {signatureCents > 0 && (
           <div className="flex justify-between text-sm text-muted-foreground">

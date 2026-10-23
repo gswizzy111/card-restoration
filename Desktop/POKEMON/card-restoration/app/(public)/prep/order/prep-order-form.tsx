@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { Hammer } from "lucide-react";
 import { SigningSection, emptySigning, signingReady, slabSigned, submittedSigning, type SigningState, type SlabCard } from "@/components/checkout/signing-section";
-import { SlabAuthorizationDialog, type HolderPatch } from "@/components/checkout/slab-authorization-dialog";
+import { SlabAuthorizationDialog } from "@/components/checkout/slab-authorization-dialog";
 import { Need, Req, revealMissing } from "@/components/checkout/required";
 import { CardIdentityFields, emptyIdentity, identityPayload, type CardIdentity } from "@/components/checkout/card-identity-fields";
 import { InsuranceElectionBox, type InsuranceElection } from "@/components/checkout/insurance-election";
@@ -192,9 +192,6 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
     if (!signed && slabDialogId) updateCard(slabDialogId, { slab: false });
     setSlabDialogId(null);
   }
-  function changeSlabHolder(patch: HolderPatch) {
-    if (slabDialogId) updateCard(slabDialogId, patch);
-  }
   const slabCrackCount = slabCards.length;
   const highValueCards = filledCards.filter((c) => isHighValue(cardValueCents(c))).map((c) => ({ name: c.name.trim(), valueCents: cardValueCents(c) }));
   function skipSlab(index: number) {
@@ -227,14 +224,17 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   const serviceSubtotal = prepSubtotal + preGradeSubtotal + slabCrackSubtotal;
   // No NJ tax for international orders
   const taxCents = isInternational ? 0 : Math.round(serviceSubtotal * NJ_TAX_RATE);
-  // ×2: customer pays inbound label + return label
-  const shippingCents = (selectedRate?.amount_cents ?? 0) * 2;
+  // The prepaid label pays the rate twice (to us and back); shipping your own
+  // way pays it once, for the trip back to you
+  const shippingTrips = shippingMethod === "buy_label" ? 2 : 1;
+  const shippingCents = (selectedRate?.amount_cents ?? 0) * shippingTrips;
   const insuranceDeclaredValueCents = addInsurance ? Math.round((parseFloat(insuranceValueDollars) || 0) * 100) : 0;
   const estimatedInsuranceCents = estimateInsuranceCents(insuranceDeclaredValueCents);
   const totalEstimate = serviceSubtotal + taxCents + shippingCents + estimatedInsuranceCents;
   const totalDeclaredValueCents = filledCards.reduce((sum, c) => sum + cardValueCents(c), 0);
 
-  const addressFingerprint = [country, street1.trim(), street2.trim(), city.trim(), stateCode.trim(), zip.trim()].join("|");
+  // Rates are quoted per address and per method (to us, or back to you)
+  const addressFingerprint = [shippingMethod, country, street1.trim(), street2.trim(), city.trim(), stateCode.trim(), zip.trim()].join("|");
   const addressComplete = !!(
     street1.trim() && city.trim() && zip.trim() &&
     (isInternational || stateCode) // state required for US, optional for international
@@ -247,30 +247,51 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
     setSelectedRate(null);
     const totalValueUsd = totalDeclaredValueCents > 0 ? totalDeclaredValueCents / 100 : filledCards.length * 25;
     try {
-      const res = await fetch("/api/prep/rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // The label's sender details (USPS requires an email on the from-address)
-          name: name.trim() || undefined,
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
-          street1: street1.trim(),
-          street2: street2.trim() || undefined,
-          city: city.trim(),
-          state: stateCode.trim() || undefined,
-          zip: zip.trim(),
-          country,
-          card_count: Math.max(1, filledCards.length),
-          total_value_usd: totalValueUsd,
-        }),
-      });
+      // The prepaid label is quoted from the customer to us; self-ship's paid
+      // return is quoted for the trip it pays for, from us to the customer.
+      const res = shippingMethod === "self_ship"
+        ? await fetch("/api/shipping/rates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to_address: {
+              name: name.trim(), email: email.trim(), phone: phone.trim(), street1: street1.trim(), street2: street2.trim(),
+              city: city.trim(), state: stateCode.trim(), zip: zip.trim(), country,
+            },
+            parcel: { length: 6, width: 4, height: 2, weight: 8 },
+            from_business: true,
+          }),
+        })
+        : await fetch("/api/prep/rates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            // The label's sender details (USPS requires an email on the from-address)
+            name: name.trim() || undefined,
+            email: email.trim() || undefined,
+            phone: phone.trim() || undefined,
+            street1: street1.trim(),
+            street2: street2.trim() || undefined,
+            city: city.trim(),
+            state: stateCode.trim() || undefined,
+            zip: zip.trim(),
+            country,
+            card_count: Math.max(1, filledCards.length),
+            total_value_usd: totalValueUsd,
+          }),
+        });
       const data = await res.json();
-      if (!res.ok || !data.rates) {
-        setRatesError(data.error ?? "Could not fetch rates. Please try again.");
+      const quoted: ShippingRate[] | null = !res.ok || !data.rates?.length
+        ? null
+        : shippingMethod === "self_ship"
+          ? (data.rates as { object_id: string; carrier: string; service_level: string; amount_cents: number; days: number | null; duration_terms: string }[])
+            .map((r) => ({ id: r.object_id, carrier: r.carrier, service: r.service_level, amount_cents: r.amount_cents, estimated_days: r.days, duration_terms: r.duration_terms || null }))
+          : data.rates;
+      if (!quoted) {
+        setRatesError(data.error && shippingMethod !== "self_ship" ? data.error : "Could not fetch rates. Please try again.");
         setRates([]);
       } else {
-        setRates(data.rates as ShippingRate[]);
+        setRates(quoted);
         setRatesFetchedFor(addressFingerprint);
       }
     } catch {
@@ -280,7 +301,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
       setRatesLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [street1, street2, city, stateCode, zip, country, addressFingerprint, filledCards.length, totalDeclaredValueCents]);
+  }, [street1, street2, city, stateCode, zip, country, addressFingerprint, filledCards.length, totalDeclaredValueCents, shippingMethod]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -294,22 +315,20 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
     if (filledCards.length < 1) { return fail("Please add at least one card."); }
     if (filledCards.some((c) => cardValueCents(c) <= 0)) { return fail("Please enter a declared value for every card."); }
-    if (filledCards.some((c) => c.slab && (!c.grading_company || !c.cert_number.trim()))) {
-      return fail("Slab removal needs each card's grading company and certification number.");
-    }
     if (!name.trim()) { return fail("Name is required."); }
     if (!email.trim()) { return fail("Email is required."); }
     if (!phone.trim()) { return fail("Phone is required."); }
-    if (shippingMethod === "buy_label") {
-      if (!street1.trim() || !city.trim() || !zip.trim()) {
-        return fail("Full address is required to generate a prepaid label.");
-      }
-      if (!isInternational && !stateCode) {
-        return fail("State is required for US addresses.");
-      }
-      if (!selectedRate) {
-        return fail("Please check shipping rates and select an option before continuing.");
-      }
+    // The cards come back to this address either way
+    if (!street1.trim() || !city.trim() || !zip.trim()) {
+      return fail(shippingMethod === "buy_label"
+        ? "Full address is required to generate a prepaid label."
+        : "Full address is required so we can ship your cards back.");
+    }
+    if (!isInternational && !stateCode) {
+      return fail("State is required for US addresses.");
+    }
+    if (!selectedRate) {
+      return fail("Please check shipping rates and select an option before continuing.");
     }
 
     if (insuranceElection === null) { return fail("Please choose whether to buy or decline shipping insurance."); }
@@ -338,15 +357,15 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
           add_pre_grade: addPreGrade,
           insurance_election: insuranceElection,
           shipping_method: shippingMethod,
+          country,
+          street1: street1.trim(),
+          street2: street2.trim() || undefined,
+          city: city.trim(),
+          state: stateCode.trim() || undefined,
+          zip: zip.trim(),
+          shipping_rate_object_id: selectedRate?.id,
+          shipping_amount_cents: shippingCents,
           ...(shippingMethod === "buy_label" ? {
-            country,
-            street1: street1.trim(),
-            street2: street2.trim() || undefined,
-            city: city.trim(),
-            state: stateCode.trim() || undefined,
-            zip: zip.trim(),
-            shipping_rate_object_id: selectedRate?.id,
-            shipping_amount_cents: (selectedRate?.amount_cents ?? 0) * 2,
             add_insurance: addInsurance,
             insurance_amount_cents: insuranceDeclaredValueCents,
           } : {}),
@@ -376,7 +395,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
   return (
     <div className="max-w-xl mx-auto px-6 py-12 md:py-16">
-      <SlabAuthorizationDialog card={slabDialogCard} state={signing} onChange={setSigning} onHolderChange={changeSlabHolder} onClose={closeSlabDialog} />
+      <SlabAuthorizationDialog card={slabDialogCard} state={signing} onChange={setSigning} onClose={closeSlabDialog} />
       <div className="mb-8">
         <Link href="/prep" className="text-xs text-primary font-semibold hover:underline">← Back to Prep Pricing</Link>
         <h1 className="font-heading text-3xl font-black text-foreground mt-3 mb-1">Prep Order</h1>
@@ -476,7 +495,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                 )}
               </div>
               <div className="pl-7">
-                <CardIdentityFields idPrefix={`prep-${card.id}`} value={card} onChange={(patch) => updateCard(card.id, patch)} needsCert={card.slab} showMissing={showMissing} />
+                <CardIdentityFields idPrefix={`prep-${card.id}`} value={card} onChange={(patch) => updateCard(card.id, patch)} />
               </div>
               <label className="ml-7 flex items-start gap-3 bg-white border border-border rounded-md px-3 py-2.5 cursor-pointer">
                 <input
@@ -553,140 +572,142 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
         <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-4">
           <h2 className="font-heading font-black text-base text-foreground">Shipping Your Cards To Us<Req /></h2>
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setShippingMethod("buy_label")}
+            <button type="button" onClick={() => { if (shippingMethod !== "buy_label") resetAddress(); setShippingMethod("buy_label"); }}
               className={`h-12 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors ${shippingMethod === "buy_label" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}>
               <span className="text-base">📦</span>Prepaid Label
             </button>
-            <button type="button" onClick={() => setShippingMethod("self_ship")}
+            <button type="button" onClick={() => { if (shippingMethod !== "self_ship") resetAddress(); setShippingMethod("self_ship"); if (insuranceElection === "purchased") setInsuranceElection(null); }}
               className={`h-12 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors ${shippingMethod === "self_ship" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}>
               <span className="text-base">📬</span>Ship Myself
             </button>
           </div>
 
-          {shippingMethod === "buy_label" && (
-            <div className="flex flex-col gap-4">
-              <div className="border-t border-border pt-4 flex flex-col gap-3">
-
-                {/* Country selector — always first */}
-                <div>
-                  <label className={labelCls}>Country<Req /></label>
-                  <select
-                    className={selectCls}
-                    value={country}
-                    onChange={(e) => { setCountry(e.target.value); setStateCode(""); resetAddress(); }}
-                  >
-                    {COUNTRIES.map((c) => (
-                      <option key={c.code} value={c.code}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <Need missing={miss(street1)}>
-                  <label className={labelCls}>Street Address<Req /></label>
-                  <input className={input} value={street1} onChange={(e) => { setStreet1(e.target.value); setSelectedRate(null); }} placeholder="123 Main St" />
-                </Need>
-                <div>
-                  <label className={labelCls}>Apt / Suite / Unit <span className="font-normal">(optional)</span></label>
-                  <input className={input} value={street2} onChange={(e) => setStreet2(e.target.value)} placeholder="Apt 4B" />
-                </div>
-
-                {!isInternational ? (
-                  /* US: city / state dropdown / zip */
-                  <div className="grid grid-cols-5 gap-2">
-                    <Need missing={miss(city)} className="col-span-2">
-                      <label className={labelCls}>City<Req /></label>
-                      <input className={input} value={city} onChange={(e) => { setCity(e.target.value); setSelectedRate(null); }} placeholder="New York" />
-                    </Need>
-                    <Need missing={miss(stateCode)}>
-                      <label className={labelCls}>State<Req /></label>
-                      <select className={selectCls} value={stateCode} onChange={(e) => { setStateCode(e.target.value); setSelectedRate(null); }}>
-                        <option value="">—</option>
-                        {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </Need>
-                    <Need missing={miss(zip)} className="col-span-2">
-                      <label className={labelCls}>ZIP Code<Req /></label>
-                      <input className={input} value={zip} onChange={(e) => { setZip(e.target.value); setSelectedRate(null); }} placeholder="10001" maxLength={10} />
-                    </Need>
-                  </div>
-                ) : (
-                  /* International: city / state text (optional) / postal code */
-                  <div className="grid grid-cols-5 gap-2">
-                    <Need missing={miss(city)} className="col-span-2">
-                      <label className={labelCls}>City<Req /></label>
-                      <input className={input} value={city} onChange={(e) => { setCity(e.target.value); setSelectedRate(null); }} placeholder="Singapore" />
-                    </Need>
-                    <div>
-                      <label className={labelCls}>State / Province <span className="font-normal">(optional)</span></label>
-                      <input className={input} value={stateCode} onChange={(e) => { setStateCode(e.target.value); setSelectedRate(null); }} placeholder="—" />
-                    </div>
-                    <Need missing={miss(zip)} className="col-span-2">
-                      <label className={labelCls}>Postal Code<Req /></label>
-                      <input className={input} value={zip} onChange={(e) => { setZip(e.target.value); setSelectedRate(null); }} placeholder="123456" maxLength={12} />
-                    </Need>
-                  </div>
-                )}
-              </div>
-
-              {addressComplete && (
-                <Need missing={showMissing && !selectedRate} note="Check shipping rates and choose an option." className="flex flex-col gap-3">
-                  {isInternational ? (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 leading-relaxed">
-                      <strong>International shipping — important:</strong> You will receive a prepaid label and customs forms after checkout. You must bring your package to a carrier counter or post office in person — do not drop in a mailbox. Shipping cost covers both the inbound label (you to us) and the return shipment (us back to you).
-                    </div>
-                  ) : (
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 leading-relaxed">
-                      <strong>Shipping price covers both ways.</strong> You&apos;re paying for your label to send cards to us <em>and</em> the return shipment back to you — two labels, billed up front.
-                    </div>
-                  )}
-
-                  {(rates.length === 0 || addressChangedSinceFetch) && !ratesLoading && (
-                    <button type="button" onClick={fetchRates}
-                      className="h-10 w-full border-2 border-primary text-primary text-sm font-bold rounded-xl hover:bg-primary/5 transition-colors">
-                      {addressChangedSinceFetch ? "Refresh Shipping Rates" : "Check Shipping Rates"}
-                    </button>
-                  )}
-
-                  {ratesLoading && (
-                    <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
-                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      Fetching rates…
-                    </div>
-                  )}
-
-                  {ratesError && (
-                    <div className="text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{ratesError}</div>
-                  )}
-
-                  {rates.length > 0 && !addressChangedSinceFetch && (
-                    <div className="flex flex-col gap-2">
-                      <p className="text-xs font-semibold text-muted-foreground">Select a shipping option:</p>
-                      {rates.map((rate) => (
-                        <button key={rate.id} type="button" onClick={() => setSelectedRate(rate)}
-                          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-left transition-colors ${selectedRate?.id === rate.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}>
-                          <div className="flex items-center gap-3">
-                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedRate?.id === rate.id ? "border-primary" : "border-border"}`}>
-                              {selectedRate?.id === rate.id && <div className="w-2 h-2 rounded-full bg-primary" />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-foreground">{rate.service}</p>
-                              <p className="text-xs text-muted-foreground">{etaLabel(rate)}</p>
-                            </div>
-                          </div>
-                          <span className="text-sm font-black text-foreground">{fmt(rate.amount_cents * 2)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </Need>
-              )}
-
-            </div>
-          )}
-
           {shippingMethod === "self_ship" && (
             <p className="text-xs text-muted-foreground">After checkout you&apos;ll receive our mailing address. Ship using any tracked, insured method and include your order number inside the package.</p>
           )}
+
+          <div className="flex flex-col gap-4">
+            <div className="border-t border-border pt-4 flex flex-col gap-3">
+
+              {/* Country selector — always first */}
+              <div>
+                <label className={labelCls}>Country<Req /></label>
+                <select
+                  className={selectCls}
+                  value={country}
+                  onChange={(e) => { setCountry(e.target.value); setStateCode(""); resetAddress(); }}
+                >
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <Need missing={miss(street1)}>
+                <label className={labelCls}>Street Address<Req /></label>
+                <input className={input} value={street1} onChange={(e) => { setStreet1(e.target.value); setSelectedRate(null); }} placeholder="123 Main St" />
+              </Need>
+              <div>
+                <label className={labelCls}>Apt / Suite / Unit <span className="font-normal">(optional)</span></label>
+                <input className={input} value={street2} onChange={(e) => setStreet2(e.target.value)} placeholder="Apt 4B" />
+              </div>
+
+              {!isInternational ? (
+                /* US: city / state dropdown / zip */
+                <div className="grid grid-cols-5 gap-2">
+                  <Need missing={miss(city)} className="col-span-2">
+                    <label className={labelCls}>City<Req /></label>
+                    <input className={input} value={city} onChange={(e) => { setCity(e.target.value); setSelectedRate(null); }} placeholder="New York" />
+                  </Need>
+                  <Need missing={miss(stateCode)}>
+                    <label className={labelCls}>State<Req /></label>
+                    <select className={selectCls} value={stateCode} onChange={(e) => { setStateCode(e.target.value); setSelectedRate(null); }}>
+                      <option value="">—</option>
+                      {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </Need>
+                  <Need missing={miss(zip)} className="col-span-2">
+                    <label className={labelCls}>ZIP Code<Req /></label>
+                    <input className={input} value={zip} onChange={(e) => { setZip(e.target.value); setSelectedRate(null); }} placeholder="10001" maxLength={10} />
+                  </Need>
+                </div>
+              ) : (
+                /* International: city / state text (optional) / postal code */
+                <div className="grid grid-cols-5 gap-2">
+                  <Need missing={miss(city)} className="col-span-2">
+                    <label className={labelCls}>City<Req /></label>
+                    <input className={input} value={city} onChange={(e) => { setCity(e.target.value); setSelectedRate(null); }} placeholder="Singapore" />
+                  </Need>
+                  <div>
+                    <label className={labelCls}>State / Province <span className="font-normal">(optional)</span></label>
+                    <input className={input} value={stateCode} onChange={(e) => { setStateCode(e.target.value); setSelectedRate(null); }} placeholder="—" />
+                  </div>
+                  <Need missing={miss(zip)} className="col-span-2">
+                    <label className={labelCls}>Postal Code<Req /></label>
+                    <input className={input} value={zip} onChange={(e) => { setZip(e.target.value); setSelectedRate(null); }} placeholder="123456" maxLength={12} />
+                  </Need>
+                </div>
+              )}
+            </div>
+
+            {addressComplete && (
+              <Need missing={showMissing && !selectedRate} note="Check shipping rates and choose an option." className="flex flex-col gap-3">
+                {shippingMethod === "self_ship" ? (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 leading-relaxed">
+                    <strong>Return shipping is paid now.</strong> You send your cards to us your own way; we ship them back to this address with a tracked label.
+                  </div>
+                ) : isInternational ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 leading-relaxed">
+                    <strong>International shipping — important:</strong> You will receive a prepaid label and customs forms after checkout. You must bring your package to a carrier counter or post office in person — do not drop in a mailbox. Shipping cost covers both the inbound label (you to us) and the return shipment (us back to you).
+                  </div>
+                ) : (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 leading-relaxed">
+                    <strong>Shipping price covers both ways.</strong> You&apos;re paying for your label to send cards to us <em>and</em> the return shipment back to you — two labels, billed up front.
+                  </div>
+                )}
+
+                {(rates.length === 0 || addressChangedSinceFetch) && !ratesLoading && (
+                  <button type="button" onClick={fetchRates}
+                    className="h-10 w-full border-2 border-primary text-primary text-sm font-bold rounded-xl hover:bg-primary/5 transition-colors">
+                    {addressChangedSinceFetch ? "Refresh Shipping Rates" : "Check Shipping Rates"}
+                  </button>
+                )}
+
+                {ratesLoading && (
+                  <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    Fetching rates…
+                  </div>
+                )}
+
+                {ratesError && (
+                  <div className="text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{ratesError}</div>
+                )}
+
+                {rates.length > 0 && !addressChangedSinceFetch && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs font-semibold text-muted-foreground">{shippingMethod === "self_ship" ? "Select a return shipping option:" : "Select a shipping option:"}</p>
+                    {rates.map((rate) => (
+                      <button key={rate.id} type="button" onClick={() => setSelectedRate(rate)}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 text-left transition-colors ${selectedRate?.id === rate.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedRate?.id === rate.id ? "border-primary" : "border-border"}`}>
+                            {selectedRate?.id === rate.id && <div className="w-2 h-2 rounded-full bg-primary" />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-foreground">{rate.service}</p>
+                            <p className="text-xs text-muted-foreground">{etaLabel(rate)}</p>
+                          </div>
+                        </div>
+                        <span className="text-sm font-black text-foreground">{fmt(rate.amount_cents * shippingTrips)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </Need>
+            )}
+
+          </div>
         </div>
 
         {/* Shipping insurance: a required choice, buy or decline (Terms 15.2, 15.4) */}
@@ -780,14 +801,12 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                 <span className="font-semibold">{fmt(taxCents)}</span>
               </div>
             )}
-            {shippingMethod === "buy_label" && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Shipping (inbound + return)</span>
-                {selectedRate
-                  ? <span className="font-semibold">{fmt(shippingCents)}</span>
-                  : <span className="text-xs font-semibold text-muted-foreground">select above</span>}
-              </div>
-            )}
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{shippingMethod === "buy_label" ? "Shipping (inbound + return)" : "Return shipping"}</span>
+              {selectedRate
+                ? <span className="font-semibold">{fmt(shippingCents)}</span>
+                : <span className="text-xs font-semibold text-muted-foreground">select above</span>}
+            </div>
             {addInsurance && insuranceDeclaredValueCents > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Shipment Insurance (~1.5% of value)</span>
@@ -796,12 +815,12 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
             )}
             <div className="flex justify-between pt-2 border-t border-border mt-1">
               <span className="font-black text-foreground">
-                {shippingMethod === "buy_label" && !selectedRate ? "Subtotal" : "Total"}
+                {!selectedRate ? "Subtotal" : "Total"}
               </span>
               <span className="font-black text-foreground text-lg">{totalEstimate > 0 ? fmt(totalEstimate) : "—"}</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {shippingMethod === "buy_label" && !selectedRate
+              {!selectedRate
                 ? "* Select a shipping option above to see your full total."
                 : isInternational
                   ? "* All amounts in USD. Confirmed at Stripe checkout."

@@ -147,7 +147,7 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
                 />
               </Need>
 
-              <CardIdentityFields idPrefix={`add-${i}`} value={card} onChange={(patch) => updateCard(i, patch)} showMissing={showMissing} />
+              <CardIdentityFields idPrefix={`add-${i}`} value={card} onChange={(patch) => updateCard(i, patch)} />
 
               <Need missing={showMissing && (valueCents(card) <= 0 || overCap(card))} note={overCap(card) ? null : "Enter a declared value."}>
                 <label className="text-xs font-semibold text-muted-foreground mb-1 block">Declared Value<Req /></label>

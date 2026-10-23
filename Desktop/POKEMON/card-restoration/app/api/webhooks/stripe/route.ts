@@ -736,7 +736,7 @@ export async function POST(request: Request) {
               <tr><td style="padding:4px 0;color:#666;width:120px">Email</td><td style="font-weight:600">${o.customer_email}</td></tr>
               <tr><td style="padding:4px 0;color:#666">Phone</td><td style="font-weight:600">${o.customer_phone ?? "—"}</td></tr>
               <tr><td style="padding:4px 0;color:#666">Address</td><td style="font-weight:600">${addressLine}</td></tr>
-              <tr><td style="padding:4px 0;color:#666">Shipping</td><td style="font-weight:600">${o.inbound_carrier ? `${o.inbound_carrier} — ${o.inbound_service_level}` : "Self-ship"}</td></tr>
+              <tr><td style="padding:4px 0;color:#666">Shipping</td><td style="font-weight:600">${o.inbound_carrier ? `${o.inbound_carrier} — ${o.inbound_service_level}` : o.return_carrier ? `Self-ship; return paid: ${o.return_carrier} — ${o.return_service_level}` : "Self-ship"}</td></tr>
             </table>
             ${inboundShippingBlock}
             <a href="${appUrl2}/admin/orders/${orderId}" style="display:inline-block;background:#c0392b;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:8px">View Order</a>

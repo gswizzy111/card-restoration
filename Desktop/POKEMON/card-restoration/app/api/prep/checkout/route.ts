@@ -9,6 +9,7 @@ import {
 import { recordConsents, recordSignatures, signingContext, type SignatureInput } from "@/lib/signatures";
 import { ensureTermsVersion, type TermsVersionRow } from "@/lib/terms-versions";
 import { isHighValue } from "@/lib/legal/agreements-v1";
+import { shippingRate } from "@/lib/inbound-rate";
 
 const CardSchema = z.object({
   card_name: z.string().trim().min(1).max(200),
@@ -28,7 +29,8 @@ const Body = z.object({
   cards: z.array(CardSchema).min(1, "Please add at least one card."),
   add_pre_grade: z.boolean().optional().default(false),
   shipping_method: z.enum(["buy_label", "self_ship"]),
-  // Client provides pre-fetched rate from /api/prep/rates — no Shippo re-fetch
+  // The rate the customer picked from /api/prep/rates; its price is looked up
+  // again at Shippo (shipping_amount_cents from the browser is not used)
   shipping_rate_object_id: z.string().optional(),
   shipping_amount_cents: z.number().int().min(0).optional().default(0),
   country: z.string().length(2).optional().default("US"),
@@ -98,22 +100,25 @@ export async function POST(request: Request) {
   }
 
   // Slab removal goes ahead only for cards with their own signed authorization
-  // naming the cert number; any other slab selection is dropped, with its fee.
-  const slabSigned = d.cards.map((c, i) => (c.needs_slab_crack ? slabSignatureFor(d, i, c) : null));
+  // naming the card; any other slab selection is dropped, with its fee.
+  const slabSigned = d.cards.map((c, i) => (c.needs_slab_crack ? slabSignatureFor(d, i) : null));
   const slabCrackCount = slabSigned.filter(Boolean).length;
   const droppedSlabs = d.cards.filter((c, i) => c.needs_slab_crack && !slabSigned[i]).map((c) => c.card_name.trim());
 
   const isInternational = (d.country ?? "US") !== "US";
 
-  // Server-side address validation for buy_label
-  // State is required for US, optional for international
-  if (d.shipping_method === "buy_label") {
-    if (!d.street1?.trim() || !d.city?.trim() || !d.zip?.trim()) {
-      return Response.json({ error: "Full address is required to generate a prepaid label." }, { status: 400 });
-    }
-    if (!isInternational && !d.state?.trim()) {
-      return Response.json({ error: "State is required for US addresses." }, { status: 400 });
-    }
+  // Server-side address validation: the prepaid label ships from it, and the
+  // cards come back to it either way. State is required for US, optional for
+  // international.
+  if (!d.street1?.trim() || !d.city?.trim() || !d.zip?.trim()) {
+    return Response.json({
+      error: d.shipping_method === "buy_label"
+        ? "Full address is required to generate a prepaid label."
+        : "Full address is required so we can ship your cards back.",
+    }, { status: 400 });
+  }
+  if (!isInternational && !d.state?.trim()) {
+    return Response.json({ error: "State is required for US addresses." }, { status: 400 });
   }
 
   const admin = createAdminClient();
@@ -138,8 +143,22 @@ export async function POST(request: Request) {
   // NJ sales tax only applies to US domestic orders
   const taxCents = isInternational ? 0 : Math.round(serviceSubtotal * NJ_TAX_RATE);
 
-  const shippingRateObjectId: string | null = d.shipping_rate_object_id ?? null;
-  const shippingAmountCents = d.shipping_method === "buy_label" ? (d.shipping_amount_cents ?? 0) : 0;
+  // Shipping is priced from the Shippo rate quoted for this address (never the
+  // browser's price). The prepaid label's rate (to us) is paid twice, to us and
+  // back; sending the cards in your own way still pays for the trip back, once,
+  // at the rate quoted from us to you.
+  const rate = d.shipping_rate_object_id
+    ? await shippingRate(d.shipping_rate_object_id, d.zip ?? "", d.shipping_method === "buy_label" ? "in" : "back", d.country ?? "US")
+    : null;
+  if (!rate) {
+    return Response.json(
+      { error: "Your shipping quote expired. Check shipping rates again and choose an option.", code: "RATE_EXPIRED" },
+      { status: 400 }
+    );
+  }
+  const shippingAmountCents = rate.amountCents * (d.shipping_method === "buy_label" ? 2 : 1);
+  // Only a prepaid label is bought after payment (by the webhook)
+  const shippingRateObjectId: string | null = d.shipping_method === "buy_label" ? (d.shipping_rate_object_id ?? null) : null;
 
   const hasInsurance = d.insurance_election === "purchased" && (d.insurance_amount_cents ?? 0) > 0;
   const insuranceCents = hasInsurance ? estimateInsuranceCents(d.insurance_amount_cents ?? 0) : 0;
@@ -174,6 +193,10 @@ export async function POST(request: Request) {
     restoration_tier: "prep",
     subtotal_cents: serviceSubtotal,
     shipping_cents: shippingAmountCents,
+    // The service paid for: the prepaid label's, or the trip back for self-ship
+    ...(d.shipping_method === "buy_label"
+      ? { inbound_carrier: rate.carrier, inbound_service_level: rate.serviceLevel }
+      : { return_carrier: rate.carrier, return_service_level: rate.serviceLevel }),
     total_cents: totalCents,
     customer_notes: [d.customer_notes, d.social_handle ? `Social: @${d.social_handle}` : ""].filter(Boolean).join("\n\n") || null,
     status: "awaiting_payment",
@@ -231,9 +254,12 @@ export async function POST(request: Request) {
       ],
     })),
     order_lines: [
-      d.shipping_method === "buy_label"
-        ? { name: "Prepaid shipping label", cents: shippingAmountCents }
-        : { name: "Shipping: you send the cards yourself" },
+      ...(d.shipping_method === "buy_label"
+        ? [{ name: "Prepaid shipping label, to us and back", cents: shippingAmountCents }]
+        : [
+            { name: "Shipping to us: you send the cards yourself" },
+            { name: `Return shipping to you, ${rate.carrier} ${rate.serviceLevel}`, cents: shippingAmountCents },
+          ]),
       hasInsurance
         ? { name: `Shipping insurance, coverage ${usd(d.insurance_amount_cents ?? 0)}`, cents: insuranceCents }
         : { name: "Shipping insurance: declined" },
@@ -345,7 +371,11 @@ export async function POST(request: Request) {
     lineItems.push({
       price_data: {
         currency: "usd",
-        product_data: { name: "Prepaid Shipping Label (inbound + return)" },
+        product_data: {
+          name: d.shipping_method === "buy_label"
+            ? "Prepaid Shipping Label (inbound + return)"
+            : `Return Shipping — ${rate.carrier} ${rate.serviceLevel}`,
+        },
         unit_amount: shippingAmountCents,
       },
       quantity: 1,

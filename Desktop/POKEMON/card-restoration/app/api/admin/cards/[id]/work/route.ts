@@ -3,11 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdminSession } from "@/lib/admin-auth";
 import { cardGate, gateFacts, type GateCard } from "@/lib/work-gates";
 
-const Body = z.object({ action: z.enum(["start_cleaning", "start_slab_opening"]) });
+const Body = z.object({ action: z.enum(["start_cleaning", "start_slab_opening", "undo_cleaning", "undo_slab_opening"]) });
 
 /**
  * Start cleaning or slab opening on one card. Refused unless every required
  * signature is in place (lib/work-gates.ts); the time is the server's.
+ * A start pressed by mistake can be undone: the card goes back to how it was
+ * (active, unless the other work has started) and the undo is logged.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getAdminSession();
@@ -18,6 +20,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const admin = createAdminClient();
   const { data: card } = await admin.from("cards").select("*").eq("id", id).single();
   if (!card) return Response.json({ error: "Card not found" }, { status: 404 });
+
+  if (parsed.data.action === "undo_cleaning" || parsed.data.action === "undo_slab_opening") {
+    const cleaning = parsed.data.action === "undo_cleaning";
+    const column = cleaning ? "cleaning_started_at" : "slab_opening_started_at";
+    const byColumn = cleaning ? "cleaning_started_by" : "slab_opening_started_by";
+    const startedAt: string | null = card[column];
+    if (!startedAt) return Response.json({ error: `${cleaning ? "Cleaning" : "Slab opening"} hasn't been started on this card.` }, { status: 409 });
+    if (card.status === "refunded") return Response.json({ error: "This card was refunded." }, { status: 409 });
+    const otherStarted = cleaning ? card.slab_opening_started_at : card.cleaning_started_at;
+    const { data: undone, error } = await admin.from("cards")
+      .update({ [column]: null, [byColumn]: null, ...(otherStarted ? {} : { status: "active" }) })
+      .eq("id", id)
+      .eq(column, startedAt)
+      .select("id");
+    if (error) return Response.json({ error: error.message }, { status: 500 });
+    if (!undone?.length) return Response.json({ error: "This card changed in the meantime. Refresh the page and try again." }, { status: 409 });
+    await admin.from("order_events").insert({
+      order_id: card.order_id,
+      event_type: cleaning ? "cleaning_undone" : "slab_opening_undone",
+      description: `${cleaning ? "Cleaning" : "Slab opening"} start undone on ${card.card_name} by ${session.username} (it was started ${startedAt}${card[byColumn] ? ` by ${card[byColumn]}` : ""})`,
+      is_customer_visible: false,
+    });
+    return Response.json({ ok: true });
+  }
 
   const gate = cardGate(card as GateCard, await gateFacts(admin, card.order_id));
   const cleaning = parsed.data.action === "start_cleaning";

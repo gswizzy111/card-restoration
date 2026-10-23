@@ -17,7 +17,7 @@ import Stripe from "stripe";
 import { isSoldOut, INSURANCE_ENABLED, SIGNATURE_FEE_CENTS, TIER_MAX_SLOTS } from "@/lib/site-config";
 import { getSlotsOpenedAt, getRestorationsOpen } from "@/lib/store-config";
 import { logCheckoutError } from "@/lib/checkout-error-log";
-import { inboundRate } from "@/lib/inbound-rate";
+import { shippingRate } from "@/lib/inbound-rate";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -124,8 +124,8 @@ export async function POST(request: Request) {
   }
 
   // Slab removal goes ahead only for cards with their own signed authorization
-  // naming the cert number; any other slab selection is dropped, with its $7.
-  const slabSigned = data.cards.map((c, i) => (c.needs_slab_crack ? slabSignatureFor(data, i, c) : null));
+  // naming the card; any other slab selection is dropped, with its $7.
+  const slabSigned = data.cards.map((c, i) => (c.needs_slab_crack ? slabSignatureFor(data, i) : null));
   const droppedSlabs = data.cards.filter((c, i) => c.needs_slab_crack && !slabSigned[i]).map((c) => c.card_name.trim());
 
   let terms: TermsVersionRow;
@@ -311,22 +311,22 @@ export async function POST(request: Request) {
   }
 
   const isInternational = false;
-  // The prepaid label covers the trip in and the trip back: twice the rate,
-  // looked up at Shippo for this customer's ZIP (never the browser's price)
-  let shippingCents = 0;
-  if (data.shipping_method === "buy_label") {
-    const rate = data.shipping_rate
-      ? await inboundRate(data.shipping_rate.object_id, data.customer.address.zip ?? "")
-      : null;
-    if (!rate) {
-      return Response.json(
-        { error: "Your shipping quote expired. Go back to the Shipping step and choose a rate again.", code: "RATE_EXPIRED" },
-        { status: 400 }
-      );
-    }
-    shippingCents = rate.amountCents * 2;
-    data.shipping_rate = { ...data.shipping_rate!, amount_cents: shippingCents, carrier: rate.carrier, service_level: rate.serviceLevel };
+  // Shipping is priced from the Shippo rate for this customer's ZIP (never the
+  // browser's price). The prepaid label's rate (to us) covers the trip in and
+  // the trip back, twice; a customer who sends the cards in their own way still
+  // pays for the trip back, once, at the rate quoted from us to them.
+  const isBuyLabel = data.shipping_method === "buy_label";
+  const rate = data.shipping_rate
+    ? await shippingRate(data.shipping_rate.object_id, data.customer.address.zip ?? "", isBuyLabel ? "in" : "back")
+    : null;
+  if (!rate) {
+    return Response.json(
+      { error: "Your shipping quote expired. Go back to the Shipping step and choose a rate again.", code: "RATE_EXPIRED" },
+      { status: 400 }
+    );
   }
+  const shippingCents = rate.amountCents * (isBuyLabel ? 2 : 1);
+  data.shipping_rate = { ...data.shipping_rate!, amount_cents: shippingCents, carrier: rate.carrier, service_level: rate.serviceLevel };
   const isDomesticBuyLabel = data.shipping_method === "buy_label" && !isInternational;
   const signatureFeeCents = isDomesticBuyLabel && data.add_signature_confirmation ? SIGNATURE_FEE_CENTS : 0;
 
@@ -421,8 +421,11 @@ export async function POST(request: Request) {
     terms_version_id: terms.id,
     insurance_election: election,
     // Read by the admin breakdown, the admin new-order email and the affiliate pages.
-    ...(data.shipping_rate?.carrier ? { inbound_carrier: data.shipping_rate.carrier } : {}),
-    ...(data.shipping_rate?.service_level ? { inbound_service_level: data.shipping_rate.service_level } : {}),
+    // A prepaid label's service is the trip in (and back); with the customer's
+    // own shipping it's the trip back they paid for.
+    ...(data.shipping_method === "buy_label"
+      ? { inbound_carrier: data.shipping_rate.carrier, inbound_service_level: data.shipping_rate.service_level }
+      : { return_carrier: data.shipping_rate.carrier, return_service_level: data.shipping_rate.service_level }),
     ...(discountCents > 0 ? { discount_cents: discountCents, discount_percent: discountPercent } : {}),
     ...(validatedAffiliateCode ? { affiliate_code: validatedAffiliateCode } : {}),
     ...(giftCardDiscountCents > 0 ? {
@@ -591,9 +594,12 @@ export async function POST(request: Request) {
       ...(!perCardPregrade && pregradeCount > 0 ? [{ name: `Pregrade x ${pregradeCount}`, cents: pregradeCents }] : []),
       ...(discountCents > 0 ? [{ name: "Discount", cents: -discountCents }] : []),
       ...(instagramFeeCents > 0 ? [{ name: "Instagram Feature (card in a video)", cents: instagramFeeCents }] : []),
-      data.shipping_method === "buy_label"
-        ? { name: "Prepaid shipping label, to us and back", cents: shippingCents }
-        : { name: "Shipping: you send the cards yourself" },
+      ...(data.shipping_method === "buy_label"
+        ? [{ name: "Prepaid shipping label, to us and back", cents: shippingCents }]
+        : [
+            { name: "Shipping to us: you send the cards yourself" },
+            { name: `Return shipping to you, ${data.shipping_rate.carrier} ${data.shipping_rate.service_level}`, cents: shippingCents },
+          ]),
       ...(signatureFeeCents > 0 ? [{ name: "Signature confirmation", cents: signatureFeeCents }] : []),
       election === "purchased"
         ? { name: `Shipping insurance (${insuranceTrip}), coverage ${usd(data.insurance_declared_value_cents ?? 0)}`, cents: insuranceChargeCents }
@@ -688,8 +694,8 @@ export async function POST(request: Request) {
     quantity: 1,
   });
 
-  if (shippingCents > 0 && data.shipping_rate) {
-    const shippingLabel = isInternational
+  if (shippingCents > 0) {
+    const shippingLabel = data.shipping_method === "self_ship"
       ? `Return Shipping — ${data.shipping_rate.carrier} ${data.shipping_rate.service_level}`
       : `Shipping — ${data.shipping_rate.carrier} ${data.shipping_rate.service_level}`;
     lineItems.push({
@@ -798,7 +804,7 @@ export async function POST(request: Request) {
         insurance_type: (INSURANCE_ENABLED && insuranceChargeCents > 0 && data.insurance_type)
           ? data.insurance_type
           : "",
-        add_signature_confirmation: data.add_signature_confirmation ? "true" : "",
+        add_signature_confirmation: signatureFeeCents > 0 ? "true" : "",
         slab_crack_count: slabCrackCount > 0 ? String(slabCrackCount) : "",
         pregrade_count: pregradeCount > 0 ? String(pregradeCount) : "",
         instagram_feature: data.instagram_feature ? "true" : "",
