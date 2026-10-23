@@ -50,8 +50,10 @@ export type BacklogDay = {
   sent_back: number;      // order moved back to Awaiting Cards
   removed: number;        // order cancelled or deleted, card refunded or deleted
   untracked: number;      // ticked done before tracking began (finish date not recorded)
+  recount: number;        // count corrected: card rows entered on an order counted by quantity, or found when tracking began
   unknown_orders: number; // open orders whose card count isn't known
   uncertain: number;      // cards that may be missing from the total
+  stale: number;          // cards that may have been finished earlier (order later marked Delivered straight from Received/In Progress)
   quality: BacklogQuality;
 };
 
@@ -95,6 +97,15 @@ export type RevenueSeries = {
   refunds_this_month: { count: number; cents: number; pending_cents: number };
 };
 
+export const QUALITY_LABEL: Record<BacklogQuality, string> = {
+  live: "Live",
+  recorded: "Recorded",
+  reconstructed: "Rebuilt",
+  approximate: "Approximate",
+  insufficient: "Insufficient data",
+  no_data: "No data",
+};
+
 /** Whether a backlog day has a number to show. */
 export function backlogKnown(d: BacklogDay): boolean {
   return d.quality !== "no_data" && d.quality !== "insufficient";
@@ -107,7 +118,7 @@ export async function getBacklogDays(admin: SupabaseClient, from: string, to: st
   return (data ?? []) as BacklogDay[];
 }
 
-export type BacklogNow = { total: number; prep: number; orders: number; unknown_orders: number; as_of: string };
+export type BacklogNow = { total: number; prep: number; orders: number; unknown_orders: number; as_of: string; tracking_start: string | null };
 
 /** Unfinished cards right now (a quick count; the same definition as today's backlog row). */
 export async function getBacklogNow(admin: SupabaseClient): Promise<BacklogNow> {
@@ -128,17 +139,21 @@ export async function getRevenueSeries(admin: SupabaseClient): Promise<RevenueSe
   return data as RevenueSeries;
 }
 
-/** The note shown beside a backlog day: data quality and anything that moved the total besides added/completed. */
+/** What to say about a backlog day beside its quality label: gaps in the data, and moves besides added/completed. */
 export function backlogNotes(d: BacklogDay): string[] {
   const notes: string[] = [];
   const cards = (n: number) => `${n} card${n === 1 ? "" : "s"}`;
-  if (d.quality === "no_data") notes.push("No data: order statuses weren't logged yet");
-  if (d.quality === "insufficient") notes.push(`Insufficient data: arrival of ${cards(d.uncertain)} wasn't logged`);
-  if (d.quality === "approximate") notes.push(`Approximate: up to ${cards(d.uncertain)} may be missing (arrival not logged)`);
+  if (d.quality === "no_data") notes.push("Order statuses weren't logged yet");
+  if (d.quality === "insufficient") notes.push(`Arrival of ${cards(d.uncertain)} wasn't logged, so no total is given`);
+  if (d.quality === "approximate" && d.uncertain) notes.push(`Up to ${cards(d.uncertain)} may be missing (arrival not logged)`);
+  if (d.stale && d.quality !== "no_data" && d.quality !== "insufficient") {
+    notes.push(`${cards(d.stale)} in orders later marked Delivered straight from Cards Received or In Progress may have been finished earlier`);
+  }
   if (d.reopened) notes.push(`+${d.reopened} reopened`);
   if (d.sent_back) notes.push(`−${d.sent_back} order sent back to Awaiting Cards`);
   if (d.removed) notes.push(`−${d.removed} cancelled, refunded or deleted`);
   if (d.untracked) notes.push(`−${d.untracked} ticked done before tracking began (finish dates not recorded)`);
+  if (d.recount) notes.push(`${d.recount > 0 ? "+" : "−"}${Math.abs(d.recount)} recounted (card count corrected)`);
   if (d.unknown_orders) notes.push(`${d.unknown_orders} open order${d.unknown_orders === 1 ? "" : "s"} with no card count`);
   return notes;
 }

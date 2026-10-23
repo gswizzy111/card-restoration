@@ -103,7 +103,10 @@ function buildBuckets(series: RevenueSeries, range: Range, kitsOnly: boolean): B
   return withTrend(raw, 3);
 }
 
-const money = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (v: number) => {
+  const r = Math.round(v * 100) / 100;
+  return `${r < 0 ? "-" : ""}$${Math.abs(r).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 const shortMoney = (v: number) => (v >= 1000 ? `$${(v / 1000).toFixed(v >= 10_000 ? 0 : 1)}k` : `$${Math.round(v)}`);
 
 function CustomTooltip({ active, payload, label, range }: {
@@ -187,9 +190,9 @@ export function RevenueChart({
         </div>
         {hasRefunds && (
           <div className="bg-red-50 rounded-lg p-4 border border-red-100">
-            <p className="text-xs font-bold uppercase tracking-widest text-red-400 mb-1">Refunded</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-red-700 mb-1">Refunded</p>
             <p className="font-heading font-black text-2xl text-red-600">−{money(totalRefunded)}</p>
-            <p className="text-xs text-red-400 mt-0.5">by the day the money went back</p>
+            <p className="text-xs text-red-700 mt-0.5">by the day the money went back</p>
           </div>
         )}
         <div className="bg-secondary/40 rounded-lg p-4">
@@ -213,7 +216,7 @@ export function RevenueChart({
             tick={{ fontSize: 12, fill: "#888" }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={(v) => `$${v}`}
+            tickFormatter={(v: number) => `${v < 0 ? "-" : ""}$${Math.abs(v)}`}
           />
           <Tooltip content={<CustomTooltip range={range} />} />
           <Bar dataKey="sales" yAxisId="left" fill="oklch(0.55 0.22 265)" radius={[4, 4, 0, 0]} />

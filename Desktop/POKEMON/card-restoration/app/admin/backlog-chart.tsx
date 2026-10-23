@@ -1,7 +1,7 @@
 "use client";
 
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { backlogKnown, backlogNotes, formatDay, type BacklogDay } from "@/lib/dashboard-metrics";
+import { QUALITY_LABEL, backlogKnown, backlogNotes, formatDay, type BacklogDay } from "@/lib/dashboard-metrics";
 
 // End-of-day card backlog, one point per New York calendar day. Days without
 // enough history are gaps, never zero.
@@ -24,6 +24,9 @@ function BacklogTooltip({ active, payload }: { active?: boolean; payload?: { pay
           <p className="text-xs text-muted-foreground">+{row.added} added · −{row.completed} completed</p>
         </>
       ) : null}
+      {row.quality !== "live" && row.quality !== "recorded" && (
+        <p className="text-xs font-semibold text-foreground mt-1">{QUALITY_LABEL[row.quality]}</p>
+      )}
       {notes.map((n) => (
         <p key={n} className="text-xs text-muted-foreground mt-0.5">{n}</p>
       ))}

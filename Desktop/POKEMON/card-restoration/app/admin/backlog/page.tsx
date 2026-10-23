@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  addDays, backlogKnown, backlogNotes, etToday, formatDay, getBacklogDays, getBacklogNow,
+  QUALITY_LABEL, addDays, backlogKnown, backlogNotes, etToday, formatDay, getBacklogDays, getBacklogNow,
   type BacklogDay, type BacklogQuality,
 } from "@/lib/dashboard-metrics";
 import { BacklogChart } from "../backlog-chart";
@@ -19,13 +19,13 @@ const RANGES = [
   { key: "all", label: "All" },
 ] as const;
 
-const QUALITY: Record<BacklogQuality, { label: string; cls: string }> = {
-  live:          { label: "Live",              cls: "bg-emerald-100 text-emerald-700" },
-  recorded:      { label: "Recorded",          cls: "bg-teal-50 text-teal-700" },
-  reconstructed: { label: "Rebuilt",           cls: "bg-slate-100 text-slate-600" },
-  approximate:   { label: "Approximate",       cls: "bg-amber-100 text-amber-700" },
-  insufficient:  { label: "Insufficient data", cls: "bg-red-100 text-red-700" },
-  no_data:       { label: "No data",           cls: "bg-gray-100 text-gray-500" },
+const QUALITY_CLS: Record<BacklogQuality, string> = {
+  live:          "bg-emerald-100 text-emerald-700",
+  recorded:      "bg-teal-50 text-teal-700",
+  reconstructed: "bg-slate-100 text-slate-600",
+  approximate:   "bg-amber-100 text-amber-700",
+  insufficient:  "bg-red-100 text-red-700",
+  no_data:       "bg-gray-100 text-gray-600",
 };
 
 export default async function BacklogPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
@@ -49,6 +49,9 @@ export default async function BacklogPage({ searchParams }: { searchParams: Prom
   const rows = all.filter((d) => d.day >= from).reverse();
   const chartDays = all.filter((d) => d.day >= chartFrom);
   const asOf = new Date(now.as_of).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
+  const trackedFrom = now.tracking_start
+    ? new Date(now.tracking_start).toLocaleDateString("en-US", { timeZone: "America/New_York", month: "long", day: "numeric", year: "numeric" })
+    : "tracking began";
 
   const csv: (string | number)[][] = [
     ["Date", "Total Backlog", "Cards Added", "Cards Completed", "Net Change", "Data quality", "Notes"],
@@ -61,7 +64,7 @@ export default async function BacklogPage({ searchParams }: { searchParams: Prom
         known ? d.added : "",
         known ? d.completed : "",
         net ?? "",
-        QUALITY[d.quality].label,
+        QUALITY_LABEL[d.quality],
         backlogNotes(d).join("; "),
       ];
     }),
@@ -153,13 +156,10 @@ export default async function BacklogPage({ searchParams }: { searchParams: Prom
                         {net == null ? "—" : net > 0 ? `+${net}` : net < 0 ? `−${Math.abs(net)}` : "0"}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        <span className={`inline-block mr-2 px-2 py-0.5 rounded-full font-bold ${QUALITY[d.quality].cls}`}>
-                          {QUALITY[d.quality].label}{d.quality === "live" ? ` · ${asOf}` : ""}
+                        <span className={`inline-block mr-2 px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${QUALITY_CLS[d.quality]}`}>
+                          {QUALITY_LABEL[d.quality]}{d.quality === "live" ? ` · ${asOf}` : ""}
                         </span>
-                        {notes.filter((n) => !/^(No data|Insufficient|Approximate)/.test(n)).join(" · ")}
-                        {d.quality === "insufficient" || d.quality === "approximate" ? (
-                          <span className="block mt-0.5">{notes[0]}</span>
-                        ) : null}
+                        {notes.join(" · ")}
                       </td>
                     </tr>
                   );
@@ -171,7 +171,7 @@ export default async function BacklogPage({ searchParams }: { searchParams: Prom
 
         <div className="text-xs text-muted-foreground leading-relaxed flex flex-col gap-1.5">
           <p><strong className="text-foreground">How it&apos;s counted.</strong> A card enters the backlog when its order is marked Cards Received (or In Progress, or when it&apos;s added to an order already in) and leaves when it&apos;s ticked done or its order is Completed, Shipped Back or Delivered. Orders sent back to Awaiting Cards, cancelled or deleted, and refunded cards, also leave it; the notes say so. Cards in manual orders entered without card rows are counted from the order&apos;s quantity. Days are New York days, and each finished day is saved once it&apos;s first shown.</p>
-          <p><strong className="text-foreground">Recorded</strong> days were logged move by move from October 23, 2026. <strong className="text-foreground">Rebuilt</strong> days come from the order status history, where a card ticked done inside an order that was still open has no finish date, so it counts as unfinished until its order closed. <strong className="text-foreground">Approximate</strong> and <strong className="text-foreground">Insufficient data</strong> days had orders whose arrival wasn&apos;t logged (they skipped Cards Received): up to 10% of cards may be missing from an approximate day, and more than that from an insufficient one, so no total is given. Orders deleted before October 23, 2026 can&apos;t be rebuilt.</p>
+          <p><strong className="text-foreground">Recorded</strong> days were logged move by move from {trackedFrom}. <strong className="text-foreground">Rebuilt</strong> days come from the order status history, where a card ticked done inside an order that was still open has no finish date, so it counts as unfinished until its order closed. <strong className="text-foreground">Approximate</strong> and <strong className="text-foreground">Insufficient data</strong> days had orders whose arrival wasn&apos;t logged (they skipped Cards Received): up to 10% of cards may be missing from an approximate day, and more than that from an insufficient one, so no total is given. Orders deleted before {trackedFrom} can&apos;t be rebuilt. When card rows are entered on an order that was counted by its quantity, the change shows as a recount, not as cards added.</p>
         </div>
       </div>
     </div>

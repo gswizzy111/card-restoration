@@ -69,8 +69,7 @@ create table if not exists backlog_events (
 create index if not exists backlog_events_order_idx on backlog_events (order_id, at);
 create index if not exists backlog_events_card_idx on backlog_events (card_id, at);
 alter table backlog_events enable row level security;
-drop trigger if exists backlog_events_immutable on backlog_events;
-create trigger backlog_events_immutable before update or delete on backlog_events
+create or replace trigger backlog_events_immutable before update or delete on backlog_events
   for each row execute function forbid_change();
 
 -- Logging never blocks the order or card write that triggered it.
@@ -86,8 +85,7 @@ exception when others then
   raise warning 'backlog_events: order % not logged: %', tg_op, sqlerrm;
   return null;
 end $$;
-drop trigger if exists orders_backlog_history on orders;
-create trigger orders_backlog_history after insert or update of status or delete on orders
+create or replace trigger orders_backlog_history after insert or update of status or delete on orders
   for each row execute function log_order_status();
 
 create or replace function stamp_card_completed() returns trigger language plpgsql as $$
@@ -99,8 +97,7 @@ begin
   end if;
   return new;
 end $$;
-drop trigger if exists cards_completed_at on cards;
-create trigger cards_completed_at before insert or update of completed on cards
+create or replace trigger cards_completed_at before insert or update of completed on cards
   for each row execute function stamp_card_completed();
 
 create or replace function log_card_change() returns trigger language plpgsql as $$
@@ -135,8 +132,7 @@ exception when others then
   raise warning 'backlog_events: card % not logged: %', tg_op, sqlerrm;
   return null;
 end $$;
-drop trigger if exists cards_backlog_history on cards;
-create trigger cards_backlog_history after insert or update or delete on cards
+create or replace trigger cards_backlog_history after insert or update or delete on cards
   for each row execute function log_card_change();
 
 -- Baseline: every order's status and every ticked card as of now, so the live history
@@ -201,10 +197,13 @@ cfg as (
   select coalesce((select value_ts from metrics_settings where key = 'backlog_tracking_start'), now()) t0,
          (now() at time zone 'America/New_York')::date today
 ),
-pts as (
-  -- Rebuilt order statuses before tracking started
+notes as (
+  -- Order statuses the site wrote as notes before tracking started
   select e.order_id, e.created_at t,
     case
+      when e.event_type = 'manual_order_created' then
+        case when e.description ilike 'Drop-off order created%' then 'received' end
+      when e.description = 'Status updated to: Awaiting Payment' then 'awaiting_payment'
       when e.description = 'Status updated to: Awaiting Cards' then 'awaiting_cards'
       when e.description = 'Status updated to: Cards Received' then 'received'
       when e.description = 'Status updated to: In Progress' then 'in_progress'
@@ -215,18 +214,33 @@ pts as (
       when e.description = 'Status updated to: Cancelled' then 'cancelled'
     end st
   from order_events e, cfg
-  where e.event_type = 'status_updated' and e.created_at < cfg.t0
+  where e.event_type in ('status_updated', 'manual_order_created') and e.created_at < cfg.t0
+),
+last_note as (
+  select distinct on (order_id) order_id, t, st from notes where st is not null order by order_id, t desc
+),
+pts as (
+  select order_id, t, st, 'note' src from notes where st is not null
   union all
-  -- Orders already cancelled when tracking started were cancelled when refunded
+  -- Orders already cancelled when tracking started, with no note saying so: cancelled
+  -- when last refunded, if that came after their last note
   select b.order_id,
-    least(coalesce((select max(e.created_at) from order_events e where e.order_id = b.order_id and e.event_type = 'refund_issued'),
-                   (select o.updated_at from orders o where o.id = b.order_id), cfg.t0), cfg.t0 - interval '1 second'),
-    'cancelled'
-  from backlog_events b, cfg
+    least(greatest(
+      case when r.t is not null and (ln.t is null or r.t >= ln.t) then r.t else least(o.updated_at, cfg.t0) end,
+      coalesce(ln.t + interval '1 millisecond', '-infinity'::timestamptz)
+    ), cfg.t0 - interval '1 millisecond'),
+    'cancelled', 'note'
+  from backlog_events b
+  cross join cfg
+  left join orders o on o.id = b.order_id
+  left join last_note ln on ln.order_id = b.order_id
+  left join lateral (select max(e.created_at) t from order_events e
+    where e.order_id = b.order_id and e.event_type = 'refund_issued' and e.created_at < cfg.t0) r on true
   where b.source = 'baseline' and b.event = 'order_status' and b.status = 'cancelled'
+    and ln.st is distinct from 'cancelled'
   union all
-  -- Recorded statuses from tracking start
-  select b.order_id, b.at, b.status
+  -- Recorded statuses from tracking start (the baseline row holds each order's status then)
+  select b.order_id, b.at, b.status, b.source
   from backlog_events b, cfg
   where b.event = 'order_status' and b.at >= cfg.t0
 ),
@@ -240,46 +254,61 @@ ords as (
   where not exists (select 1 from orders o where o.id = d.order_id)
   group by d.order_id
 ),
+first_card as (
+  select order_id, min(t) t from (
+    select order_id, created_at t from cards
+    union all
+    select order_id, card_created_at from backlog_events
+    where event in ('card_added', 'card_removed') and card_created_at is not null
+  ) x group by order_id
+),
+late as (
+  -- Orders whose card rows were entered after the order (manual orders entered without
+  -- them): until then, their service-line quantity stands in for the cards
+  select o.id, o.created_at, fc.t switch_at,
+    (select coalesce(sum(s.quantity), 0)::int from order_services s where s.order_id = o.id
+      and coalesce(s.service_id, '') not in ('pregrade', 'pre_grade_assessment', 'slab_crack', 'instagram_feature')) q
+  from ords o left join first_card fc on fc.order_id = o.id
+  where fc.t is null or fc.t > o.created_at + interval '10 minutes'
+),
 units as (
   -- One unit per card row, including cards since removed
-  select c.id::text uid, c.id card_id, c.order_id, c.created_at born, false unknown
-  from cards c join ords o on o.id = c.order_id
+  select c.id::text uid, c.id card_id, c.order_id, c.created_at born, false unknown, null::timestamptz ends,
+    case when l.switch_at = c.created_at then 'recount' end born_src
+  from cards c join ords o on o.id = c.order_id left join late l on l.id = c.order_id
   union all
-  select * from (
-    select distinct on (b.card_id) b.card_id::text, b.card_id, b.order_id, b.card_created_at, false
+  select r.*, case when l.switch_at = r.born then 'recount' end
+  from (
+    select distinct on (b.card_id) b.card_id::text uid, b.card_id, b.order_id, b.card_created_at born, false unknown, null::timestamptz ends
     from backlog_events b join ords o on o.id = b.order_id
     where b.event = 'card_removed' and not exists (select 1 from cards c where c.id = b.card_id)
     order by b.card_id, b.at
-  ) removed
+  ) r left join late l on l.id = r.order_id
   union all
-  -- Manual orders entered without card rows: their service-line quantity
-  select o.id::text || '#' || g, null::uuid, o.id, o.created_at, false
-  from ords o
-  cross join lateral (select coalesce(sum(s.quantity), 0)::int q from order_services s where s.order_id = o.id
-    and coalesce(s.service_id, '') not in ('pregrade', 'pre_grade_assessment', 'slab_crack', 'instagram_feature')) q
-  cross join lateral generate_series(1, q.q) g
-  where not exists (select 1 from cards c where c.order_id = o.id)
-    and not exists (select 1 from backlog_events b where b.order_id = o.id and b.event = 'card_added')
+  -- Service-line quantity until the cards were entered
+  select l.id::text || '#' || g, null::uuid, l.id, l.created_at, false, l.switch_at, null
+  from late l cross join lateral generate_series(1, l.q) g
+  where l.q > 0
   union all
-  -- ... and when neither tells, one placeholder so the day can say a count is unknown
-  select o.id::text || '#?', null::uuid, o.id, o.created_at, true
-  from ords o
-  where not exists (select 1 from cards c where c.order_id = o.id)
-    and not exists (select 1 from backlog_events b where b.order_id = o.id and b.event = 'card_added')
-    and not exists (select 1 from order_services s where s.order_id = o.id and s.quantity > 0
-      and coalesce(s.service_id, '') not in ('pregrade', 'pre_grade_assessment', 'slab_crack', 'instagram_feature'))
+  -- ... and when that doesn't tell either, one placeholder so the day can say a count is unknown
+  select l.id::text || '#?', null::uuid, l.id, l.created_at, true, l.switch_at, null
+  from late l where l.q = 0
 ),
 card_ev as (
   select card_id, at, event, source from backlog_events
-  where card_id is not null and event in ('card_removed', 'card_completed', 'card_uncompleted', 'card_refunded')
+  where card_id is not null and event in ('card_added', 'card_removed', 'card_completed', 'card_uncompleted', 'card_refunded')
 ),
 ev as (
   -- seq orders same-instant events: existence, then status, then card ticks, then refunds
-  select u.uid, u.born t, 0 seq, 'born' kind, null::text st, null::text src from units u
+  select u.uid, u.born t, 0 seq, 'born' kind, null::text st, u.born_src src from units u
   union all
-  select u.uid, b.at, 0, 'removed', null, null from units u join card_ev b on b.card_id = u.card_id and b.event = 'card_removed'
+  select u.uid, u.ends, 0, 'removed', null, 'recount' from units u where u.ends is not null
   union all
-  select u.uid, p.t, 1, 'status', p.st, null from units u join pts p on p.order_id = u.order_id where p.st is not null
+  -- a card moved between orders is removed from one and added to the other
+  select u.uid, b.at, 0, case b.event when 'card_added' then 'born' else 'removed' end, null, null
+  from units u join card_ev b on b.card_id = u.card_id and b.event in ('card_added', 'card_removed')
+  union all
+  select u.uid, p.t, 1, 'status', p.st, p.src from units u join pts p on p.order_id = u.order_id where p.st is not null
   union all
   select u.uid, b.at, 2, case b.event when 'card_completed' then 'done' else 'undone' end, null, b.source
   from units u join card_ev b on b.card_id = u.card_id and b.event in ('card_completed', 'card_uncompleted')
@@ -298,7 +327,7 @@ grp as (
     count(*) filter (where kind in ('done', 'undone')) over w gd,
     count(*) filter (where kind = 'refund') over w gr
   from ev
-  window w as (partition by uid order by t, seq rows unbounded preceding)
+  window w as (partition by uid order by t, seq, kind = 'born' rows unbounded preceding)
 ),
 state as (
   select uid, t, rn, kind, src,
@@ -312,7 +341,8 @@ per_t as (
   -- State after every event at one instant, and which kinds of events happened then
   select uid, t,
     (array_agg(cur_status order by rn desc))[1] cur_status,
-    bool_or(kind = 'status') has_status, bool_or(kind = 'born') has_born, bool_or(kind = 'removed') has_removed,
+    bool_or(kind = 'status') has_status, bool_or(kind = 'status' and src = 'baseline') has_baseline,
+    bool_or(kind = 'born') has_born, bool_or(kind = 'removed') has_removed, bool_or(src = 'recount') has_recount,
     bool_or(kind = 'done' and src = 'baseline') has_done_untracked, bool_or(kind = 'done' and coalesce(src, 'live') = 'live') has_done,
     bool_or(kind = 'refund') has_refund,
     coalesce((array_agg(cur_status order by rn desc))[1] in ('received', 'in_progress', 'awaiting_restoration'), false)
@@ -330,8 +360,10 @@ seqd as (
 ),
 tr as (
   -- Every move into or out of the backlog, with its reason
-  select s.uid, s.t, (s.t at time zone 'America/New_York')::date d, s.inb up, s.cur_status,
+  select s.uid, s.t, (s.t at time zone 'America/New_York')::date d, s.inb up, s.cur_status, s.prev_status,
     case
+      when s.has_recount then 'recount'
+      when s.inb and s.has_baseline then 'recount'
       when s.inb and s.has_status and s.prev_status in ('completed', 'shipped_back', 'delivered') then 'reopened'
       when s.inb and s.has_status then 'received'
       when s.inb and s.has_born then 'added'
@@ -351,13 +383,15 @@ unit_info as (
   from units u join ords o on o.id = u.order_id
 ),
 -- Possible undercount: cards whose arrival wasn't logged (the order skipped "Cards
--- Received", or closed without ever being open) could have been in the shop from
--- the order date until the first logged status.
+-- Received", first showed up open when tracking began, or closed without ever being
+-- open) could have been in the shop from the order date until the first logged status.
 uncertain as (
   select f.uid, ui.order_created a, f.t b
-  from (select distinct on (uid) uid, t, cur_status from tr where up order by uid, t) f
+  from (select distinct on (uid) uid, t, cur_status, reason from tr where up order by uid, t) f
   join unit_info ui on ui.uid = f.uid
-  where f.cur_status <> 'received' and not ui.unknown
+  cross join cfg
+  where not ui.unknown
+    and ((f.reason = 'received' and f.cur_status <> 'received') or (f.reason = 'recount' and f.t = cfg.t0))
   union all
   select ui.uid, ui.order_created, min(p.t)
   from unit_info ui
@@ -373,6 +407,7 @@ deltas as (
     count(*) filter (where not t.up and t.reason = 'sent_back' and not ui.unknown) sent_back,
     count(*) filter (where not t.up and t.reason = 'removed' and not ui.unknown) removed,
     count(*) filter (where not t.up and t.reason = 'untracked' and not ui.unknown) untracked,
+    coalesce(sum(case when t.up then 1 else -1 end) filter (where t.reason = 'recount' and not ui.unknown), 0) recount,
     coalesce(sum(case when t.up then 1 else -1 end) filter (where not ui.unknown), 0) dtotal,
     coalesce(sum(case when t.up then 1 else -1 end) filter (where not ui.unknown and ui.prep), 0) dprep,
     coalesce(sum(case when t.up then 1 else -1 end) filter (where ui.unknown), 0) dunknown
@@ -387,6 +422,7 @@ cum as (
   select a.d, a.t0, a.today,
     coalesce(x.added, 0) added, coalesce(x.completed, 0) completed, coalesce(x.reopened, 0) reopened,
     coalesce(x.sent_back, 0) sent_back, coalesce(x.removed, 0) removed, coalesce(x.untracked, 0) untracked,
+    coalesce(x.recount, 0) recount,
     sum(coalesce(x.dtotal, 0)) over (order by a.d) total,
     sum(coalesce(x.dprep, 0)) over (order by a.d) prep,
     sum(coalesce(x.dunknown, 0)) over (order by a.d) unknown_orders
@@ -395,6 +431,21 @@ cum as (
 unc as (
   select c.d, count(*) n
   from cum c join uncertain u on u.a < et_day_start(c.d + 1) and u.b >= et_day_start(c.d + 1)
+  where c.d between p_from and p_to
+  group by c.d
+),
+-- Possible overcount: cards whose order went from Cards Received / In Progress straight
+-- to Delivered more than a week later; when they were really finished wasn't logged.
+stale as (
+  select x.uid, x.a, x.t b
+  from (select tr.*, lag(tr.t) over (partition by tr.uid order by tr.t) a from tr) x
+  join unit_info ui on ui.uid = x.uid
+  where not x.up and not ui.unknown and x.reason = 'completed' and x.cur_status = 'delivered'
+    and x.prev_status in ('received', 'in_progress', 'awaiting_restoration') and x.t - x.a > interval '7 days'
+),
+stl as (
+  select c.d, count(*) n
+  from cum c join stale s on s.a < et_day_start(c.d + 1) and s.b >= et_day_start(c.d + 1)
   where c.d between p_from and p_to
   group by c.d
 ),
@@ -411,12 +462,15 @@ select coalesce(jsonb_agg(jsonb_build_object(
     'sent_back', c.sent_back,
     'removed', c.removed,
     'untracked', c.untracked,
+    'recount', c.recount,
     'unknown_orders', c.unknown_orders,
     'uncertain', coalesce(un.n, 0),
+    'stale', coalesce(sl.n, 0),
     'quality', case
       when fp.d is null or c.d < fp.d then 'no_data'
       when coalesce(un.n, 0)::numeric / greatest(c.total + coalesce(un.n, 0), 1) > 0.10 then 'insufficient'
       when coalesce(un.n, 0)::numeric / greatest(c.total + coalesce(un.n, 0), 1) > 0.03 then 'approximate'
+      when coalesce(sl.n, 0)::numeric / greatest(c.total, 1) > 0.03 then 'approximate'
       when et_day_start(c.d + 1) <= c.t0 then 'reconstructed'
       when c.d = c.today then 'live'
       else 'recorded'
@@ -425,6 +479,7 @@ select coalesce(jsonb_agg(jsonb_build_object(
 from cum c
 cross join first_point fp
 left join unc un on un.d = c.d
+left join stl sl on sl.d = c.d
 where c.d between p_from and p_to
 $$;
 
@@ -594,8 +649,11 @@ with open_orders as (
 ),
 counts as (
   select oo.id, oo.svc,
-    case when exists (select 1 from cards c where c.order_id = oo.id)
-      then (select count(*) from cards c where c.order_id = oo.id and not c.completed and coalesce(c.status, '') <> 'refunded')
+    case
+      when exists (select 1 from cards c where c.order_id = oo.id)
+        then (select count(*) from cards c where c.order_id = oo.id and not c.completed and coalesce(c.status, '') <> 'refunded')
+      -- every card row was deleted
+      when exists (select 1 from backlog_events b where b.order_id = oo.id and b.event in ('card_added', 'card_removed')) then 0
       else order_card_count(oo.id)
     end n
   from open_orders oo
@@ -605,7 +663,8 @@ select jsonb_build_object(
   'prep', coalesce(sum(n) filter (where svc = 'prep'), 0),
   'orders', count(*) filter (where n > 0),
   'unknown_orders', count(*) filter (where n is null),
-  'as_of', now()
+  'as_of', now(),
+  'tracking_start', (select value_ts from metrics_settings where key = 'backlog_tracking_start')
 ) from counts
 $$;
 

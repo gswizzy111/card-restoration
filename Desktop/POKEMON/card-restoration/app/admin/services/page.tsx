@@ -57,13 +57,13 @@ export default async function ServicesPage({ searchParams }: { searchParams: Pro
             <h1 className="font-heading font-black text-3xl text-foreground">PSA Prep vs Full Restoration</h1>
             <p className="text-muted-foreground text-sm mt-1">Paid orders by the day they were paid (New York time). Each order counts once, under its own service.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex gap-1 bg-white border border-border rounded-lg p-1">
               {RANGES.map((r) => (
                 <Link
                   key={r.key}
                   href={`/admin/services?range=${r.key}`}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors ${
                     range === r.key ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >

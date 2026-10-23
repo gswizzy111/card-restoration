@@ -364,8 +364,13 @@ export default async function AdminPage({
   const filteredShippedOrders = filterByPeriod(shippedOrders, activePeriod);
 
   const orderIds = orders?.map((o) => o.id) ?? [];
+  // The list covers nearly every order, so read all cards in pages and keep the listed
+  // orders' (a filter naming every order ID makes a URL too long for the API gateway)
+  const listedOrderIds = new Set(orderIds);
   const allCards = orderIds.length > 0
-    ? await fetchAll((from, to) => admin.from("cards").select("id, order_id, card_name, photo_urls").in("order_id", orderIds).order("id").range(from, to))
+    ? (await fetchAll((from, to) => admin.from("cards").select("id, order_id, card_name, photo_urls").order("id").range(from, to))
+        .catch((e) => { console.error("[admin] cards:", e); return []; }))
+        .filter((c) => listedOrderIds.has(c.order_id))
     : [];
 
   const cardsByOrder: Record<string, string[]> = {};
@@ -679,7 +684,7 @@ export default async function AdminPage({
                 {month && <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(month.sales)} sales − {formatCurrency(month.refunds.cents)} refunds</p>}
               </div>
               <div className="bg-white rounded-xl border border-red-100 p-5">
-                <p className="text-xs font-bold uppercase tracking-widest text-red-400 mb-1">Refunds This Month</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-red-700 mb-1">Refunds This Month</p>
                 <p className="font-heading font-black text-3xl text-red-600">{month ? formatCurrency(month.refunds.cents) : "—"}</p>
                 {month && (
                   <p className="text-xs text-muted-foreground mt-0.5">

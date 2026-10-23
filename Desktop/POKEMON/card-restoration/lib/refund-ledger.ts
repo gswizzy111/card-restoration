@@ -14,8 +14,11 @@ export type RefundKind = "restoration" | "prep" | "kit" | "kit_club" | "other" |
 type Link = { order_id: string | null; shop_order_id: string | null; card_id: string | null; kind: RefundKind; match_method: string };
 
 const SYNC_KEY = "refunds_synced_at";
-// Each sync re-reads this far back, so a refund is never missed between syncs
-const OVERLAP_SECONDS = 2 * 86_400;
+// Each sync re-reads this far back: a refund can still fail up to 30 days after it
+// posts, and unchanged refunds are skipped, so the overlap costs only list pages
+const OVERLAP_SECONDS = 35 * 86_400;
+
+type StripeOpts = { timeout?: number; maxNetworkRetries?: number };
 
 const id = (x: string | { id: string } | null | undefined) => (typeof x === "string" ? x : x?.id ?? null);
 
@@ -32,7 +35,7 @@ async function shopLink(admin: SupabaseClient, column: "id" | "stripe_session_id
 }
 
 /** Which order a Stripe refund belongs to. */
-export async function matchRefund(admin: SupabaseClient, r: Stripe.Refund): Promise<Link> {
+export async function matchRefund(admin: SupabaseClient, r: Stripe.Refund, opts: StripeOpts = {}): Promise<Link> {
   const m = r.metadata ?? {};
   // 1. Refunds made from the admin pages carry the order in their metadata
   if (m.card_id) {
@@ -54,7 +57,7 @@ export async function matchRefund(admin: SupabaseClient, r: Stripe.Refund): Prom
     const { data: byPi } = await admin.from("orders").select("id").eq("stripe_payment_intent_id", pi).maybeSingle();
     if (byPi) return (await orderLink(admin, byPi.id, "payment_intent"))!;
     // 3. The Checkout session that took the payment (add-cards and upgrade sessions name their order)
-    const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 });
+    const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 }, opts);
     const s = sessions.data[0];
     if (s) {
       if (s.metadata?.order_id) {
@@ -65,9 +68,11 @@ export async function matchRefund(admin: SupabaseClient, r: Stripe.Refund): Prom
       if (bySession) return (await orderLink(admin, bySession.id, "checkout_session"))!;
       const kit = await shopLink(admin, "stripe_session_id", s.id, "checkout_session");
       if (kit) return kit;
+      // Gift card purchases have no order
+      if (s.metadata?.type === "gift_card") return { order_id: null, shop_order_id: null, card_id: null, kind: "other", match_method: "checkout_session" };
     }
     // 4. A Kit Club invoice
-    const payments = await stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: pi }, limit: 1 });
+    const payments = await stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: pi }, limit: 1 }, opts);
     const invoice = id(payments.data[0]?.invoice as string | { id: string } | undefined);
     if (invoice) {
       const kit = await shopLink(admin, "stripe_session_id", invoice, "invoice");
@@ -112,9 +117,9 @@ export async function recordRefund(
 }
 
 /** Save or update one Stripe refund, matching it to an order the first time. */
-export async function upsertStripeRefund(admin: SupabaseClient, r: Stripe.Refund) {
+export async function upsertStripeRefund(admin: SupabaseClient, r: Stripe.Refund, opts: StripeOpts = {}) {
   const { data: existing } = await admin.from("refunds").select("kind").eq("stripe_refund_id", r.id).maybeSingle();
-  const link = existing && existing.kind !== "unmatched" ? {} : await matchRefund(admin, r);
+  const link = existing && existing.kind !== "unmatched" ? {} : await matchRefund(admin, r, opts);
   const { error } = await admin.from("refunds").upsert({ ...ledgerRow(r), ...link }, { onConflict: "stripe_refund_id" });
   if (error) throw new Error(`refund ${r.id}: ${error.message}`);
 }
@@ -122,9 +127,15 @@ export async function upsertStripeRefund(admin: SupabaseClient, r: Stripe.Refund
 /**
  * Bring the ledger up to date with Stripe: refunds created since the last
  * sync (with an overlap), and every refund still pending. At most once per
- * `minIntervalMs`; stops after `budgetMs` and finishes on a later call.
+ * `minIntervalMs`; stops after `budgetMs` and finishes on a later call. Each
+ * Stripe request gives up after `requestTimeoutMs`, without retries.
  */
-export async function syncRefunds(admin: SupabaseClient, { minIntervalMs = 60_000, budgetMs = 4_000 } = {}) {
+export async function syncRefunds(
+  admin: SupabaseClient,
+  { minIntervalMs = 60_000, budgetMs = 4_000, requestTimeoutMs = 3_000 } = {},
+) {
+  const opts: StripeOpts = { timeout: requestTimeoutMs, maxNetworkRetries: 0 };
+  const overBudget = () => Date.now() - started > budgetMs;
   const started = Date.now();
   const { data: state } = await admin.from("metrics_settings").select("value_ts").eq("key", SYNC_KEY).maybeSingle();
   const last = state?.value_ts ? new Date(state.value_ts).getTime() : 0;
@@ -134,7 +145,7 @@ export async function syncRefunds(admin: SupabaseClient, { minIntervalMs = 60_00
   const since = last ? Math.floor(last / 1000) - OVERLAP_SECONDS : 0;
   let synced = 0;
   let complete = true;
-  let page = await stripe.refunds.list({ created: { gte: since }, limit: 100 });
+  let page = await stripe.refunds.list({ created: { gte: since }, limit: 100 }, opts);
   while (page.data.length) {
     // Only new refunds, or ones whose status changed, need writing
     const { data: known } = await admin.from("refunds").select("stripe_refund_id, status")
@@ -142,33 +153,40 @@ export async function syncRefunds(admin: SupabaseClient, { minIntervalMs = 60_00
     const seen = new Map((known ?? []).map((k) => [k.stripe_refund_id, k.status]));
     for (const r of page.data) {
       if (seen.get(r.id) === r.status) continue;
-      await upsertStripeRefund(admin, r);
+      if (overBudget()) { complete = false; break; }
+      await upsertStripeRefund(admin, r, opts);
       synced++;
-      if (Date.now() - started > budgetMs) { complete = false; break; }
     }
     if (!complete || !page.has_more) break;
-    page = await stripe.refunds.list({ created: { gte: since }, limit: 100, starting_after: page.data[page.data.length - 1].id });
+    if (overBudget()) { complete = false; break; }
+    page = await stripe.refunds.list({ created: { gte: since }, limit: 100, starting_after: page.data[page.data.length - 1].id }, opts);
   }
   if (complete) {
     const { data: open } = await admin.from("refunds").select("stripe_refund_id")
       .in("status", ["pending", "requires_action"]).not("stripe_refund_id", "is", null);
     for (const row of open ?? []) {
-      await upsertStripeRefund(admin, await stripe.refunds.retrieve(row.stripe_refund_id!));
+      if (overBudget()) { complete = false; break; }
+      await upsertStripeRefund(admin, await stripe.refunds.retrieve(row.stripe_refund_id!, {}, opts), opts);
       synced++;
     }
+  }
+  if (complete) {
     await admin.from("metrics_settings").upsert({ key: SYNC_KEY, value_ts: new Date(started).toISOString(), updated_at: new Date().toISOString() });
   }
   return { synced, skipped: false, complete };
 }
 
-/** Sync without letting a Stripe problem break the page; the ledger as it stands is still shown. */
-export async function syncRefundsQuietly(admin: SupabaseClient) {
-  try {
-    return await syncRefunds(admin);
-  } catch (e) {
+/**
+ * Sync before a page renders, without letting Stripe slow or break it: gives up
+ * after a few seconds and the page shows the ledger as it stands (whatever was
+ * saved so far stays saved; the next load or the daily job finishes the rest).
+ */
+export async function syncRefundsQuietly(admin: SupabaseClient, waitMs = 4_000) {
+  const sync = syncRefunds(admin, { budgetMs: waitMs - 1_000, requestTimeoutMs: 2_500 }).catch((e) => {
     console.error("[refund ledger] sync failed:", e instanceof Error ? e.message : e);
     return null;
-  }
+  });
+  return Promise.race([sync, new Promise<null>((resolve) => setTimeout(() => resolve(null), waitMs))]);
 }
 
 /** What has been refunded on an order so far: the larger of the order's own figure and the ledger's. */

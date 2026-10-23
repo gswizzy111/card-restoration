@@ -80,6 +80,23 @@ export async function POST(
     }
   }
 
+  // No Stripe payment to refund (an order entered by hand): the money goes back
+  // another way, so the ledger gets a refund paid outside Stripe
+  if (refundAmount > 0 && !refundId) {
+    const { error: ledgerErr } = await admin.from("refunds").insert({
+      source: "manual",
+      amount_cents: refundAmount,
+      status: "succeeded",
+      refunded_at: new Date().toISOString(),
+      shop_order_id: id,
+      kind: "kit",
+      match_method: "admin_route",
+      reason: "Order cancelled by admin",
+      created_by: adminSession.username,
+    });
+    if (ledgerErr) console.error("[cancel kit order] ledger insert failed:", ledgerErr.message, "order:", id);
+  }
+
   // Mark cancelled and record full refund
   await admin
     .from("shop_orders")
