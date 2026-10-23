@@ -47,9 +47,8 @@ export function TermsView({
             ))}
           </ol>
           <p className="mt-4 text-sm text-muted-foreground">
-            Signed separately when they apply:{" "}
-            <Link href="/agreements/slab-removal" className={LINK}>Slab Removal Authorization</Link> ·{" "}
-            <Link href="/agreements/high-value" className={LINK}>High-Value Agreement</Link>
+            Signed separately when it applies:{" "}
+            <Link href="/agreements/slab-removal" className={LINK}>Slab Removal Authorization</Link>
           </p>
           {otherVersions.length > 0 && (
             <p className="mt-2 text-sm text-muted-foreground">

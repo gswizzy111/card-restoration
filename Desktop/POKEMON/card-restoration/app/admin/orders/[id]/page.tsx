@@ -25,7 +25,7 @@ import { PaymentMethodEditor } from "./payment-method-editor";
 import { RegenerateLabelButton } from "./regenerate-label-button";
 import type { Track } from "shippo/models/components";
 import { requireAdmin } from "@/lib/admin-auth";
-import { AgreementsPanel, type PanelAgreement, type PanelCard } from "./agreements-panel";
+import { AgreementsPanel, type PanelCard } from "./agreements-panel";
 import { cardGate, gateFacts, type GateCard } from "@/lib/work-gates";
 
 export const dynamic = "force-dynamic";
@@ -76,17 +76,15 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
     if (!stageByCard[cardId]) stageByCard[cardId] = stage;
   }
 
-  // Terms of Service v1.0: signatures, consents, high-value agreements and each card's work gates
-  const [{ data: sigRows }, { data: consentRows }, { data: hvRows }, facts] = await Promise.all([
+  // Terms of Service v1.0 and later: signatures, consents and each card's work gates
+  const [{ data: sigRows }, { data: consentRows }, facts] = await Promise.all([
     admin.from("signatures").select("id, type, order_item_id, typed_full_name, signed_at, email_verified, terms_version_id").eq("order_id", id).order("signed_at"),
     admin.from("consents").select("type, granted, granted_at").eq("order_id", id).order("granted_at"),
-    admin.from("high_value_agreements").select("*").eq("order_id", id).order("created_at"),
     gateFacts(admin, id),
   ]);
   const versionIds = [...new Set((sigRows ?? []).map((s) => s.terms_version_id))];
   const { data: versionRows } = versionIds.length ? await admin.from("terms_versions").select("id, version").in("id", versionIds) : { data: [] };
   const versionOf = new Map((versionRows ?? []).map((v) => [v.id, v.version as string]));
-  const sigById = new Map((sigRows ?? []).map((s) => [s.id, s]));
   // The latest choice of each consent type
   const latestConsents = [...new Map((consentRows ?? []).map((c) => [c.type, c])).values()];
   const panelCards: PanelCard[] = (cards ?? []).map((c) => {
@@ -105,22 +103,6 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
       ...gate,
     };
   });
-  const panelAgreements: PanelAgreement[] = (hvRows ?? []).map((h) => {
-    const sig = h.customer_signature_id ? sigById.get(h.customer_signature_id) : null;
-    return {
-      id: h.id,
-      cardName: (cards ?? []).find((c) => c.id === h.order_item_id)?.card_name ?? "Card",
-      status: h.status,
-      negotiatedTerms: h.negotiated_terms ?? "",
-      sentAt: h.sent_at,
-      customerSignatureId: h.customer_signature_id,
-      customerSigned: sig ? { name: sig.typed_full_name, at: sig.signed_at } : null,
-      companySignedBy: h.company_signed_by,
-      companySignedAt: h.company_signed_at,
-      declinedReason: h.declined_reason,
-    };
-  });
-
   // What the customer paid for add-ons, from the order's service lines (the
   // Instagram feature was $100 before Sept 29, 2026 and $250 after)
   const instagramPaidCents = services?.find((s) => s.service_id === "instagram_feature")?.price_cents ?? INSTAGRAM_FEATURE_CENTS;
@@ -266,7 +248,6 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               insuranceElection={(order.insurance_election as string | null) ?? null}
               consents={latestConsents.map((c) => ({ type: c.type, granted: c.granted }))}
               cards={panelCards}
-              agreements={panelAgreements}
             />
 
             {/* Status updater */}
@@ -678,7 +659,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               />
             </div>
 
-            {/* Slab-Removal Authorization and High-Value Card Agreements signed at checkout */}
+            {/* Slab-Removal Authorizations signed at checkout */}
             {(agreements ?? []).length > 0 && (
               <div className="bg-white rounded-xl border border-border p-6">
                 <h2 className="font-heading font-black text-lg text-foreground mb-3">Signed Agreements</h2>

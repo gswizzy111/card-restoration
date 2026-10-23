@@ -1,10 +1,10 @@
 "use client";
 
 import { useId } from "react";
-import { Check, Download, ExternalLink, Hourglass, PenLine } from "lucide-react";
+import { Check, Download, ExternalLink, PenLine } from "lucide-react";
 import { LegalDocument } from "@/components/legal/legal-document";
 import {
-  AGREE_LABEL, CERTIFICATION_CLAUSE, CERTIFICATION_TEXT, ESIGN_BLOCKS, ESIGN_LABEL, HIGH_VALUE_NOTICE,
+  AGREE_LABEL, CERTIFICATION_CLAUSE, CERTIFICATION_TEXT, ESIGN_BLOCKS, ESIGN_LABEL,
   MEDIA_LABEL, TAG_LABEL, TERMS_VERSION,
 } from "@/lib/legal/current-terms";
 import { cardTitle, holderLine, SLAB_FEE_CENTS, type CardDetails } from "@/lib/legal/agreements-v1";
@@ -15,9 +15,9 @@ import { Need, Req } from "./required";
  * Everything a customer signs or chooses before an order is placed (Terms
  * Section 35), kept short. Each slab to open is authorized in its own pop-up
  * when slab cracking is picked (SlabAuthorizationDialog); here the review
- * step lists those, then the high-value hold notice, the optional photo
- * permissions (unchecked), and "Sign to confirm your order": two required
- * boxes (the Terms and electronic records) and the Full legal name. The full
+ * step lists those, then the optional photo permissions (unchecked), and
+ * "Sign to confirm your order": two required boxes (the Terms and electronic
+ * records) and the Full legal name. The full
  * texts are a link or a tap away, and all of it is stored with the signature
  * and printed on its PDF. Shared by the restoration, prep and add-cards
  * checkouts.
@@ -81,7 +81,6 @@ const LINK_BUTTON = "text-xs font-semibold underline underline-offset-2";
 
 export function SigningSection({
   slabCards,
-  highValueCards,
   state,
   onChange,
   onSkipSlab,
@@ -91,7 +90,6 @@ export function SigningSection({
   showMissing = false,
 }: {
   slabCards: SlabCard[];
-  highValueCards: { name: string; valueCents: number }[];
   state: SigningState;
   onChange: (s: SigningState) => void;
   /** The customer chose not to authorize this card's slab: drop the add-on. */
@@ -142,18 +140,6 @@ export function SigningSection({
               Slab removal removed for {skippedSlabs.join(", ")}. We won&apos;t open {skippedSlabs.length === 1 ? "that holder" : "those holders"}, and the ${(SLAB_FEE_CENTS / 100).toFixed(0)} add-on is off your order.
             </p>
           )}
-        </section>
-      )}
-
-      {highValueCards.length > 0 && (
-        <section className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3.5">
-          <Hourglass className="h-5 w-5 mt-0.5 shrink-0 text-amber-800" strokeWidth={1.75} />
-          <div className="text-sm text-amber-950">
-            <p className="font-semibold">{HIGH_VALUE_NOTICE}</p>
-            <ul className="mt-1.5 list-disc pl-5">
-              {highValueCards.map((c, i) => <li key={i}>{c.name}: ${(c.valueCents / 100).toLocaleString("en-US")}</li>)}
-            </ul>
-          </div>
         </section>
       )}
 

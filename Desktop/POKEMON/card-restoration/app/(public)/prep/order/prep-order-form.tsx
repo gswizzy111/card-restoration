@@ -7,8 +7,7 @@ import { SlabAuthorizationDialog } from "@/components/checkout/slab-authorizatio
 import { Need, Req, revealMissing } from "@/components/checkout/required";
 import { CardIdentityFields, emptyIdentity, identityPayload, type CardIdentity } from "@/components/checkout/card-identity-fields";
 import { InsuranceElectionBox, type InsuranceElection } from "@/components/checkout/insurance-election";
-import { HIGH_VALUE_NOTICE, SIGN_BUTTON_LABEL, VALUE_HELP } from "@/lib/legal/current-terms";
-import { isHighValue } from "@/lib/legal/agreements-v1";
+import { SIGN_BUTTON_LABEL, VALUE_HELP } from "@/lib/legal/current-terms";
 import Link from "next/link";
 import { PhotoUploader } from "@/components/order-builder/photo-uploader";
 
@@ -193,7 +192,6 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
     setSlabDialogId(null);
   }
   const slabCrackCount = slabCards.length;
-  const highValueCards = filledCards.filter((c) => isHighValue(cardValueCents(c))).map((c) => ({ name: c.name.trim(), valueCents: cardValueCents(c) }));
   function skipSlab(index: number) {
     const card = filledCards[index];
     if (!card) return;
@@ -490,9 +488,6 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
               </Need>
               <div className="pl-7 flex flex-col gap-2">
                 <p className="text-xs text-muted-foreground">{VALUE_HELP}</p>
-                {isHighValue(cardValueCents(card)) && (
-                  <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-md px-3 py-2 font-medium">{HIGH_VALUE_NOTICE}</p>
-                )}
               </div>
               <div className="pl-7">
                 <CardIdentityFields idPrefix={`prep-${card.id}`} value={card} onChange={(patch) => updateCard(card.id, patch)} />
@@ -523,7 +518,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
               )}
               <div className="pl-7">
                 <p className="text-xs text-muted-foreground mb-1.5">Photos <span className="text-muted-foreground/60">(optional)</span></p>
-                <PhotoUploader photoUrls={card.photoUrls} onChange={(urls) => updateCardPhotos(card.id, urls)} max={4} />
+                <PhotoUploader photoUrls={card.photoUrls} onChange={(urls) => updateCardPhotos(card.id, urls)} />
               </div>
             </div>
           ))}
@@ -832,7 +827,6 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
         <div className="bg-white rounded-lg border border-border p-6">
           <SigningSection
             slabCards={slabCards}
-            highValueCards={highValueCards}
             state={signing}
             onChange={setSigning}
             onSkipSlab={skipSlab}

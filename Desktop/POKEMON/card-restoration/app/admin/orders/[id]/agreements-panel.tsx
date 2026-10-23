@@ -3,13 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, FileDown, Hourglass, Lock, ShieldAlert } from "lucide-react";
+import { CheckCircle2, FileDown, Lock, ShieldAlert } from "lucide-react";
 
 /**
  * Terms of Service v1.0 on the admin order page: who signed what, each card's
  * work gates (Start slab opening / Start cleaning stay disabled until every
- * required signature is in place), the per-card refund before work starts,
- * and the High-Value Agreements to send, countersign or decline.
+ * required signature is in place) and the per-card refund before work starts.
  */
 export type PanelCard = {
   id: string;
@@ -29,19 +28,6 @@ export type PanelCard = {
   slabSignatureId: string | null;
 };
 
-export type PanelAgreement = {
-  id: string;
-  cardName: string;
-  status: "pending" | "executed" | "declined";
-  negotiatedTerms: string;
-  sentAt: string | null;
-  customerSignatureId: string | null;
-  customerSigned: { name: string; at: string } | null;
-  companySignedBy: string | null;
-  companySignedAt: string | null;
-  declinedReason: string | null;
-};
-
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }) + " ET";
 const usd = (c: number) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const BTN = "h-8 px-3 rounded-md text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
@@ -49,7 +35,6 @@ const UNDO = "font-semibold text-primary underline underline-offset-2 hover:text
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   active: { label: "Ready", cls: "bg-green-100 text-green-800" },
-  on_hold_high_value: { label: "On hold: high value", cls: "bg-amber-100 text-amber-900" },
   in_progress: { label: "Work started", cls: "bg-blue-100 text-blue-800" },
   refunded: { label: "Refunded", cls: "bg-gray-200 text-gray-700" },
 };
@@ -61,107 +46,18 @@ async function post(url: string, body: unknown) {
   return data;
 }
 
-function AgreementBox({ a }: { a: PanelAgreement }) {
-  const router = useRouter();
-  const [terms, setTerms] = useState(a.negotiatedTerms);
-  const [name, setName] = useState("");
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const run = async (body: unknown, done: string) => {
-    setBusy(true);
-    try {
-      await post(`/api/admin/high-value/${a.id}`, body);
-      toast.success(done);
-      router.refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="rounded-lg border border-amber-300 bg-amber-50/60 p-4 flex flex-col gap-3 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-bold text-foreground">High-Value Agreement: {a.cardName}</p>
-        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${a.status === "executed" ? "bg-green-100 text-green-800" : a.status === "declined" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900"}`}>
-          {a.status === "executed" ? "Executed" : a.status === "declined" ? "Declined" : a.customerSigned ? "Waiting for your countersignature" : "Waiting for the customer"}
-        </span>
-      </div>
-
-      {a.status === "pending" && !a.customerSigned && (
-        <>
-          <label className="text-xs font-semibold text-muted-foreground" htmlFor={`terms-${a.id}`}>Negotiated terms for this card (shipping, insurance, liability, price). Leave empty for none.</label>
-          <textarea id={`terms-${a.id}`} rows={3} value={terms} onChange={(e) => setTerms(e.target.value)} className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm" />
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="button" disabled={busy} onClick={() => run({ action: "save_and_send", negotiated_terms: terms }, "Agreement sent to the customer")} className={`${BTN} bg-foreground text-background`}>
-              {a.sentAt ? "Save and resend" : "Save and send"} to customer
-            </button>
-            <span className="text-xs text-muted-foreground">{a.sentAt ? `Last sent ${when(a.sentAt)}; sending again replaces the old link.` : "Not sent yet."}</span>
-          </div>
-        </>
-      )}
-
-      {a.customerSigned && (
-        <p className="text-foreground">
-          Customer signed as <strong>{a.customerSigned.name}</strong> on {when(a.customerSigned.at)}{" "}
-          {a.customerSignatureId && (
-            <a href={`/api/admin/signatures/${a.customerSignatureId}`} className="inline-flex items-center gap-1 text-primary font-semibold underline underline-offset-2"><FileDown className="h-3.5 w-3.5" />PDF</a>
-          )}
-        </p>
-      )}
-      {a.negotiatedTerms && a.customerSigned && <p className="text-xs text-muted-foreground whitespace-pre-wrap">Negotiated terms: {a.negotiatedTerms}</p>}
-
-      {a.status === "pending" && a.customerSigned && (
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-muted-foreground" htmlFor={`cs-${a.id}`}>Your full legal name, signing for The Card Doc LLC</label>
-            <input id={`cs-${a.id}`} value={name} onChange={(e) => setName(e.target.value)} className="h-8 w-64 rounded-md border border-border bg-white px-2 text-sm" />
-          </div>
-          <button type="button" disabled={busy || name.trim().length < 2} onClick={() => run({ action: "countersign", signed_by: name.trim() }, "Countersigned; the card is released for work")} className={`${BTN} bg-primary text-primary-foreground`}>
-            Countersign
-          </button>
-        </div>
-      )}
-
-      {a.status === "executed" && a.companySignedBy && a.companySignedAt && (
-        <p className="text-foreground">
-          Countersigned by {a.companySignedBy} on {when(a.companySignedAt)}{" "}
-          {a.customerSignatureId && (
-            <a href={`/api/admin/signatures/${a.customerSignatureId}?executed=1`} className="inline-flex items-center gap-1 text-primary font-semibold underline underline-offset-2"><FileDown className="h-3.5 w-3.5" />Fully signed PDF</a>
-          )}
-        </p>
-      )}
-      {a.status === "declined" && <p className="text-red-800">Declined: {a.declinedReason}</p>}
-
-      {a.status === "pending" && (
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground">Decline this card</summary>
-          <div className="mt-2 flex flex-wrap items-end gap-2">
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (kept on the order)" className="h-8 w-64 rounded-md border border-border bg-white px-2 text-sm" />
-            <button type="button" disabled={busy || reason.trim().length < 2} onClick={() => run({ action: "decline", reason: reason.trim() }, "Marked declined")} className={`${BTN} border border-red-300 text-red-800`}>
-              Decline
-            </button>
-          </div>
-        </details>
-      )}
-    </div>
-  );
-}
-
 export function AgreementsPanel({
   versioned,
   master,
   insuranceElection,
   consents,
   cards,
-  agreements,
 }: {
   versioned: boolean;
   master: { id: string; name: string; at: string; emailVerified: boolean; version: string }[];
   insuranceElection: string | null;
   consents: { type: string; granted: boolean }[];
   cards: PanelCard[];
-  agreements: PanelAgreement[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -295,13 +191,6 @@ export function AgreementsPanel({
           <input type="checkbox" checked={emailRefund} onChange={(e) => setEmailRefund(e.target.checked)} className="accent-primary" />
           Email the customer when a card is refunded
         </label>
-      )}
-
-      {agreements.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"><Hourglass className="h-3.5 w-3.5" />High-Value Agreements</p>
-          {agreements.map((a) => <AgreementBox key={a.id} a={a} />)}
-        </div>
       )}
     </div>
   );

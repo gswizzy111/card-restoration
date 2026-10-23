@@ -70,7 +70,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: "Do you take cards worth more than $5,000?",
-        a: "Yes. Every card declared above $5,000 needs its own High-Value Agreement before we begin work. We email it after you order, and the card stays on hold until both of us sign. We strongly recommend insured, tracked shipping with signature confirmation for it.",
+        a: "Yes. We strongly recommend insured, tracked shipping with signature confirmation for it.",
       },
     ],
   },

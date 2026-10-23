@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button";
 import { PhotoUploader } from "./photo-uploader";
 import { CardIdentityFields, emptyIdentity, type CardIdentity } from "@/components/checkout/card-identity-fields";
 import { Need, Req } from "@/components/checkout/required";
-import { HIGH_VALUE_NOTICE, VALUE_HELP } from "@/lib/legal/current-terms";
-import { isHighValue } from "@/lib/legal/agreements-v1";
+import { VALUE_HELP } from "@/lib/legal/current-terms";
 import type { Service, CardEntry } from "@/lib/types";
 import { getAllTiers, formatCents } from "@/lib/restoration-tiers";
 import type { RestorationTier, RestorationTierId } from "@/lib/restoration-tiers";
@@ -187,9 +186,6 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                     <p className="text-xs text-red-600 font-semibold">
                       ⚠ This value exceeds the {activeTier.name} tier&apos;s max of ${(activeTier.max_card_value_cents / 100).toLocaleString()}. Please select a higher tier below.
                     </p>
-                  )}
-                  {isHighValue(estimatedValueCents) && (
-                    <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-md px-3 py-2 font-medium">{HIGH_VALUE_NOTICE}</p>
                   )}
                 </Need>
 

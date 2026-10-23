@@ -4,8 +4,7 @@ import { useState } from "react";
 import { SigningSection, emptySigning, signingReady, submittedSigning, type SigningState } from "@/components/checkout/signing-section";
 import { CardIdentityFields, emptyIdentity, identityPayload, type CardIdentity } from "@/components/checkout/card-identity-fields";
 import { MissingNote, Need, Req, revealMissing } from "@/components/checkout/required";
-import { HIGH_VALUE_NOTICE, SIGN_BUTTON_LABEL, VALUE_HELP } from "@/lib/legal/current-terms";
-import { isHighValue } from "@/lib/legal/agreements-v1";
+import { SIGN_BUTTON_LABEL, VALUE_HELP } from "@/lib/legal/current-terms";
 import { RESTORATION_TIERS } from "@/lib/restoration-tiers";
 import { formatCurrency } from "@/lib/utils";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
@@ -70,7 +69,6 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
   const tax = Math.round(subtotal * TAX_RATE);
   const total = subtotal + tax;
   const overCap = (c: CardEntry) => maxCents !== null && valueCents(c) > maxCents;
-  const highValueCards = cards.filter((c) => isHighValue(valueCents(c))).map((c) => ({ name: c.name.trim(), valueCents: valueCents(c) }));
   const cardsOk = cards.every((c) => c.name.trim().length > 0 && valueCents(c) > 0 && !overCap(c));
   const ready = cardsOk && signingReady(signing, []);
 
@@ -170,9 +168,6 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
                     This is above the {tierInfo.name} tier&apos;s ${(maxCents! / 100).toLocaleString()} cap, so it can&apos;t be added to this order. Please place a new order for it with a higher tier.
                   </p>
                 )}
-                {isHighValue(valueCents(card)) && (
-                  <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-md px-3 py-2 font-medium mt-2">{HIGH_VALUE_NOTICE}</p>
-                )}
               </Need>
 
               <div>
@@ -214,7 +209,7 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
       </div>
 
       <div className="mt-6 bg-white rounded-lg border border-border p-4 md:p-5">
-        <SigningSection slabCards={[]} highValueCards={highValueCards} state={signing} onChange={setSigning} onSkipSlab={() => {}} showMissing={showMissing} />
+        <SigningSection slabCards={[]} state={signing} onChange={setSigning} onSkipSlab={() => {}} showMissing={showMissing} />
       </div>
 
       {error && <p className="text-sm text-red-500 mt-3">{error}</p>}

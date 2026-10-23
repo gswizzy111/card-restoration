@@ -103,8 +103,7 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong>Signing records:</strong> when you sign our Terms of Service or a
-                card-specific agreement (such as a Slab Removal Authorization or High-Value
-                Agreement), we record your typed full name, the exact document and version you
+                card-specific agreement (such as a Slab Removal Authorization), we record your typed full name, the exact document and version you
                 signed, the date and time from our server, your email address and whether it was
                 verified, and the <strong>IP address</strong> and{" "}
                 <strong>browser and device information</strong> (user agent) of the device you

@@ -10,6 +10,9 @@ export const INSURANCE_ENABLED = true;
 
 // Flat fee charged to customers when we add USPS/carrier signature confirmation to their inbound label.
 export const SIGNATURE_FEE_CENTS = 500;
+
+// Photos a customer can upload per card (order builder, prep, add-cards; checked at checkout too).
+export const MAX_CARD_PHOTOS = 3;
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── TIER SELECTION ────────────────────────────────────────────────────────────

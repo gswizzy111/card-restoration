@@ -8,14 +8,14 @@ import {
 } from "@/lib/checkout-signing";
 import { recordConsents, recordSignatures, signingContext, type SignatureInput } from "@/lib/signatures";
 import { ensureTermsVersion, type TermsVersionRow } from "@/lib/terms-versions";
-import { isHighValue } from "@/lib/legal/agreements-v1";
 import { shippingRate } from "@/lib/inbound-rate";
+import { MAX_CARD_PHOTOS } from "@/lib/site-config";
 
 const CardSchema = z.object({
   card_name: z.string().trim().min(1).max(200),
   // Required: every card needs its own declared value (Terms Section 4)
   declared_value_cents: z.number().int().positive(),
-  photo_urls: z.array(z.string().url()).optional().default([]),
+  photo_urls: z.array(z.string().url()).max(MAX_CARD_PHOTOS).optional().default([]),
   needs_slab_crack: z.boolean().optional(),
 }).extend(CardFieldsSchema.shape);
 
@@ -234,7 +234,7 @@ export async function POST(request: Request) {
         tier: "prep",
         slab_removal_selected: !!slabSigned[i],
         pregrade_selected: d.add_pre_grade,
-        status: isHighValue(c.declared_value_cents) ? "on_hold_high_value" : "active",
+        status: "active",
         service_price_cents: price,
         discount_cents: 0,
         tax_cents: isInternational ? 0 : Math.round(price * NJ_TAX_RATE),
@@ -285,10 +285,6 @@ export async function POST(request: Request) {
     await admin.from("orders").update({ status: "cancelled", internal_notes: "Checkout stopped: the signed records could not be saved." }).eq("id", order.id);
     return Response.json({ error: "We couldn't save your signed order. Please try again." }, { status: 500 });
   }
-  const highValueIds = cardIds.filter((_, i) => isHighValue(d.cards[i].declared_value_cents));
-  if (highValueIds.length) {
-    await admin.from("high_value_agreements").insert(highValueIds.map((id) => ({ order_id: order.id, order_item_id: id })));
-  }
   await admin.from("order_events").insert({
     order_id: order.id,
     event_type: "terms_signed",
@@ -296,7 +292,6 @@ export async function POST(request: Request) {
       `Terms of Service v${terms.version} signed by ${d.terms!.signer_name.trim()}`,
       slabCrackCount ? `Slab Removal Authorization × ${slabCrackCount}` : "",
       droppedSlabs.length ? `slab removal dropped (not authorized): ${droppedSlabs.join(", ")}` : "",
-      highValueIds.length ? `${highValueIds.length} card(s) on hold for a High-Value Agreement` : "",
       `shipping insurance ${d.insurance_election}`,
     ].filter(Boolean).join("; "),
     is_customer_visible: false,

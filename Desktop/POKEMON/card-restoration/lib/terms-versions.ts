@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { TERMS_EFFECTIVE_ISO, TERMS_MARKDOWN, TERMS_VERSION } from "@/lib/legal/current-terms";
+import { TERMS_VERSION, termsSource } from "@/lib/legal/current-terms";
 import { TERMS_INTRO, TERMS_SECTIONS, TERMS_UPDATED } from "@/lib/legal/terms";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -36,9 +36,9 @@ function interimMarkdown(): string {
 
 /** What each version's row is built from, by version. */
 function source(version: string): { markdown: string; effective: string } | null {
-  if (version === TERMS_VERSION) return { markdown: TERMS_MARKDOWN, effective: TERMS_EFFECTIVE_ISO };
   if (version === INTERIM_VERSION) return { markdown: interimMarkdown(), effective: "2026-10-22" };
-  return null;
+  const src = termsSource(version);
+  return src && { markdown: src.markdown, effective: src.effectiveIso };
 }
 
 /**

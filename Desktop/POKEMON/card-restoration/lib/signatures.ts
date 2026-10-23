@@ -12,11 +12,11 @@ type Admin = ReturnType<typeof createAdminClient>;
  * Each row stores the exact text signed and its SHA-256:
  *   - master_terms: sha256(Terms markdown + "\n\n" + document_text), where
  *     document_text is the Key Terms, certification and checked box;
- *   - slab_removal / high_value: sha256(document_text).
+ *   - slab_removal: sha256(document_text).
  * Its signed PDF lives at signed_pdf_url in the private signed-documents
  * bucket (lib/signed-pdfs.ts) and can be rebuilt from the row at any time.
  */
-export type SignatureType = "master_terms" | "slab_removal" | "high_value";
+export type SignatureType = "master_terms" | "slab_removal";
 
 export type SignatureInput = {
   order_id: string;
