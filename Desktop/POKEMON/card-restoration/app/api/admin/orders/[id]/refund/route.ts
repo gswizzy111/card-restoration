@@ -3,7 +3,8 @@ import { stripe } from "@/lib/stripe";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { refundEmailHtml } from "@/lib/refund-email";
 import { z } from "zod";
-import { isAdmin } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
+import { recordRefund, refundedSoFar } from "@/lib/refund-ledger";
 
 const Body = z.object({
   amountCents: z.number().int().min(1).optional(),
@@ -16,7 +17,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await isAdmin())) {
+  const adminSession = await getAdminSession();
+  if (adminSession?.role !== "admin") {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -29,7 +31,7 @@ export async function POST(
 
   const { data: order, error: orderErr } = await admin
     .from("orders")
-    .select("id, order_number, total_cents, stripe_session_id, payment_status, refunded_cents, customer_name, customer_email")
+    .select("id, order_number, total_cents, stripe_session_id, payment_status, refunded_cents, restoration_tier, customer_name, customer_email")
     .eq("id", id)
     .single();
 
@@ -42,7 +44,8 @@ export async function POST(
   }
   if (!order.stripe_session_id) return Response.json({ error: "No Stripe session on this order" }, { status: 400 });
 
-  const alreadyRefunded: number = (order.refunded_cents as number) ?? 0;
+  // Partial refunds made before the ledger existed may be missing from refunded_cents
+  const alreadyRefunded = await refundedSoFar(admin, id, order.refunded_cents as number | null);
   const maxRefundable = (order.total_cents as number) - alreadyRefunded;
   if (maxRefundable <= 0) return Response.json({ error: "Order is already fully refunded" }, { status: 400 });
 
@@ -86,13 +89,20 @@ export async function POST(
   const newRefundedCents = alreadyRefunded + refundAmount;
   const isFullRefund = newRefundedCents >= (order.total_cents as number);
 
-  await admin
+  await recordRefund(admin, stripeRefund, {
+    orderId: id,
+    kind: order.restoration_tier === "prep" || order.restoration_tier === "prep_standard" ? "prep" : "restoration",
+  }, adminSession.username);
+
+  // A partial refund leaves the order paid (payment_status allows only pending/paid/refunded/failed)
+  const { error: updateErr } = await admin
     .from("orders")
     .update({
       refunded_cents: newRefundedCents,
-      ...(isFullRefund ? { status: "cancelled", payment_status: "refunded" } : { payment_status: "partially_refunded" }),
+      ...(isFullRefund ? { status: "cancelled", payment_status: "refunded" } : {}),
     })
     .eq("id", id);
+  if (updateErr) console.error("[refund] order update failed:", updateErr.message, "order:", id);
 
   await admin.from("order_events").insert({
     order_id: id,

@@ -5,6 +5,8 @@ import { formatCurrency } from "@/lib/utils";
 import { PeriodTabs } from "./period-tabs";
 import { CostSettings } from "./cost-settings";
 import { RevenueChart } from "../revenue-chart";
+import { getRevenueSeries } from "@/lib/dashboard-metrics";
+import { syncRefundsQuietly } from "@/lib/refund-ledger";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -141,12 +143,11 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
   const hasCosts = Object.values(costConfig.products).some((p) => p.cost_cents > 0) ||
     Object.values(costConfig.restoration).some((v) => v > 0);
 
-  // Combined entries for revenue chart (kit + restoration)
-  // Pass gross cents + refundedCents so the chart can show the red refund section
-  const allRevenueEntries = [
-    ...shopOrders.map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o.refunded_cents as number | null | undefined) ?? 0, createdAt: o.created_at })),
-    ...restorationOrders.map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o.refunded_cents as number | null | undefined) ?? 0, createdAt: o.created_at })),
-  ];
+  // Revenue chart (kit + restoration): sales by the day paid, refunds by the day refunded
+  const revenueSeries = await syncRefundsQuietly(admin).then(() => getRevenueSeries(admin)).catch((e) => {
+    console.error("[p&l] revenue_series:", e);
+    return null;
+  });
 
   return (
     <div className="p-6 max-w-5xl mx-auto flex flex-col gap-6">
@@ -167,8 +168,8 @@ export default async function ProfitLossPage({ searchParams }: { searchParams: P
       )}
 
       {/* Combined revenue chart */}
-      {allRevenueEntries.length > 0 && (
-        <RevenueChart entries={allRevenueEntries} label="Total Revenue (Kit + Restoration)" />
+      {revenueSeries && (
+        <RevenueChart series={revenueSeries} label="Total Revenue (Kit + Restoration)" />
       )}
 
       {/* Summary */}

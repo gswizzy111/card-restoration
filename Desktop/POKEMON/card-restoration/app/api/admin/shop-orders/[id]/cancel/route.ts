@@ -2,7 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { refundEmailHtml } from "@/lib/refund-email";
-import { isAdmin } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
+import { recordRefund } from "@/lib/refund-ledger";
 
 type PaymentRef = { payment_intent: string } | { charge: string };
 
@@ -30,7 +31,8 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await isAdmin())) {
+  const adminSession = await getAdminSession();
+  if (adminSession?.role !== "admin") {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -70,6 +72,7 @@ export async function POST(
           metadata: { shop_order_id: id, order_number: orderLabel, admin_reason: "Order cancelled by admin" },
         });
         refundId = stripeRefund.id;
+        await recordRefund(admin, stripeRefund, { shopOrderId: id, kind: "kit" }, adminSession.username);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Stripe refund failed";
         return Response.json({ error: msg }, { status: 502 });
