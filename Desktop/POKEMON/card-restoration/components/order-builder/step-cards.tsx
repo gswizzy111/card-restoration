@@ -161,6 +161,11 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                     idPrefix={`card-${card.id}`}
                     value={identityOf(card)}
                     onChange={(patch) => updateCard(card.id, patch)}
+<<<<<<< HEAD
+=======
+                    needsCert={card.needs_slab_crack}
+                    showMissing={showMissing}
+>>>>>>> origin/main
                   />
                 </div>
 
