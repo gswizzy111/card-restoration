@@ -5,6 +5,7 @@ import { stripe } from "@/lib/stripe";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { refundEmailHtml } from "@/lib/refund-email";
 import { cardGate, gateFacts, nonRefundableText, type GateCard } from "@/lib/work-gates";
+import { recordRefund, refundedSoFar } from "@/lib/refund-ledger";
 
 const Body = z.object({ sendEmail: z.boolean().optional() });
 
@@ -23,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { data: card } = await admin.from("cards").select("*").eq("id", id).single();
   if (!card) return Response.json({ error: "Card not found" }, { status: 404 });
   const { data: order } = await admin.from("orders")
-    .select("id, order_number, total_cents, refunded_cents, payment_status, stripe_session_id, stripe_payment_intent_id, customer_name, customer_email")
+    .select("id, order_number, total_cents, refunded_cents, payment_status, restoration_tier, stripe_session_id, stripe_payment_intent_id, customer_name, customer_email")
     .eq("id", card.order_id).single();
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
 
@@ -33,7 +34,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (order.payment_status !== "paid" && order.payment_status !== "partially_refunded") {
     return Response.json({ error: "This order hasn't been paid." }, { status: 400 });
   }
-  const remaining = (order.total_cents ?? 0) - (order.refunded_cents ?? 0);
+  const refundedBefore = await refundedSoFar(admin, order.id, order.refunded_cents);
+  const remaining = (order.total_cents ?? 0) - refundedBefore;
   const amount = Math.min(gate.refundableCents, remaining);
   if (amount <= 0) return Response.json({ error: "The order is already fully refunded." }, { status: 409 });
   if (!order.stripe_payment_intent_id && !order.stripe_session_id) return Response.json({ error: "No Stripe payment on this order." }, { status: 400 });
@@ -53,18 +55,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       metadata: { order_id: order.id, order_number: String(order.order_number), card_id: card.id },
     });
     refundId = refund.id;
+    await recordRefund(admin, refund, {
+      orderId: order.id,
+      cardId: card.id,
+      kind: order.restoration_tier === "prep" || order.restoration_tier === "prep_standard" ? "prep" : "restoration",
+    }, session.username);
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : "Stripe refund failed" }, { status: 502 });
   }
 
   const now = new Date().toISOString();
-  await admin.from("cards").update({ status: "refunded", refunded_cents: (card.refunded_cents ?? 0) + amount, refunded_at: now }).eq("id", id);
-  const newRefunded = (order.refunded_cents ?? 0) + amount;
+  const { error: cardErr } = await admin.from("cards").update({ status: "refunded", refunded_cents: (card.refunded_cents ?? 0) + amount, refunded_at: now }).eq("id", id);
+  if (cardErr) console.error("[card refund] card update failed:", cardErr.message, "card:", id);
+  const newRefunded = refundedBefore + amount;
   const full = newRefunded >= (order.total_cents ?? 0);
-  await admin.from("orders").update({
+  // A partial refund leaves the order paid (payment_status allows only pending/paid/refunded/failed)
+  const { error: orderErr } = await admin.from("orders").update({
     refunded_cents: newRefunded,
-    ...(full ? { status: "cancelled", payment_status: "refunded" } : { payment_status: "partially_refunded" }),
+    ...(full ? { status: "cancelled", payment_status: "refunded" } : {}),
   }).eq("id", order.id);
+  if (orderErr) console.error("[card refund] order update failed:", orderErr.message, "order:", order.id);
   await admin.from("order_events").insert({
     order_id: order.id,
     event_type: "refund_issued",

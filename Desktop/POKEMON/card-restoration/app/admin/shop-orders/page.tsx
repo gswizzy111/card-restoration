@@ -12,6 +12,8 @@ import { KitCustomerEditor } from "./kit-customer-editor";
 import { KitTrackingEditor } from "./kit-tracking-editor";
 import { RefundButton } from "../orders/[id]/refund-button";
 import { RevenueChart } from "../revenue-chart";
+import { getRevenueSeries } from "@/lib/dashboard-metrics";
+import { syncRefundsQuietly } from "@/lib/refund-ledger";
 import { SyncKitOrdersButton } from "./sync-kit-orders-button";
 import { SyncShopDeliveredButton } from "./sync-shop-delivered-button";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -244,6 +246,12 @@ export default async function ShopOrdersPage({
 
   const admin = createAdminClient();
   await syncRecentFromStripe();
+  const revenueSeries = activeTab === "all"
+    ? await syncRefundsQuietly(admin).then(() => getRevenueSeries(admin)).catch((e) => {
+        console.error("[kit orders] revenue_series:", e);
+        return null;
+      })
+    : null;
 
   const { data: orders } = await admin
     .from("shop_orders")
@@ -339,10 +347,7 @@ export default async function ShopOrdersPage({
         {activeTab === "all" && (
           <>
             <div className="mb-8">
-              <RevenueChart
-                entries={(orders ?? []).map((o) => ({ cents: o.total_cents ?? 0, refundedCents: (o.refunded_cents as number | null | undefined) ?? 0, createdAt: o.created_at }))}
-                label="Kit Sales"
-              />
+              {revenueSeries && <RevenueChart series={revenueSeries} label="Kit Sales" kitsOnly />}
             </div>
             {(!orders || orders.length === 0) && (
               <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">

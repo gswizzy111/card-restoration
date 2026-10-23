@@ -3,7 +3,8 @@ import { stripe } from "@/lib/stripe";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { refundEmailHtml } from "@/lib/refund-email";
 import { z } from "zod";
-import { isAdmin } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
+import { recordRefund } from "@/lib/refund-ledger";
 
 const Body = z.object({
   amountCents: z.number().int().min(1).optional(),
@@ -41,7 +42,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!(await isAdmin())) {
+  const adminSession = await getAdminSession();
+  if (adminSession?.role !== "admin") {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -96,9 +98,11 @@ export async function POST(
     return Response.json({ error: msg }, { status: 502 });
   }
 
+  await recordRefund(admin, stripeRefund, { shopOrderId: id, kind: "kit" }, adminSession.username);
   const newRefundedCents = alreadyRefunded + refundAmount;
   const isFullRefund = newRefundedCents >= (order.total_cents ?? 0);
-  await admin.from("shop_orders").update({ refunded_cents: newRefundedCents }).eq("id", id);
+  const { error: updateErr } = await admin.from("shop_orders").update({ refunded_cents: newRefundedCents }).eq("id", id);
+  if (updateErr) console.error("[kit refund] order update failed:", updateErr.message, "order:", id);
 
   if (parsed.data.sendEmail && order.customer_email) {
     const amountFormatted = `$${(refundAmount / 100).toFixed(2)}`;
