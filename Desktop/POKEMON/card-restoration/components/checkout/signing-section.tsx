@@ -1,23 +1,23 @@
 "use client";
 
 import { useId } from "react";
-import { Check, Download, ExternalLink, PenLine } from "lucide-react";
+import { Download, ExternalLink, PenLine } from "lucide-react";
 import { LegalDocument } from "@/components/legal/legal-document";
 import {
   AGREE_LABEL, CERTIFICATION_CLAUSE, CERTIFICATION_TEXT, ESIGN_BLOCKS, ESIGN_LABEL,
   MEDIA_LABEL, TAG_LABEL, TERMS_VERSION,
 } from "@/lib/legal/current-terms";
-import { cardTitle, holderLine, SLAB_FEE_CENTS, type CardDetails } from "@/lib/legal/agreements-v1";
+import type { CardDetails } from "@/lib/legal/agreements-v1";
 import type { SubmittedSigning } from "@/lib/checkout-signing";
 import { Need, Req } from "./required";
 
 /**
  * Everything a customer signs or chooses before an order is placed (Terms
- * Section 35), kept short. Each slab to open is authorized in its own pop-up
- * when slab cracking is picked (SlabAuthorizationDialog); here the review
- * step lists those, then the optional photo permissions (unchecked), and
- * "Sign to confirm your order": two required boxes (the Terms and electronic
- * records) and the Full legal name. The full
+ * Section 35), kept short. Each slab to open is authorized only in its own
+ * pop-up when slab cracking is picked (SlabAuthorizationDialog), stored with
+ * the order and not shown again. Here: the optional photo permissions
+ * (unchecked), and "Sign to confirm your order": two required boxes (the Terms
+ * and electronic records) and the Full legal name. The full
  * texts are a link or a tap away, and all of it is stored with the signature
  * and printed on its PDF. Shared by the restoration, prep and add-cards
  * checkouts.
@@ -77,27 +77,15 @@ export function submittedSigning(state: SigningState, slabCards: SlabCard[]): Su
 const CHECK = "mt-0.5 h-4 w-4 shrink-0 accent-primary";
 const NAME_INPUT = "w-full h-10 rounded-md border border-input bg-white px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 const MORE = "cursor-pointer text-xs font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground";
-const LINK_BUTTON = "text-xs font-semibold underline underline-offset-2";
 
 export function SigningSection({
-  slabCards,
   state,
   onChange,
-  onSkipSlab,
-  onOpenSlab,
-  skippedSlabs = [],
   mediaRequiredNote,
   showMissing = false,
 }: {
-  slabCards: SlabCard[];
   state: SigningState;
   onChange: (s: SigningState) => void;
-  /** The customer chose not to authorize this card's slab: drop the add-on. */
-  onSkipSlab: (index: number) => void;
-  /** Open the card's slab authorization pop-up. */
-  onOpenSlab?: (index: number) => void;
-  /** Cards whose slab removal was dropped, to tell the customer. */
-  skippedSlabs?: string[];
   /** Set when a paid add-on depends on the photo permission. */
   mediaRequiredNote?: string;
   /** The customer pressed sign with something missing: outline it in red */
@@ -106,43 +94,6 @@ export function SigningSection({
   const id = useId();
   return (
     <div className="flex flex-col gap-8">
-      {(slabCards.length > 0 || skippedSlabs.length > 0) && (
-        <section className="flex flex-col gap-2.5">
-          <h3 className="font-medium text-foreground">Slab removal</h3>
-          {slabCards.map((c) => {
-            const signed = slabSigned(state, c);
-            return (
-              <Need key={slabKey(c)} missing={showMissing && !signed} note="Sign this slab's authorization, or choose not to open it.">
-              <div className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border px-4 py-3 text-sm ${signed ? "border-border bg-card" : "border-amber-300 bg-amber-50"}`}>
-                <p className="text-foreground min-w-0">
-                  {signed ? <Check className="inline h-4 w-4 mr-1.5 -mt-0.5 text-primary" strokeWidth={2.25} /> : null}
-                  <strong className="font-semibold">{cardTitle(c.details) || `Card ${c.index + 1}`}</strong>{c.details.grading_company || c.details.cert_number ? ` (${holderLine(c.details)})` : ""}:{" "}
-                  {signed ? `authorization signed by ${slabSignature(state, c)!.signer_name.trim()}.` : "the slab authorization isn't signed yet."}
-                </p>
-                <span className="flex gap-4">
-                  {onOpenSlab && (
-                    <button type="button" onClick={() => onOpenSlab(c.index)} className={`${LINK_BUTTON} text-primary`}>
-                      {signed ? "Review" : "Sign authorization"}
-                    </button>
-                  )}
-                  {!signed && (
-                    <button type="button" onClick={() => onSkipSlab(c.index)} className={`${LINK_BUTTON} text-muted-foreground hover:text-foreground`}>
-                      Don&apos;t open this slab (remove the ${(SLAB_FEE_CENTS / 100).toFixed(0)} add-on)
-                    </button>
-                  )}
-                </span>
-              </div>
-              </Need>
-            );
-          })}
-          {skippedSlabs.length > 0 && (
-            <p className="rounded-md border border-border bg-secondary/40 px-3 py-2.5 text-sm text-foreground">
-              Slab removal removed for {skippedSlabs.join(", ")}. We won&apos;t open {skippedSlabs.length === 1 ? "that holder" : "those holders"}, and the ${(SLAB_FEE_CENTS / 100).toFixed(0)} add-on is off your order.
-            </p>
-          )}
-        </section>
-      )}
-
       <section className="flex flex-col gap-2.5">
         <h3 className="font-medium text-foreground">Optional permissions</h3>
         <label className="flex items-start gap-2.5 text-sm cursor-pointer">

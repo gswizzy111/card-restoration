@@ -209,7 +209,7 @@ export function AddCardsSection({ orderNumber, customerEmail, tier }: Props) {
       </div>
 
       <div className="mt-6 bg-white rounded-lg border border-border p-4 md:p-5">
-        <SigningSection slabCards={[]} state={signing} onChange={setSigning} onSkipSlab={() => {}} showMissing={showMissing} />
+        <SigningSection state={signing} onChange={setSigning} showMissing={showMissing} />
       </div>
 
       {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
