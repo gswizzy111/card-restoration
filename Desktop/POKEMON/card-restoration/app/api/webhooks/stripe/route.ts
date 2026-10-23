@@ -5,10 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { randomUUID } from "node:crypto";
-import { isHighValue } from "@/lib/legal/agreements-v1";
 import { itemAmounts } from "@/lib/item-pricing";
 import { signedPdfAttachments } from "@/lib/signed-pdfs";
-import { startHighValueAgreements } from "@/lib/high-value";
 
 /** A card added to a paid order, as the add-cards route saved it. */
 type AddedCard = {
@@ -404,7 +402,7 @@ export async function POST(request: Request) {
             known_defects: c.known_defects ?? null,
             estimated_value_cents: c.declaredValueCents,
             tier: addTier.id,
-            status: isHighValue(c.declaredValueCents) ? "on_hold_high_value" : "active",
+            status: "active",
             ...amounts[i],
           }));
         }
@@ -428,11 +426,6 @@ export async function POST(request: Request) {
 
         if (newCardRows.length > 0) {
           await admin.from("cards").insert(newCardRows);
-          // Cards over $5,000 wait for their own High-Value Agreement
-          const heldIds = newCardRows.filter((r) => r.status === "on_hold_high_value").map((r) => r.id as string);
-          if (heldIds.length) {
-            await admin.from("high_value_agreements").insert(heldIds.map((id) => ({ order_id: addOrderId, order_item_id: id })));
-          }
 
           // Service lines for the added cards, priced the way the add-cards route charged them
           const addTier = RESTORATION_TIERS[tierName as RestorationTierId] ?? RESTORATION_TIERS.regular;
@@ -473,7 +466,7 @@ export async function POST(request: Request) {
           is_customer_visible: true,
         });
 
-        // The signature given for these cards, emailed as a PDF; then any high-value agreements
+        // The signature given for these cards, emailed as a PDF
         const { data: addSig } = await admin.from("signatures").select("id").eq("order_id", addOrderId).eq("type", "master_terms").order("signed_at", { ascending: false }).limit(1);
         const docs = addSig?.length ? await signedPdfAttachments(admin, addOrderId, [addSig[0].id]).catch(() => []) : [];
         const { data: addOrder } = await admin.from("orders").select("order_number, customer_email").eq("id", addOrderId).single();
@@ -486,7 +479,6 @@ export async function POST(request: Request) {
             attachments: docs,
           }).catch((err) => console.error("Add-cards documents email failed:", err));
         }
-        await startHighValueAgreements(admin, addOrderId).catch((err) => console.error("High-value agreements failed:", err));
       }
       return Response.json({ received: true });
     }
@@ -822,8 +814,6 @@ export async function POST(request: Request) {
     } catch (err) {
       console.error("Failed to send confirmation email:", err);
     }
-    // Cards over $5,000: email their High-Value Agreements and tell the owner
-    await startHighValueAgreements(admin, orderId!).catch((err) => console.error("High-value agreements failed:", err));
   }
 
   // ── Invoice paid (recurring subscription billing) ─────────────────────

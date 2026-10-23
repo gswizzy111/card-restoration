@@ -6,7 +6,6 @@ import {
 } from "@/lib/checkout-signing";
 import { recordConsents, recordSignatures, signingContext, type SignatureInput } from "@/lib/signatures";
 import { ensureTermsVersion, type TermsVersionRow } from "@/lib/terms-versions";
-import { isHighValue } from "@/lib/legal/agreements-v1";
 import { itemAmounts } from "@/lib/item-pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
@@ -14,7 +13,7 @@ import { getPriceCents, getRatePerCard } from "@/lib/pricing";
 import { getTierById, getCardPriceCents, applyDbOverride } from "@/lib/restoration-tiers";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import Stripe from "stripe";
-import { isSoldOut, INSURANCE_ENABLED, SIGNATURE_FEE_CENTS, TIER_MAX_SLOTS } from "@/lib/site-config";
+import { isSoldOut, INSURANCE_ENABLED, SIGNATURE_FEE_CENTS, TIER_MAX_SLOTS, MAX_CARD_PHOTOS } from "@/lib/site-config";
 import { getSlotsOpenedAt, getRestorationsOpen } from "@/lib/store-config";
 import { logCheckoutError } from "@/lib/checkout-error-log";
 import { shippingRate } from "@/lib/inbound-rate";
@@ -37,7 +36,7 @@ const BodySchema = z.object({
       // Required: every card needs its own declared value (Terms Section 4)
       estimated_value_cents: z.number().int().positive(),
       notes: z.string().optional(),
-      photo_urls: z.array(z.string()),
+      photo_urls: z.array(z.string()).max(MAX_CARD_PHOTOS),
       service_ids: z.array(z.string()),
       tier: z.enum(["regular", "expedited", "premium", "ultra_premium", "elite", "fast_pass"]).optional(),
       needs_slab_crack: z.boolean().optional(),
@@ -559,8 +558,7 @@ export async function POST(request: Request) {
     tier: cardTiers[i],
     slab_removal_selected: !!slabSigned[i],
     pregrade_selected: !!c.needs_pregrade,
-    // Over $5,000: no work until the High-Value Agreement is signed by both sides
-    status: isHighValue(c.estimated_value_cents) ? "on_hold_high_value" : "active",
+    status: "active",
     ...amounts[i],
   }));
   const { error: cardsErr } = await admin.from("cards").insert(cardRows);
@@ -632,11 +630,6 @@ export async function POST(request: Request) {
     }, { status: 500 });
   }
 
-  // Each card over $5,000 waits for its own High-Value Agreement (emailed once paid)
-  const highValueIds = cardIds.filter((_, i) => isHighValue(data.cards[i].estimated_value_cents));
-  if (highValueIds.length) {
-    await admin.from("high_value_agreements").insert(highValueIds.map((id) => ({ order_id: order.id, order_item_id: id })));
-  }
   await admin.from("order_events").insert({
     order_id: order.id,
     event_type: "terms_signed",
@@ -644,7 +637,6 @@ export async function POST(request: Request) {
       `Terms of Service v${terms.version} signed by ${data.terms!.signer_name.trim()}`,
       slabCrackCount ? `Slab Removal Authorization × ${slabCrackCount}` : "",
       droppedSlabs.length ? `slab removal dropped (not authorized): ${droppedSlabs.join(", ")}` : "",
-      highValueIds.length ? `${highValueIds.length} card(s) on hold for a High-Value Agreement` : "",
       `shipping insurance ${election}`,
     ].filter(Boolean).join("; "),
     is_customer_visible: false,

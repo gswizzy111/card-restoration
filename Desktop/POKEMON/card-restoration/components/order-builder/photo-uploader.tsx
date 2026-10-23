@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
+import { MAX_CARD_PHOTOS } from "@/lib/site-config";
 
 interface PhotoUploaderProps {
   photoUrls: string[];
@@ -90,7 +91,7 @@ async function uploadFile(file: File): Promise<string> {
   return data.url as string;
 }
 
-export function PhotoUploader({ photoUrls, onChange, max = 4 }: PhotoUploaderProps) {
+export function PhotoUploader({ photoUrls, onChange, max = MAX_CARD_PHOTOS }: PhotoUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");

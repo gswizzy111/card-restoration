@@ -1,17 +1,16 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { isHighValue, SLAB_FEE_CENTS } from "@/lib/legal/agreements-v1";
+import { SLAB_FEE_CENTS } from "@/lib/legal/agreements-v1";
 import { NONREFUNDABLE_CLAUSE } from "@/lib/legal/current-terms";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
 /**
  * When staff may start work on a card (Terms "Required online acceptance",
- * Sections 4.2, 7.1 and 11): cleaning or opening a slab needs the order's
- * master signature, the card's own slab authorization when its slab is being
- * opened, and a fully signed High-Value Agreement when it's valued above
- * $5,000. Orders placed before Terms v1.0 were signed under the earlier Terms
- * and only the high-value rule applies to them. The same rules decide whether
- * a card's service fee can still be refunded (before work starts).
+ * Sections 7.1 and 11): cleaning or opening a slab needs the order's master
+ * signature and the card's own slab authorization when its slab is being
+ * opened. Orders placed before Terms v1.0 were signed under the earlier Terms,
+ * so neither applies to them. The same rules decide whether a card's service
+ * fee can still be refunded (before work starts).
  */
 export type GateCard = {
   id: string;
@@ -32,8 +31,6 @@ export type GateFacts = {
   versioned: boolean;
   masterSigned: boolean;
   slabSignedCardIds: Set<string>;
-  /** High-value agreement status by card id */
-  highValue: Map<string, { status: string; customerSigned: boolean }>;
 };
 
 export type CardGate = {
@@ -52,10 +49,6 @@ export function cardGate(card: GateCard, f: GateFacts): CardGate {
   const missing: string[] = [];
   if (f.versioned && !f.masterSigned) missing.push("Terms of Service signature");
   if (card.slab_removal_selected && f.versioned && !f.slabSignedCardIds.has(card.id)) missing.push("Slab Removal Authorization");
-  const hv = f.highValue.get(card.id);
-  if (hv ? hv.status !== "executed" : isHighValue(card.estimated_value_cents)) {
-    missing.push(!hv ? "High-Value Agreement" : hv.customerSigned ? "High-Value Agreement countersignature" : "High-Value Agreement (customer)");
-  }
   const refunded = card.status === "refunded";
   const ok = missing.length === 0 && !refunded;
   // The service fee stops being refundable when cleaning starts (11.1, 11.3); the
@@ -74,15 +67,13 @@ export function cardGate(card: GateCard, f: GateFacts): CardGate {
 
 /** Everything the gates need for one order. */
 export async function gateFacts(admin: Admin, orderId: string): Promise<GateFacts> {
-  const [{ data: order }, { data: sigs }, { data: hvas }] = await Promise.all([
+  const [{ data: order }, { data: sigs }] = await Promise.all([
     admin.from("orders").select("terms_version_id").eq("id", orderId).single(),
     admin.from("signatures").select("type, order_item_id").eq("order_id", orderId),
-    admin.from("high_value_agreements").select("order_item_id, status, customer_signature_id").eq("order_id", orderId),
   ]);
   return {
     versioned: !!order?.terms_version_id,
     masterSigned: (sigs ?? []).some((s) => s.type === "master_terms"),
     slabSignedCardIds: new Set((sigs ?? []).filter((s) => s.type === "slab_removal" && s.order_item_id).map((s) => s.order_item_id as string)),
-    highValue: new Map((hvas ?? []).map((h) => [h.order_item_id as string, { status: h.status as string, customerSigned: !!h.customer_signature_id }])),
   };
 }
