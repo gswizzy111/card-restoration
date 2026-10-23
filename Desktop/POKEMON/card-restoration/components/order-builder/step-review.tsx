@@ -4,9 +4,7 @@ import { useState, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
-import { getRatePerCard } from "@/lib/pricing";
 import { computeOrderTotals, INSTAGRAM_FEATURE_CENTS } from "@/lib/order-totals";
-import { getTierById, getCardPriceCents, formatCents } from "@/lib/restoration-tiers";
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import { INSURANCE_ENABLED } from "@/lib/site-config";
@@ -59,7 +57,6 @@ interface StepReviewProps {
 }
 
 export function StepReview({
-  services,
   cards,
   customer,
   shippingMethod,
@@ -91,7 +88,6 @@ export function StepReview({
   tipCents,
   onTipCentsChange,
 }: StepReviewProps) {
-  const [loyaltyOrderCount, setLoyaltyOrderCount] = useState(0);
   const [codeStatus, setCodeStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [codeName, setCodeName] = useState("");
   const [gcStatus, setGcStatus] = useState<"idle" | "valid" | "invalid">("idle");
@@ -107,10 +103,7 @@ export function StepReview({
     fetch(`/api/loyalty?email=${encodeURIComponent(customer.email)}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.discountPercent > 0) {
-          setLoyaltyOrderCount(data.orderCount);
-          onLoyaltyDiscountChange(data.discountPercent);
-        }
+        if (data.discountPercent > 0) onLoyaltyDiscountChange(data.discountPercent);
       })
       .catch(() => {});
   }, [customer.email]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -196,7 +189,6 @@ export function StepReview({
     }
   }
 
-  const serviceMap = Object.fromEntries(services.map((s) => [s.id, s]));
   // We can only insure the trip to us when we buy that label
   const insuranceOptions: Exclude<InsuranceType, "none">[] = shippingMethod === "buy_label" ? ["inbound", "round_trip"] : ["return"];
 
@@ -212,90 +204,13 @@ export function StepReview({
     instagramFeature,
     giftCardAmountCents,
   });
-  const { subtotal, discountCents, taxCents, signatureCents } = totals;
-  const shipping = totals.shippingCents;
+  // The totals themselves (with any tip) are in the order summary beside this step
   const gcApplied = totals.giftCardCents;
-  const total = totals.total + tipCents;
 
   return (
     <div className="flex flex-col gap-8">
       <div>
         <h2 className="font-serif text-2xl font-medium text-foreground mb-1">Review your order.</h2>
-      </div>
-
-      {/* Loyalty discount banner */}
-      {loyaltyDiscountPercent > 0 && (
-        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-xl p-4 flex items-center gap-3">
-          <span className="text-2xl shrink-0">🏆</span>
-          <div>
-            <p className="font-bold text-amber-900 text-sm">
-              {loyaltyDiscountPercent}% loyalty discount applied!
-            </p>
-            <p className="text-xs text-amber-700 mt-0.5">
-              {loyaltyOrderCount === 1
-                ? "Welcome back — this is your 2nd order with us."
-                : `You're a loyal customer (${loyaltyOrderCount + 1} orders). Thank you!`}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Cards & Services/Tier */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-foreground">Cards & Services</h3>
-          <button
-            type="button"
-            onClick={() => onEditStep(2)}
-            className="text-xs text-accent hover:text-accent/80 transition-colors"
-          >
-            Edit
-          </button>
-        </div>
-        {selectedTier && (
-          <div className="border border-[#1a8fe0] bg-blue-50 rounded-lg p-4">
-            <p className="font-medium text-[#1a8fe0] text-sm mb-1">
-              {getTierById(selectedTier).name} Tier
-            </p>
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p>Turnaround: {getTierById(selectedTier).turnaround_min_days}–{getTierById(selectedTier).turnaround_max_days} business days</p>
-              <p>Max value: {getTierById(selectedTier).max_card_value_cents === null ? "Unlimited" : formatCurrency(getTierById(selectedTier).max_card_value_cents!)}</p>
-            </div>
-          </div>
-        )}
-        {cards.map((card, i) => (
-          <div key={card.id} className="border border-border rounded-lg p-4 flex flex-col gap-2">
-            <p className="font-medium text-foreground text-sm">
-              Card {i + 1}: {card.card_name}
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {(card.tier ?? selectedTier) ? (
-                <span className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground">
-                  {(() => {
-                    const t = getTierById(card.tier ?? selectedTier!);
-                    const valCents = card.estimated_value
-                      ? Math.round(parseFloat(card.estimated_value.replace(/[$,]/g, "")) * 100)
-                      : 0;
-                    const price = getCardPriceCents(t, valCents);
-                    return `${t.name} Restoration${price > 0 ? ` — ${formatCents(price)}` : t.pricing_type === "percentage" ? ` — ${((t.pricing_rate ?? 0) * 100).toFixed(0)}% of value` : ""}`;
-                  })()}
-                </span>
-              ) : (
-                card.service_ids.map((sid) => {
-                  const svc = serviceMap[sid];
-                  return svc ? (
-                    <span
-                      key={sid}
-                      className="text-xs bg-secondary border border-border px-2 py-0.5 rounded-full text-muted-foreground"
-                    >
-                      {svc.name} — {formatCurrency(getRatePerCard(cards.length))}
-                    </span>
-                  ) : null;
-                })
-              )}
-            </div>
-          </div>
-        ))}
       </div>
 
       {/* Shipping */}
@@ -459,104 +374,6 @@ export function StepReview({
             }}
             className="w-full border border-border rounded-lg pl-6 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
-        </div>
-      </div>
-
-      {/* Customer info */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-foreground">Your Information</h3>
-          <button
-            type="button"
-            onClick={() => onEditStep(3)}
-            className="text-xs text-accent hover:text-accent/80 transition-colors"
-          >
-            Edit
-          </button>
-        </div>
-        <div className="text-sm text-muted-foreground flex flex-col gap-0.5">
-          <p>{customer.name}</p>
-          <p>{customer.email}</p>
-          <p>{customer.phone}</p>
-          <p>
-            {customer.street1}
-            {customer.street2 ? `, ${customer.street2}` : ""}
-          </p>
-          <p>
-            {customer.city}, {customer.state} {customer.zip}
-          </p>
-        </div>
-      </div>
-
-      {/* Totals */}
-      <div className="border border-border rounded-lg p-5 flex flex-col gap-2">
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Subtotal</span>
-          <span>{formatCurrency(subtotal)}</span>
-        </div>
-        {discountCents > 0 && (
-          <div className="flex justify-between text-sm text-green-600 font-medium">
-            <span>
-              {loyaltyDiscountPercent >= discountPercent
-                ? `Loyalty Discount (${effectiveDiscountPct}% off)`
-                : `Discount (${effectiveDiscountPct}% off)`}
-            </span>
-            <span>−{formatCurrency(discountCents)}</span>
-          </div>
-        )}
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Sales Tax (6.625%)</span>
-          <span>{formatCurrency(taxCents)}</span>
-        </div>
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>{shippingMethod === "self_ship" ? "Return shipping" : "Shipping"}</span>
-          <span>{formatCurrency(shipping)}</span>
-        </div>
-        {signatureCents > 0 && (
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Signature Confirmation</span>
-            <span>{formatCurrency(signatureCents)}</span>
-          </div>
-        )}
-        {INSURANCE_ENABLED && insurance.chargeCents > 0 && (
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Shipping Insurance ({insuranceTypeLabel(insurance.type)})</span>
-            <span>{formatCurrency(insurance.chargeCents)}</span>
-          </div>
-        )}
-        {totals.slabCrackCents > 0 && (
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Slab Cracking × {totals.slabCrackCount}</span>
-            <span>{formatCurrency(totals.slabCrackCents)}</span>
-          </div>
-        )}
-        {totals.pregradeCents > 0 && (
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Pregrade × {totals.pregradeCount}</span>
-            <span>{formatCurrency(totals.pregradeCents)}</span>
-          </div>
-        )}
-        {instagramFeature && (
-          <div className="flex justify-between text-sm text-muted-foreground">
-            <span>Instagram Feature</span>
-            <span>{formatCurrency(totals.instagramCents)}</span>
-          </div>
-        )}
-        {gcApplied > 0 && (
-          <div className="flex justify-between text-sm text-green-600 font-medium">
-            <span>Gift Card</span>
-            <span>−{formatCurrency(gcApplied)}</span>
-          </div>
-        )}
-        {tipCents > 0 && (
-          <div className="flex justify-between text-sm text-amber-600 font-medium">
-            <span>Tip</span>
-            <span>{formatCurrency(tipCents)}</span>
-          </div>
-        )}
-        <div className="flex justify-between font-medium text-foreground pt-2 border-t border-border">
-          <span>Total</span>
-          <span>{formatCurrency(total)}</span>
         </div>
       </div>
 

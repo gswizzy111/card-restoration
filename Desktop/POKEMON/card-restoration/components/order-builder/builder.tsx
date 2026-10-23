@@ -15,6 +15,7 @@ import { OrderSummary } from "./order-summary";
 import { StepCards } from "./step-cards";
 import { StepCustomer } from "./step-customer";
 import { StepShipping } from "./step-shipping";
+import { YourInformation } from "./your-information";
 import { StepReview } from "./step-review";
 import type { Service, CardEntry, CustomerInfo, ShippingRate, InsuranceSelection } from "@/lib/types";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
@@ -76,7 +77,6 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const [instagramFeature, setInstagramFeature] = useState(false);
   // The signatures and consents for the Terms of Service v1.0 (components/checkout/signing-section.tsx)
   const [signing, setSigning] = useState<SigningState>(emptySigning());
-  const [skippedSlabs, setSkippedSlabs] = useState<string[]>([]);
   // The card whose slab authorization pop-up is open
   const [slabDialogId, setSlabDialogId] = useState<string | null>(null);
   // Pressed Continue / sign with something missing: outline it in red
@@ -110,10 +110,6 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
   const slabCards: SlabCard[] = cards.flatMap((c, i) => (c.needs_slab_crack ? [slabCardOf(c, i)] : []));
   const slabDialogIndex = cards.findIndex((c) => c.id === slabDialogId);
   const slabDialogCard = slabDialogIndex >= 0 ? slabCardOf(cards[slabDialogIndex], slabDialogIndex) : null;
-  const slabStatus = (cardId: string) => {
-    const i = cards.findIndex((c) => c.id === cardId);
-    return i >= 0 && slabSigned(signing, slabCardOf(cards[i], i));
-  };
   const insuranceOk = insuranceElection === "declined"
     || (insuranceElection === "purchased" && insurance.declaredValueCents > 0 && insurance.type !== "none");
   const readyToSign = signingReady(signing, slabCards) && insuranceOk;
@@ -132,10 +128,12 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
     if (!signed && slabDialogId) setCards((cs) => cs.map((c) => (c.id === slabDialogId ? { ...c, needs_slab_crack: false } : c)));
     setSlabDialogId(null);
   }
-  function skipSlab(index: number) {
-    const name = cards[index]?.card_name.trim() || `Card ${index + 1}`;
-    setCards((cs) => cs.map((c, i) => (i === index ? { ...c, needs_slab_crack: false } : c)));
-    setSkippedSlabs((s) => [...s, name]);
+  // A ticked slab whose card changed after signing pops its authorization up again
+  function openUnsignedSlab(): boolean {
+    const unsigned = slabCards.find((c) => !slabSigned(signing, c));
+    if (!unsigned) return false;
+    setSlabDialogId(cards[unsigned.index]?.id ?? null);
+    return true;
   }
   function changeInsuranceElection(e: Exclude<InsuranceElection, null>) {
     setInsuranceElection(e);
@@ -167,11 +165,13 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
     setStep(n);
   }
   function tryContinue() {
+    if (step === 1 && openUnsignedSlab()) return;
     if (canAdvance()) return goToStep(step + 1);
     setShowMissing(true);
     revealMissing();
   }
   function trySign() {
+    if (openUnsignedSlab()) return;
     if (readyToSign) {
       setShowMissing(false);
       return handleSubmit();
@@ -287,7 +287,6 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               selectedServiceIds={[serviceId]}
               onChange={setCards}
               defaultTier={selectedTier}
-              slabSigned={slabStatus}
               onOpenSlab={setSlabDialogId}
               showMissing={showMissing}
             />
@@ -325,12 +324,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               onDiscountChange={setDiscountPercent}
               signingSlot={
                 <SigningSection
-                  slabCards={slabCards}
                   state={signing}
                   onChange={changeSigning}
-                  onSkipSlab={skipSlab}
-                  onOpenSlab={(i) => setSlabDialogId(cards[i]?.id ?? null)}
-                  skippedSlabs={skippedSlabs}
                   mediaRequiredNote={instagramFeature ? "The Instagram feature you added needs the first permission; unchecking it removes the feature." : undefined}
                   showMissing={showMissing}
                 />
@@ -441,6 +436,8 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               shippingMethod={shippingMethod}
               selectedRate={selectedRate}
               discountPercent={Math.max(discountPercent, loyaltyDiscountPercent)}
+              loyaltyPercent={loyaltyDiscountPercent}
+              tipCents={tipCents}
               isInternational={!!(customer.country && customer.country !== "US")}
               selectedTier={selectedTier}
               insurance={insurance}
@@ -448,6 +445,11 @@ export function OrderBuilder({ services, selectedTier }: { services: Service[]; 
               instagramFeature={instagramFeature}
               giftCardAmountCents={giftCardAmountCents}
             />
+            {step === 4 && (
+              <div className="mt-4">
+                <YourInformation customer={customer} onEdit={() => goToStep(2)} />
+              </div>
+            )}
           </div>
         </div>
       </div>

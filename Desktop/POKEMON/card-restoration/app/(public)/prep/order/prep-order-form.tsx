@@ -134,7 +134,6 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
   // The signatures and consents for the Terms of Service v1.0 (components/checkout/signing-section.tsx)
   const [signing, setSigning] = useState<SigningState>(emptySigning());
-  const [skippedSlabs, setSkippedSlabs] = useState<string[]>([]);
   // The card whose slab authorization pop-up is open
   const [slabDialogId, setSlabDialogId] = useState<string | null>(null);
   const [insuranceElection, setInsuranceElection] = useState<InsuranceElection>(null);
@@ -192,12 +191,6 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
     setSlabDialogId(null);
   }
   const slabCrackCount = slabCards.length;
-  function skipSlab(index: number) {
-    const card = filledCards[index];
-    if (!card) return;
-    updateCard(card.id, { slab: false });
-    setSkippedSlabs((s) => [...s, card.name.trim()]);
-  }
 
   function cardValueCents(card: CardRow): number {
     return Math.round((parseFloat(card.declaredValueDollars.replace(/[^0-9.]/g, "")) || 0) * 100);
@@ -311,6 +304,9 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
       revealMissing();
     };
 
+    // A ticked slab whose card changed after signing: its authorization pops up again
+    const unsignedSlab = slabCards.find((c) => !slabSigned(signing, c));
+    if (unsignedSlab) { setSlabDialogId(unsignedSlab.id ?? null); return; }
     if (filledCards.length < 1) { return fail("Please add at least one card."); }
     if (filledCards.some((c) => cardValueCents(c) <= 0)) { return fail("Please enter a declared value for every card."); }
     if (!name.trim()) { return fail("Name is required."); }
@@ -332,7 +328,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
     if (insuranceElection === null) { return fail("Please choose whether to buy or decline shipping insurance."); }
     if (addInsurance && insuranceDeclaredValueCents <= 0) { return fail("Enter the amount to insure, or decline shipping insurance."); }
     if (!signingReady(signing, slabCards)) {
-      return fail("Please sign or skip each slab authorization, check both boxes under Sign to confirm your order, and type your full legal name.");
+      return fail("Please check both boxes under Sign to confirm your order, and type your full legal name.");
     }
 
     setShowMissing(false);
@@ -508,14 +504,6 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
                   <span className="block text-xs text-muted-foreground mt-0.5">For a card in a PSA, BGS or other graded slab. You&apos;ll sign a separate authorization for it.</span>
                 </span>
               </label>
-              {card.slab && (
-                <p className="ml-7 -mt-2 text-xs text-muted-foreground">
-                  {slabSigned(signing, slabCardOf(card)) ? "Slab removal authorization signed. " : "Slab removal authorization not signed yet. "}
-                  <button type="button" onClick={() => setSlabDialogId(card.id)} className="font-semibold text-primary underline underline-offset-2">
-                    {slabSigned(signing, slabCardOf(card)) ? "Review" : "Sign it"}
-                  </button>
-                </p>
-              )}
               <div className="pl-7">
                 <p className="text-xs text-muted-foreground mb-1.5">Photos <span className="text-muted-foreground/60">(optional)</span></p>
                 <PhotoUploader photoUrls={card.photoUrls} onChange={(urls) => updateCardPhotos(card.id, urls)} />
@@ -826,13 +814,9 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
 
         <div className="bg-white rounded-lg border border-border p-6">
           <SigningSection
-            slabCards={slabCards}
             state={signing}
             onChange={setSigning}
-            onSkipSlab={skipSlab}
             showMissing={showMissing}
-            onOpenSlab={(i) => setSlabDialogId(filledCards[i]?.id ?? null)}
-            skippedSlabs={skippedSlabs}
           />
         </div>
 

@@ -42,8 +42,6 @@ interface StepCardsProps {
   selectedServiceIds: string[];
   onChange: (cards: CardEntry[]) => void;
   defaultTier?: RestorationTierId;
-  /** Whether this card's slab authorization is signed (by card id) */
-  slabSigned?: (cardId: string) => boolean;
   /** Open the card's slab authorization pop-up */
   onOpenSlab?: (cardId: string) => void;
   /** The customer pressed Continue with something missing: outline it in red */
@@ -75,7 +73,7 @@ export function cardProblems(c: CardEntry, defaultTier?: RestorationTierId): str
   return problems;
 }
 
-export function StepCards({ cards, services, selectedServiceIds, onChange, defaultTier, slabSigned, onOpenSlab, showMissing = false }: StepCardsProps) {
+export function StepCards({ cards, services, selectedServiceIds, onChange, defaultTier, onOpenSlab, showMissing = false }: StepCardsProps) {
   const availableServices = services.filter((s) => selectedServiceIds.includes(s.id));
 
   function updateCard(id: string, patch: Partial<CardEntry>) {
@@ -308,14 +306,6 @@ export function StepCards({ cards, services, selectedServiceIds, onChange, defau
                   </span>
                 </label>
               </div>
-              {card.needs_slab_crack && onOpenSlab && (
-                <p className="-mt-2 pl-7 text-xs text-muted-foreground">
-                  {slabSigned?.(card.id) ? "Slab removal authorization signed. " : "Slab removal authorization not signed yet. "}
-                  <button type="button" onClick={() => onOpenSlab(card.id)} className="font-semibold text-primary underline underline-offset-2">
-                    {slabSigned?.(card.id) ? "Review" : "Sign it"}
-                  </button>
-                </p>
-              )}
 
               {/* Pregrade */}
               <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
