@@ -37,6 +37,45 @@ function signatureFields(sig: SignatureRow, orderNumber: string | number): [stri
   ];
 }
 
+const AMOUNT = /^(.*): (-?\$[\d,]+\.\d{2})$/;
+
+/**
+ * The stored text as PDF elements: headings, ticked boxes as checkboxes, and
+ * item lists with prices (services, order lines, the total) as a price table.
+ * Only the layout changes; every word is the stored text.
+ */
+function documentElements(text: string, title: string): PdfElement[] {
+  const out: PdfElement[] = [];
+  text.split(/\n{2,}/).forEach((chunk, i) => {
+    if (i === 0 && chunk === title) return; // the title is already at the top
+    if (chunk.startsWith("## ")) { out.push({ type: "heading", text: chunk.slice(3) }); return; }
+    const box = chunk.match(/^\[(x| )\] ([\s\S]+)$/);
+    if (box) { out.push({ type: "check", text: box[2], checked: box[1] === "x" }); return; }
+    const lines = chunk.split("\n");
+    if (lines.every((l) => l.startsWith("- "))) {
+      const items = lines.map((l) => l.slice(2));
+      if (items.some((l) => AMOUNT.test(l))) {
+        out.push({ type: "amounts", rows: items.map((l) => { const m = l.match(AMOUNT); return m ? { label: m[1], amount: m[2] } : { label: l, amount: null }; }) });
+      } else {
+        out.push({ type: "list", items });
+      }
+      return;
+    }
+    const total = chunk.match(/^(Order total): (-?\$[\d,]+\.\d{2})$/);
+    if (total) {
+      const prev = out[out.length - 1];
+      if (prev?.type === "amounts" && !prev.total) prev.total = { label: total[1], amount: total[2] };
+      else out.push({ type: "amounts", rows: [], total: { label: total[1], amount: total[2] } });
+      return;
+    }
+    // A quoted section's heading ("4. Per-card market values; ...") and short labels ("Order:")
+    if (!chunk.includes("\n") && chunk.length <= 100 && /^\d+\. \S/.test(chunk)) { out.push({ type: "heading", text: chunk }); return; }
+    if (/^Card \d+: /.test(chunk) || (!chunk.includes("\n") && chunk.length <= 80 && chunk.endsWith(":"))) { out.push({ type: "lead", text: chunk }); return; }
+    out.push({ type: "para", text: chunk });
+  });
+  return out;
+}
+
 /** The PDF of one signed document. `company` adds The Card Doc's countersignature (high-value agreements). */
 export async function signaturePdf(
   admin: Admin,
@@ -46,32 +85,36 @@ export async function signaturePdf(
 ): Promise<Uint8Array> {
   const { data: terms } = await admin.from("terms_versions").select("version, content_markdown").eq("id", sig.terms_version_id).single();
   const version = terms?.version ?? "";
+  const master = sig.type === "master_terms";
   const elements: PdfElement[] = [
     { type: "title", text: sig.document_title },
-    { type: "subtitle", text: `The Card Doc LLC - signed electronically under the Terms of Service v${version}` },
+    { type: "subtitle", text: `The Card Doc LLC - order ${displayOrder(order.order_number)} - signed electronically under the Terms of Service v${version}` },
+    { type: "small", text: master
+      ? "The document signed: the Terms of Service below, then the certification, the consent to electronic records, the boxes checked, the services authorized and the optional choices. The signature and the signing record are at the end."
+      : "The signatures and the signing record are at the end." },
     { type: "rule" },
-    { type: "heading", text: sig.type === "master_terms" ? "Customer signature" : "Signature" },
-    { type: "fields", rows: signatureFields(sig, order.order_number) },
   ];
-  if (company) {
-    elements.push(
-      { type: "heading", text: "Countersigned by The Card Doc LLC" },
-      { type: "fields", rows: [["Signed by", company.signed_by], ["Signed at", utc(company.signed_at)]] },
-    );
-  }
-  elements.push({ type: "rule" });
-  if (sig.type === "master_terms" && terms) {
-    elements.push(
-      { type: "small", text: "The document signed: the Terms of Service below, then the certification, the consent to electronic records, the boxes checked, the services authorized and the optional choices." },
-      ...blocksToPdf(parseLegalMarkdown(terms.content_markdown)),
-      { type: "rule" },
-    );
-  }
-  for (const chunk of sig.document_text.split(/\n{2,}/)) {
-    if (chunk.startsWith("## ")) elements.push({ type: "heading", text: chunk.slice(3) });
-    else if (chunk.split("\n").every((l) => l.startsWith("- "))) elements.push({ type: "list", items: chunk.split("\n").map((l) => l.slice(2)) });
-    else elements.push({ type: "para", text: chunk });
-  }
+  if (master && terms) elements.push(...blocksToPdf(parseLegalMarkdown(terms.content_markdown)), { type: "rule" });
+  elements.push(...documentElements(sig.document_text, sig.document_title));
+
+  // Signatures, like the end of a contract, then the record of how it was signed
+  elements.push(
+    { type: "keep", height: 250 },
+    { type: "rule" },
+    { type: "heading", text: "Signatures" },
+    { type: "small", text: "Signed electronically: each name below was typed by the person signing. Dates and times are our server's (UTC)." },
+    { type: "signatures", parties: [
+      { role: "Customer", name: sig.typed_full_name, date: utc(sig.signed_at) },
+      ...(company
+        ? [{ role: "The Card Doc LLC", name: company.signed_by, date: utc(company.signed_at) }]
+        : sig.type === "high_value" ? [{ role: "The Card Doc LLC", name: null, date: null, pendingNote: "Countersignature to follow" }] : []),
+    ] },
+    { type: "heading", text: "Signing record" },
+    { type: "table", rows: [
+      ...signatureFields(sig, order.order_number),
+      ...(company ? [["Countersigned by", `${company.signed_by} for The Card Doc LLC`], ["Countersigned at", utc(company.signed_at)]] as [string, string][] : []),
+    ] },
+  );
   return buildLegalPdf({
     title: `${sig.document_title} - order ${displayOrder(order.order_number)}`,
     footer: `${sig.document_title} - order ${displayOrder(order.order_number)} - signed ${utc(sig.signed_at)} - SHA-256 ${sig.document_sha256.slice(0, 16)}`,
