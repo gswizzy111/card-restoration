@@ -3,11 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const HIDE_ON = ["/restoration", "/tier-selection"];
+// Booking and checkout pages, where the button would cover the form: the
+// restoration and prep order forms, the cart and its checkout, gift cards,
+// subscriptions and the pages a payment returns to.
+const HIDE_ON = [
+  "/restoration",
+  "/tier-selection",
+  "/order",
+  "/prep/order",
+  "/cart",
+  "/checkout",
+  "/gift-cards",
+  "/subscribe",
+  "/shop/order-confirmed",
+];
+
+/** True on a listed page or anything under it ("/cart" hides "/cart/checkout"). */
+export function hidesBookingButton(pathname: string) {
+  return HIDE_ON.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 export function RestorationBubble() {
   const pathname = usePathname();
-  if (HIDE_ON.some((p) => pathname.startsWith(p))) return null;
+  if (hidesBookingButton(pathname)) return null;
 
   return (
     <div className="fixed bottom-5 left-0 right-0 flex justify-center z-50 px-4 md:hidden">
