@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 // Booking and checkout pages, where the button would cover the form: the
 // restoration and prep order forms, the cart and its checkout, gift cards,
-// subscriptions, the slab agreement and the pages a payment returns to.
+// subscriptions and the pages a payment returns to.
 const HIDE_ON = [
   "/restoration",
   "/tier-selection",
@@ -15,7 +15,6 @@ const HIDE_ON = [
   "/checkout",
   "/gift-cards",
   "/subscribe",
-  "/agreements",
   "/shop/order-confirmed",
 ];
 
