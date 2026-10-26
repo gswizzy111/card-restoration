@@ -15,6 +15,8 @@ export function MetaPixelRouteTracker() {
       isFirst.current = false;
       return;
     }
+    // The pixel wasn't started on a page holding a one-time account link (root layout)
+    if ((window as Window & { __noTrack?: boolean }).__noTrack) return;
     fbq("track", "PageView");
   }, [pathname]);
 

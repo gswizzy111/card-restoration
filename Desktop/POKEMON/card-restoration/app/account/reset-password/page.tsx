@@ -18,6 +18,7 @@ function ResetPassword() {
     e.preventDefault();
     setError("");
     if (password.length < 8) return setError("Password must be at least 8 characters.");
+    if (password.length > 72) return setError("Password must be at most 72 characters.");
     if (password !== confirm) return setError("The two passwords don't match.");
     setSaving(true);
     const res = await fetch("/api/account/auth/reset", {

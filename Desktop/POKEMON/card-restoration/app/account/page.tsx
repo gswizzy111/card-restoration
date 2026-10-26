@@ -6,6 +6,7 @@ import { ORDER_STATUSES } from "@/lib/constants";
 import type { OrderStatus } from "@/lib/constants";
 import Link from "next/link";
 import { LogoutButton } from "./logout-button";
+import { likeExact } from "@/lib/like-exact";
 
 export const dynamic = "force-dynamic";
 
@@ -42,13 +43,13 @@ export default async function AccountPage() {
     admin
       .from("orders")
       .select("id, order_number, status, restoration_tier, total_cents, created_at, shipping_label_url, inbound_method")
-      .ilike("customer_email", email)
+      .ilike("customer_email", likeExact(email))
       .not("status", "eq", "awaiting_payment")
       .order("created_at", { ascending: false }),
     admin
       .from("shop_orders")
       .select("id, order_number, status, total_cents, created_at, items, tracking_number, carrier")
-      .ilike("customer_email", email)
+      .ilike("customer_email", likeExact(email))
       .order("created_at", { ascending: false }),
   ]);
 

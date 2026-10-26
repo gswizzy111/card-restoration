@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { sendCancellationEmail } from "@/lib/subscription-emails";
+import { likeExact } from "@/lib/like-exact";
 
 export async function POST() {
   const supabase = await createClient();
@@ -13,7 +14,7 @@ export async function POST() {
   const { data: sub } = await admin
     .from("subscriptions")
     .select("id, stripe_subscription_id, status, customer_email, customer_name")
-    .ilike("customer_email", user.email!)
+    .ilike("customer_email", likeExact(user.email!))
     .eq("status", "active")
     .maybeSingle();
 

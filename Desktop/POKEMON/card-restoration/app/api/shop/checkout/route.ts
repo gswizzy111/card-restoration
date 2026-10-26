@@ -5,6 +5,7 @@ import Stripe from "stripe";
 import { isSoldOut } from "@/lib/site-config";
 import { addressProblem, normalizeAddress } from "@/lib/shipping-address";
 import { usAddressRejection } from "@/lib/verify-address";
+import { likeExact } from "@/lib/like-exact";
 
 const BodySchema = z.object({
   items: z.array(z.object({ id: z.string(), quantity: z.number().int().positive(), slug: z.string(), size: z.string().optional() })).min(1),
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
     const { data: affiliate } = await admin
       .from("affiliates")
       .select("code, discount_percent")
-      .ilike("code", data.affiliate_code.trim())
+      .ilike("code", likeExact(data.affiliate_code.trim()))
       .single();
     if (!affiliate) return Response.json({ error: "Invalid creator code." }, { status: 400 });
     validatedAffiliateCode = affiliate.code;

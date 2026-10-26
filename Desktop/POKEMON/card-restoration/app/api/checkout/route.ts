@@ -17,6 +17,7 @@ import { isSoldOut, INSURANCE_ENABLED, SIGNATURE_FEE_CENTS, TIER_MAX_SLOTS, MAX_
 import { getSlotsOpenedAt, getRestorationsOpen } from "@/lib/store-config";
 import { logCheckoutError } from "@/lib/checkout-error-log";
 import { shippingRate } from "@/lib/inbound-rate";
+import { likeExact } from "@/lib/like-exact";
 
 const AddressSchema = z.object({
   street1: z.string().min(1),
@@ -273,10 +274,10 @@ export async function POST(request: Request) {
   if (data.affiliate_code) {
     const { data: affiliate } = await admin
       .from("affiliates")
-      .select("discount_percent")
-      .ilike("code", data.affiliate_code.trim())
+      .select("code, discount_percent")
+      .ilike("code", likeExact(data.affiliate_code.trim()))
       .single();
-    if (affiliate) validatedAffiliateCode = data.affiliate_code.trim();
+    if (affiliate) validatedAffiliateCode = affiliate.code;
     discountPercent = affiliate?.discount_percent ?? 0;
     if (discountPercent > 0) {
       discountCents = Math.round(subtotalCents * discountPercent / 100);
@@ -287,7 +288,7 @@ export async function POST(request: Request) {
   const { count: completedOrderCount } = await admin
     .from("orders")
     .select("id", { count: "exact", head: true })
-    .ilike("customer_email", data.customer.email)
+    .ilike("customer_email", likeExact(data.customer.email))
     .eq("payment_status", "paid")
     .neq("status", "awaiting_payment");
   const completedOrders = completedOrderCount ?? 0;

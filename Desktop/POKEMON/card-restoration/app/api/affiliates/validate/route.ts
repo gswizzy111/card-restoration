@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { likeExact } from "@/lib/like-exact";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
   const { data: affiliate, error } = await admin
     .from("affiliates")
     .select("id, name, code, discount_percent")
-    .ilike("code", code.trim())
+    .ilike("code", likeExact(code.trim()))
     .single();
 
   if (error || !affiliate) {

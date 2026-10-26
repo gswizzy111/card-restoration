@@ -47,11 +47,16 @@ export default function RootLayout({
       <head>
         <meta name="facebook-domain-verification" content="ihjnpqbitwq29e5kx3x0dujilxh1n9" />
         <script async src="https://www.googletagmanager.com/gtag/js?id=G-LSQXS277DY" />
+        {/* Pages whose address holds a one-time link (confirm email, reset
+            password, admin reset, creator and accountant setup) aren't
+            reported to analytics or the pixel: both record the full URL,
+            token included. */}
         <script dangerouslySetInnerHTML={{ __html: `
+          window.__noTrack = /^\\/(account\\/(confirm|reset-password)|admin\\/reset-password|affiliates\\/setup|accountant\\/setup)(\\/|$)/.test(location.pathname);
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
-          gtag('config', 'G-LSQXS277DY');
+          if (!window.__noTrack) gtag('config', 'G-LSQXS277DY');
         `}} />
         {/* Meta Pixel — init + initial PageView */}
         <script dangerouslySetInnerHTML={{ __html: `
@@ -60,8 +65,10 @@ export default function RootLayout({
           n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
           t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
           document,'script','https://connect.facebook.net/en_US/fbevents.js');
-          fbq('init','${PIXEL_ID}');
-          fbq('track','PageView');
+          if (!window.__noTrack) {
+            fbq('init','${PIXEL_ID}');
+            fbq('track','PageView');
+          }
         `}} />
       </head>
       <body className="min-h-full flex flex-col">

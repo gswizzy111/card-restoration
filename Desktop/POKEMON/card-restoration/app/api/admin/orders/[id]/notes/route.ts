@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { resend, fromEmail, businessName } from "@/lib/resend";
+import { resend, fromEmail, fromAddress, businessName } from "@/lib/resend";
 import { isAdmin } from "@/lib/admin-auth";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
             <a href="${orderTrackingUrl}" style="display:inline-block;background:#c0392b;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin-bottom:24px">View Your Order →</a>
 
-            <p style="font-size:14px;color:#666;">Questions? Reply to this email or reach out at <a href="mailto:${fromEmail}" style="color:#c0392b">${fromEmail}</a>.</p>
+            <p style="font-size:14px;color:#666;">Questions? Reply to this email or reach out at <a href="mailto:${fromAddress}" style="color:#c0392b">${fromAddress}</a>.</p>
             <p style="font-size:13px;color:#999">${businessName}</p>
           </div>
         `,
