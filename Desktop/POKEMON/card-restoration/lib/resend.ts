@@ -6,16 +6,17 @@ export const businessName =
 /** Where replies go. The sending address (orders@…) has no mailbox, so
  * without this a customer's reply bounces. The Terms and FAQ already tell
  * people to write to this address. */
-export const replyToAddress = process.env.CONTACT_EMAIL ?? "thecarddoc1@gmail.com";
+export const replyToAddress = process.env.CONTACT_EMAIL?.trim() || "thecarddoc1@gmail.com";
 
 const client = new Resend(process.env.RESEND_API_KEY);
 // Every email gets that reply-to unless it sets its own (a problem report
-// replies to the customer, for example)
-const sendOne = client.emails.send.bind(client.emails);
-client.emails.send = (payload, options) => sendOne({ ...payload, replyTo: payload.replyTo ?? replyToAddress }, options);
-const sendBatch = client.batch.send.bind(client.batch);
-client.batch.send = ((payload, options) =>
-  sendBatch(payload.map((p) => ({ ...p, replyTo: p.replyTo ?? replyToAddress })), options)) as typeof client.batch.send;
+// replies to the customer, for example). The SDK's send() calls create(), so
+// patching create covers both, for single emails and batches.
+const createOne = client.emails.create.bind(client.emails);
+client.emails.create = (payload, options) => createOne({ ...payload, replyTo: payload.replyTo || replyToAddress }, options);
+const createBatch = client.batch.create.bind(client.batch);
+client.batch.create = ((payload, options) =>
+  createBatch(payload.map((p) => ({ ...p, replyTo: p.replyTo || replyToAddress })), options)) as typeof client.batch.create;
 
 export const resend = client;
 

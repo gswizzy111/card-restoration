@@ -11,14 +11,15 @@ export default async function EmailProblemsPage() {
   if (!(await isAdmin())) redirect("/admin/login");
 
   const problems = await listEmailProblems();
-  const open = problems.filter((p) => !p.resolved_at).length;
+  // Addresses, like the nav badge and the cards
+  const open = new Set(problems.filter((p) => !p.resolved_at).map((p) => p.email)).size;
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
       <div className="mb-8">
         <h1 className="font-heading font-black text-3xl text-foreground">Email Problems</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Emails that didn&apos;t reach the customer: bounced, marked as spam, blocked by Resend or failed · {open} open · newest first
+          Emails that didn&apos;t reach the customer: bounced, marked as spam, blocked by Resend or failed · {open} open · newest first · fixed ones stay listed for 90 days
         </p>
       </div>
       <EmailProblemsClient initialProblems={problems} />

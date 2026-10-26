@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PROBLEM_LABELS, problemAdvice, type EmailProblem } from "@/lib/email-problem-labels";
 
@@ -24,29 +25,33 @@ function ProblemLine({ p }: { p: EmailProblem }) {
         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TYPE_COLORS[p.type]}`}>{PROBLEM_LABELS[p.type]}</span>
         <span className="text-xs text-muted-foreground">{when(p.received_at)}</span>
       </div>
-      {p.subject && <p className="text-xs text-muted-foreground mt-1">Email: &ldquo;{p.subject}&rdquo;{p.sent_at ? ` · sent ${when(p.sent_at)}` : ""}</p>}
+      {p.subject && <p className="text-xs text-muted-foreground mt-1 break-words">Email: &ldquo;{p.subject}&rdquo;{p.sent_at ? ` · sent ${when(p.sent_at)}` : ""}</p>}
       {p.detail && <p className="text-xs text-muted-foreground mt-0.5 font-mono break-words">{p.detail}</p>}
     </div>
   );
 }
 
 export function EmailProblemsClient({ initialProblems }: { initialProblems: EmailProblem[] }) {
+  const router = useRouter();
   const [problems, setProblems] = useState(initialProblems);
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function setResolved(id: string, resolved: boolean) {
+  // ids: for Mark fixed, every open row the card shows
+  async function setResolved(id: string, resolved: boolean, ids?: string[]) {
     setBusy(id);
     try {
       const res = await fetch(`/api/admin/email-problems/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resolved }),
+        body: JSON.stringify({ resolved, ids }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(data.error ?? "Could not update it"); return; }
       const changed = new Set<string>(data.ids ?? []);
       setProblems((list) => list.map((p) => (changed.has(p.id) ? { ...p, resolved_at: data.resolved_at ?? null } : p)));
       toast.success(resolved ? "Marked fixed" : "Opened again");
+      // The nav badge and the page's count come from the server
+      router.refresh();
     } catch {
       toast.error("Could not reach the server");
     } finally {
@@ -89,7 +94,7 @@ export function EmailProblemsClient({ initialProblems }: { initialProblems: Emai
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setResolved(list[0].id, true)}
+                  onClick={() => setResolved(list[0].id, true, list.map((p) => p.id))}
                   disabled={busy === list[0].id}
                   className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
                 >

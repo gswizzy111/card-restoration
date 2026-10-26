@@ -65,9 +65,6 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   let order = orderRes.data;
   if (!order) notFound();
 
-  // Emails to this customer that didn't arrive (Resend's webhook, lib/email-problems.ts)
-  const emailProblems = await openProblemsFor(order.customer_email);
-
   // Derive per-card restoration stages from stage_update events
   // Description format: "Stage: <stage> [card:<card_id>]"
   const stageByCard: Record<string, string> = {};
@@ -82,10 +79,12 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   }
 
   // Terms of Service v1.0 and later: signatures, consents and each card's work gates
-  const [{ data: sigRows }, { data: consentRows }, facts] = await Promise.all([
+  // ...and emails to this customer that didn't arrive (Resend's webhook, lib/email-problems.ts)
+  const [{ data: sigRows }, { data: consentRows }, facts, emailProblems] = await Promise.all([
     admin.from("signatures").select("id, type, order_item_id, typed_full_name, signed_at, email_verified, terms_version_id").eq("order_id", id).order("signed_at"),
     admin.from("consents").select("type, granted, granted_at").eq("order_id", id).order("granted_at"),
     gateFacts(admin, id),
+    openProblemsFor(order.customer_email),
   ]);
   const versionIds = [...new Set((sigRows ?? []).map((s) => s.terms_version_id))];
   const { data: versionRows } = versionIds.length ? await admin.from("terms_versions").select("id, version").in("id", versionIds) : { data: [] };

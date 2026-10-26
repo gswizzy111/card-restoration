@@ -6,6 +6,7 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/admin",              label: "Orders",       icon: "📋" },
+  { href: "/admin/email-problems", label: "Email Problems", icon: "📭" },
   { href: "/admin/backlog",      label: "Backlog",      icon: "📈" },
   { href: "/admin/services",     label: "Prep vs Restoration", icon: "⚖️" },
   { href: "/admin/fast-pass",    label: "Fast Pass",    icon: "⚡" },
@@ -31,7 +32,6 @@ const NAV_ITEMS = [
   { href: "/admin/testimonials",     label: "Reviews",         icon: "⭐" },
   { href: "/admin/accountant",      label: "Accountant Access", icon: "🔐" },
   { href: "/admin/checkout-errors", label: "Checkout Errors", icon: "🚨" },
-  { href: "/admin/email-problems",  label: "Email Problems",  icon: "📭" },
 ];
 
 const ACCOUNTANT_NAV_ITEMS = [

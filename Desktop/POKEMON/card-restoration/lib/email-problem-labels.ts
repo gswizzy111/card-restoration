@@ -32,3 +32,8 @@ export function problemAdvice(type: EmailProblemType): string {
     case "failed": return "Resend couldn't send it. Try again, or reach the customer another way.";
   }
 }
+
+/** The address alone, lowercased: "Jane <jane@x.com>" gives "jane@x.com". */
+export function bareAddress(email: string): string {
+  return (email.match(/<([^<>]+)>\s*$/)?.[1] ?? email).trim().toLowerCase();
+}
