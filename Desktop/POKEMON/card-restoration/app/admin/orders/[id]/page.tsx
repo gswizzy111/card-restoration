@@ -25,6 +25,8 @@ import { PaymentMethodEditor } from "./payment-method-editor";
 import { RegenerateLabelButton } from "./regenerate-label-button";
 import type { Track } from "shippo/models/components";
 import { requireAdmin } from "@/lib/admin-auth";
+import { openProblemsFor } from "@/lib/email-problems";
+import { PROBLEM_LABELS, problemAdvice } from "@/lib/email-problem-labels";
 import { AgreementsPanel, type PanelCard } from "./agreements-panel";
 import { cardGate, gateFacts, type GateCard } from "@/lib/work-gates";
 
@@ -62,6 +64,9 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
 
   let order = orderRes.data;
   if (!order) notFound();
+
+  // Emails to this customer that didn't arrive (Resend's webhook, lib/email-problems.ts)
+  const emailProblems = await openProblemsFor(order.customer_email);
 
   // Derive per-card restoration stages from stage_update events
   // Description format: "Stage: <stage> [card:<card_id>]"
@@ -646,6 +651,17 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             {/* Customer info */}
             <div className="bg-white rounded-xl border border-border p-6">
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Customer</h2>
+              {emailProblems.length > 0 && (
+                <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                  <p className="font-bold">Emails to this address aren&apos;t arriving</p>
+                  <p className="mt-1">
+                    {PROBLEM_LABELS[emailProblems[0].type]}{" "}
+                    {new Date(emailProblems[0].received_at).toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" })}.{" "}
+                    {problemAdvice(emailProblems[0].type)}
+                  </p>
+                  <Link href="/admin/email-problems" className="mt-1 inline-block font-semibold underline">See Email Problems</Link>
+                </div>
+              )}
               <CustomerEditor
                 orderId={order.id}
                 name={order.customer_name}

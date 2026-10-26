@@ -31,13 +31,14 @@ const NAV_ITEMS = [
   { href: "/admin/testimonials",     label: "Reviews",         icon: "⭐" },
   { href: "/admin/accountant",      label: "Accountant Access", icon: "🔐" },
   { href: "/admin/checkout-errors", label: "Checkout Errors", icon: "🚨" },
+  { href: "/admin/email-problems",  label: "Email Problems",  icon: "📭" },
 ];
 
 const ACCOUNTANT_NAV_ITEMS = [
   { href: "/admin/tax", label: "Tax Reports", icon: "🧾" },
 ];
 
-function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, role }: { onNavigate?: () => void; openCaseCount?: number; openUpdateRequestCount?: number; role?: string | null }) {
+function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, emailProblemCount, role }: { onNavigate?: () => void; openCaseCount?: number; openUpdateRequestCount?: number; emailProblemCount?: number; role?: string | null }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const items = role === "accountant" ? ACCOUNTANT_NAV_ITEMS : NAV_ITEMS;
@@ -57,9 +58,11 @@ function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, role }: {
     return pathname.startsWith(href);
   }
 
-  // Red count badges: open cases, and update requests waiting on a reply
+  // Red count badges: open cases, update requests waiting on a reply, and
+  // emails that didn't reach a customer
   function badgeFor(href: string) {
     if (href === "/admin/cases") return openCaseCount ?? 0;
+    if (href === "/admin/email-problems") return emailProblemCount ?? 0;
     if (href.startsWith("/admin/cases?") && href.includes("type=inquiry")) return openUpdateRequestCount ?? 0;
     return 0;
   }
@@ -117,7 +120,7 @@ function ProfileLink({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function AdminNav({ openCaseCount, openUpdateRequestCount, role, username }: { openCaseCount?: number; openUpdateRequestCount?: number; role?: string | null; username?: string | null }) {
+export function AdminNav({ openCaseCount, openUpdateRequestCount, emailProblemCount, role, username }: { openCaseCount?: number; openUpdateRequestCount?: number; emailProblemCount?: number; role?: string | null; username?: string | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -130,7 +133,7 @@ export function AdminNav({ openCaseCount, openUpdateRequestCount, role, username
           <p className="text-xs text-muted-foreground mt-0.5">Admin</p>
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 flex flex-col gap-1">
-          <NavLinks openCaseCount={openCaseCount} openUpdateRequestCount={openUpdateRequestCount} role={role} />
+          <NavLinks openCaseCount={openCaseCount} openUpdateRequestCount={openUpdateRequestCount} emailProblemCount={emailProblemCount} role={role} />
           {role === "accountant" && (
             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest px-3 pt-4">Accountant View</p>
           )}
@@ -186,7 +189,7 @@ export function AdminNav({ openCaseCount, openUpdateRequestCount, role, username
       )}
       <div className={`lg:hidden fixed top-14 left-0 right-0 z-30 max-h-[calc(100dvh-3.5rem)] overflow-y-auto bg-white border-b border-border transition-transform duration-200 ${open ? "translate-y-0" : "-translate-y-full pointer-events-none"}`}>
         <nav className="px-3 py-3 flex flex-col gap-1">
-          <NavLinks onNavigate={() => setOpen(false)} openCaseCount={openCaseCount} openUpdateRequestCount={openUpdateRequestCount} role={role} />
+          <NavLinks onNavigate={() => setOpen(false)} openCaseCount={openCaseCount} openUpdateRequestCount={openUpdateRequestCount} emailProblemCount={emailProblemCount} role={role} />
         </nav>
         <div className="px-3 py-3 border-t border-border">
           {role === "admin" && <ProfileLink onNavigate={() => setOpen(false)} />}
