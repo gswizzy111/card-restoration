@@ -34,6 +34,10 @@ export default function ForgotPasswordPage() {
           <p className="text-sm text-muted-foreground leading-relaxed">
             If there&apos;s an account for <span className="font-semibold text-foreground [overflow-wrap:anywhere]">{email}</span>, we just emailed it a link to choose a new password. The link expires in 1 hour.
           </p>
+          <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+            Not there in a minute? Check your Spam, Junk and Promotions folders, and make sure this is the email you signed up with. No account yet?{" "}
+            <Link href="/account/login" className="font-semibold text-primary hover:underline">Create one</Link>.
+          </p>
           <Link href="/account/login" className="mt-6 inline-block text-sm font-semibold text-primary hover:underline">Back to sign in</Link>
         </div>
       ) : (

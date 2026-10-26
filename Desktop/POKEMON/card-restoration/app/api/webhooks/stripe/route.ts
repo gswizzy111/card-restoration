@@ -3,7 +3,7 @@ import { addressFromSession } from "@/lib/shipping-address";
 import { stripe, invoiceSubscriptionId } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shippo } from "@/lib/shippo";
-import { resend, fromEmail, businessName } from "@/lib/resend";
+import { resend, fromEmail, fromAddress, businessName } from "@/lib/resend";
 import { randomUUID } from "node:crypto";
 import { itemAmounts } from "@/lib/item-pricing";
 import { signedPdfAttachments } from "@/lib/signed-pdfs";
@@ -352,7 +352,7 @@ export async function POST(request: Request) {
                 <h1 style="font-size:22px;font-weight:900">Welcome to Monthly Kit Club!</h1>
                 <p>Hi ${subCustomerName.split(" ")[0] || "there"}, you&rsquo;re officially subscribed.</p>
                 <p>Your first kit will ship within 1-2 business days. After that, you&rsquo;ll be billed $${(subFirstPriceCents / 100).toFixed(2)} on the same day each month and a new kit will be on its way.</p>
-                <p>You can cancel anytime by emailing us at <a href="mailto:${fromEmail}">${fromEmail}</a>.</p>
+                <p>You can cancel anytime by emailing us at <a href="mailto:${fromAddress}">${fromAddress}</a>.</p>
                 <p style="font-size:13px;color:#666">Questions? DM us on Instagram <strong>@thecarddoc</strong></p>
                 <p style="font-size:13px;color:#999">${businessName}</p>
               </div>

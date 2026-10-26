@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
+import { CheckEmail, type ConfirmSent } from "./check-email";
 
 function LoginForm() {
   const router = useRouter();
@@ -15,13 +16,13 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  // The confirm email is on its way (after signing up, or signing in unconfirmed)
+  const [confirm, setConfirm] = useState<ConfirmSent | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    setNotice("");
     setLoading(true);
 
     const url = tab === "login"
@@ -40,16 +41,22 @@ function LoginForm() {
     const data = await res.json().catch(() => ({}));
     setLoading(false);
 
-    if (!res.ok) {
-      setError(data.error ?? "Something went wrong. Please try again.");
+    // New accounts confirm their email first (the link opens the account)
+    if (data.confirmationSent || data.code === "EMAIL_NOT_CONFIRMED") {
+      setConfirm({
+        email: email.trim(),
+        password,
+        sent: !!data.confirmationSent,
+        existingAccount: !!data.existingAccount,
+        sentFrom: data.sentFrom,
+        subject: data.subject,
+        message: data.error,
+      });
       return;
     }
 
-    // New accounts confirm their email first (the link opens the account)
-    if (data.confirmationSent) {
-      setNotice(`Check your email: we sent a link to ${email} to confirm your account.`);
-      setTab("login");
-      setPassword("");
+    if (!res.ok) {
+      setError(data.error ?? "Something went wrong. Please try again.");
       return;
     }
 
@@ -67,6 +74,14 @@ function LoginForm() {
           <p className="text-muted-foreground text-sm mt-2">Customer portal</p>
         </div>
 
+        {confirm ? (
+          <CheckEmail
+            info={confirm}
+            onConfirmed={() => { router.push(next); router.refresh(); }}
+            onStartOver={() => { setConfirm(null); setTab("signup"); setEmail(""); setPassword(""); setError(""); }}
+            onBack={() => { setConfirm(null); setTab("login"); setPassword(""); setError(""); }}
+          />
+        ) : (
         <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
           {/* Tabs */}
           <div className="grid grid-cols-2 border-b border-border">
@@ -130,11 +145,6 @@ function LoginForm() {
                 {error}
               </div>
             )}
-            {notice && (
-              <div role="status" className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800">
-                {notice}
-              </div>
-            )}
 
             <button
               type="submit"
@@ -161,6 +171,7 @@ function LoginForm() {
             )}
           </form>
         </div>
+        )}
       </div>
     </div>
   );
