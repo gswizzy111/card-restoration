@@ -22,7 +22,7 @@ export async function sendResetLink(email: string): Promise<boolean> {
   const link = `${appUrl}/account/reset-password?token_hash=${encodeURIComponent(tokenHash)}`;
   const { html, text } = accountEmail({
     heading: "Reset your password",
-    greetingName: ((data.user?.user_metadata?.name as string | undefined) ?? "").split(" ")[0],
+    greetingName: (data.user?.user_metadata?.name as string | undefined) ?? "",
     body: "someone (hopefully you) asked to reset the password for your account. Tap the button to choose a new one. If it wasn't you, you can ignore this email.",
     button: "Choose a new password",
     link,

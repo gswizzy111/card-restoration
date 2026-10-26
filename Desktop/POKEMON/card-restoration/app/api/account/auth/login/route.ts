@@ -36,7 +36,11 @@ export async function POST(request: Request) {
 
   if (error) {
     if (/not confirmed/i.test(error.message)) return notConfirmed(email);
-    return Response.json({ error: error.message }, { status: 400 });
+    if (error.status === 429) {
+      return Response.json({ error: "Too many attempts. Please wait a minute and try again.", code: "RATE_LIMITED" }, { status: 429 });
+    }
+    const wrongPassword = error.code === "invalid_credentials" || /invalid login credentials/i.test(error.message);
+    return Response.json({ error: error.message, ...(wrongPassword ? { code: "INVALID_CREDENTIALS" } : {}) }, { status: 400 });
   }
 
   // Accounts are tied to orders by email: an unconfirmed address gets no access

@@ -9,9 +9,19 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 export const INSTAGRAM_HANDLE = "@the_card_doc";
 const INSTAGRAM_URL = "https://www.instagram.com/the_card_doc";
 
+/**
+ * The first word of a name, only when it looks like a name. Anyone can sign
+ * up any address with any name, so free text (links, sentences) never makes it
+ * into an email that comes from us.
+ */
+export function safeFirstName(name?: string | null): string {
+  const first = (name ?? "").trim().split(/\s+/)[0] ?? "";
+  return /^[\p{L}\p{M}'’.-]{1,30}$/u.test(first) ? first : "";
+}
+
 export function accountEmail(opts: {
   heading: string;
-  /** First name, or empty for no greeting */
+  /** The person's name (only a plain first name is used), or empty for no greeting */
   greetingName: string;
   /** Follows "Hi Name, " so it starts lowercase; capitalized when there's no greeting */
   body: string;
@@ -20,8 +30,9 @@ export function accountEmail(opts: {
   /** Button color */
   color: string;
 }): { html: string; text: string } {
-  const lead = opts.greetingName
-    ? `Hi ${opts.greetingName}, ${opts.body}`
+  const first = safeFirstName(opts.greetingName);
+  const lead = first
+    ? `Hi ${first}, ${opts.body}`
     : opts.body.charAt(0).toUpperCase() + opts.body.slice(1);
   const expiry = "This link works once and expires in 1 hour. Didn't ask for this? Ignore this email.";
   const help = `Questions? DM us on Instagram at ${INSTAGRAM_HANDLE}.`;

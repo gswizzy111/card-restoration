@@ -19,5 +19,7 @@ export async function POST(request: Request) {
   }
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) return Response.json({ error: error.message }, { status: 400 });
+  // Anyone else signed in to this account is signed out
+  await supabase.auth.signOut({ scope: "others" });
   return Response.json({ ok: true });
 }

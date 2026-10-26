@@ -9,9 +9,11 @@ import { CheckEmail, type ConfirmSent } from "./check-email";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/account";
+  // Only paths on this site (never another site) after signing in
+  const rawNext = searchParams.get("next");
+  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\") ? rawNext : "/account";
 
-  const [tab, setTab] = useState<"login" | "signup">("login");
+  const [tab, setTab] = useState<"login" | "signup">(searchParams.get("tab") === "signup" ? "signup" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -47,7 +49,6 @@ function LoginForm() {
         email: email.trim(),
         password,
         sent: !!data.confirmationSent,
-        existingAccount: !!data.existingAccount,
         sentFrom: data.sentFrom,
         subject: data.subject,
         message: data.error,

@@ -13,4 +13,4 @@ export const fromAddress = sender.match(/<([^>]+)>/)?.[1]?.trim() ?? sender.trim
 
 /** The From header. A bare FROM_EMAIL gets the business name, so inboxes
  * show "The Card Doc" instead of an address. */
-export const fromEmail = sender.includes("<") ? sender : `${businessName} <${fromAddress}>`;
+export const fromEmail = sender.includes("<") ? sender : `"${businessName.replace(/["\\]/g, "\\$&")}" <${fromAddress}>`;

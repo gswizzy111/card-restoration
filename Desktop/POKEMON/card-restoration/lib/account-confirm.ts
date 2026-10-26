@@ -33,7 +33,7 @@ export async function emailConfirmLink(email: string, tokenHash: string, name?: 
   const link = `${CONFIRM_URL}?token_hash=${encodeURIComponent(tokenHash)}`;
   const { html, text } = accountEmail({
     heading: "Confirm your email",
-    greetingName: (name ?? "").split(" ")[0],
+    greetingName: name ?? "",
     body: "tap the button to confirm your email and open your account. Your orders placed with this email will show up there.",
     button: "Confirm my email",
     link,
