@@ -5,7 +5,7 @@ import { z } from "zod";
 
 const Body = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z.string().min(8).max(72, "Password must be at most 72 characters."),
   name: z.string().min(1).max(100),
 });
 

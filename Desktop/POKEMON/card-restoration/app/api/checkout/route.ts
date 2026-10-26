@@ -274,10 +274,10 @@ export async function POST(request: Request) {
   if (data.affiliate_code) {
     const { data: affiliate } = await admin
       .from("affiliates")
-      .select("discount_percent")
-      .ilike("code", data.affiliate_code.trim())
+      .select("code, discount_percent")
+      .ilike("code", likeExact(data.affiliate_code.trim()))
       .single();
-    if (affiliate) validatedAffiliateCode = data.affiliate_code.trim();
+    if (affiliate) validatedAffiliateCode = affiliate.code;
     discountPercent = affiliate?.discount_percent ?? 0;
     if (discountPercent > 0) {
       discountCents = Math.round(subtotalCents * discountPercent / 100);

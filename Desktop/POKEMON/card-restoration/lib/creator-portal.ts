@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { newToken, sha256, TOKEN_PATTERN } from "@/lib/admin-session";
 import { DEFAULT_COMMISSION_PERCENT } from "@/lib/commission";
+import { likeExact } from "@/lib/like-exact";
 
 /**
  * The creator portal (/affiliates): creators sign in with their code and a
@@ -22,9 +23,9 @@ export { DEFAULT_COMMISSION_PERCENT, formatPercent } from "@/lib/commission";
 
 export type Creator = { id: string; name: string; code: string; discount_percent: number };
 
-// Escape LIKE wildcards so a code is matched literally (case-insensitive)
+// A code matched literally (case-insensitive): LIKE wildcards don't count
 export function literalCode(code: string) {
-  return code.replace(/[\\%_]/g, (c) => `\\${c}`);
+  return likeExact(code);
 }
 
 export async function createCreatorSession(affiliateId: string, userAgent?: string | null) {
