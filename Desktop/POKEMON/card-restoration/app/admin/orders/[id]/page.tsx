@@ -25,6 +25,8 @@ import { PaymentMethodEditor } from "./payment-method-editor";
 import { RegenerateLabelButton } from "./regenerate-label-button";
 import type { Track } from "shippo/models/components";
 import { requireAdmin } from "@/lib/admin-auth";
+import { openProblemsFor } from "@/lib/email-problems";
+import { PROBLEM_LABELS, problemAdvice } from "@/lib/email-problem-labels";
 import { AgreementsPanel, type PanelCard } from "./agreements-panel";
 import { cardGate, gateFacts, type GateCard } from "@/lib/work-gates";
 
@@ -77,10 +79,12 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   }
 
   // Terms of Service v1.0 and later: signatures, consents and each card's work gates
-  const [{ data: sigRows }, { data: consentRows }, facts] = await Promise.all([
+  // ...and emails to this customer that didn't arrive (Resend's webhook, lib/email-problems.ts)
+  const [{ data: sigRows }, { data: consentRows }, facts, emailProblems] = await Promise.all([
     admin.from("signatures").select("id, type, order_item_id, typed_full_name, signed_at, email_verified, terms_version_id").eq("order_id", id).order("signed_at"),
     admin.from("consents").select("type, granted, granted_at").eq("order_id", id).order("granted_at"),
     gateFacts(admin, id),
+    openProblemsFor(order.customer_email),
   ]);
   const versionIds = [...new Set((sigRows ?? []).map((s) => s.terms_version_id))];
   const { data: versionRows } = versionIds.length ? await admin.from("terms_versions").select("id, version").in("id", versionIds) : { data: [] };
@@ -646,6 +650,17 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             {/* Customer info */}
             <div className="bg-white rounded-xl border border-border p-6">
               <h2 className="font-heading font-black text-lg text-foreground mb-4">Customer</h2>
+              {emailProblems.length > 0 && (
+                <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                  <p className="font-bold">Emails to this address aren&apos;t arriving</p>
+                  <p className="mt-1">
+                    {PROBLEM_LABELS[emailProblems[0].type]}{" "}
+                    {new Date(emailProblems[0].received_at).toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" })}.{" "}
+                    {problemAdvice(emailProblems[0].type)}
+                  </p>
+                  <Link href="/admin/email-problems" className="mt-1 inline-block font-semibold underline">See Email Problems</Link>
+                </div>
+              )}
               <CustomerEditor
                 orderId={order.id}
                 name={order.customer_name}

@@ -75,6 +75,8 @@ function LoginForm() {
             The Card Doc
           </Link>
           <p className="text-muted-foreground text-sm mt-2">Customer portal</p>
+          {/* The check-email view has its own heading */}
+          {!confirm && <h1 className="sr-only">{tab === "login" ? "Sign in" : "Create an account"}</h1>}
         </div>
 
         {confirm ? (
@@ -91,6 +93,8 @@ function LoginForm() {
             {(["login", "signup"] as const).map((t) => (
               <button
                 key={t}
+                type="button"
+                aria-pressed={tab === t}
                 onClick={() => { setTab(t); setError(""); }}
                 className={`py-3.5 text-sm font-bold transition-colors ${
                   tab === t
@@ -106,8 +110,9 @@ function LoginForm() {
           <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
             {tab === "signup" && (
               <div>
-                <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground block mb-1.5">Full Name</label>
+                <label htmlFor="login-name" className="text-xs font-bold uppercase tracking-wide text-muted-foreground block mb-1.5">Full Name</label>
                 <input
+                  id="login-name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -119,8 +124,9 @@ function LoginForm() {
             )}
 
             <div>
-              <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground block mb-1.5">Email</label>
+              <label htmlFor="login-email" className="text-xs font-bold uppercase tracking-wide text-muted-foreground block mb-1.5">Email</label>
               <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -131,8 +137,9 @@ function LoginForm() {
             </div>
 
             <div>
-              <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground block mb-1.5">Password</label>
+              <label htmlFor="login-password" className="text-xs font-bold uppercase tracking-wide text-muted-foreground block mb-1.5">Password</label>
               <input
+                id="login-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -144,7 +151,7 @@ function LoginForm() {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+              <div role="alert" className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
