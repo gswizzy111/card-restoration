@@ -53,9 +53,12 @@ export default function RootLayout({
         {/* Pages whose address holds a one-time link (confirm email, reset
             password, admin reset, creator and accountant setup) aren't
             reported to analytics or the pixel: both record the full URL,
-            token included. */}
+            token included. Leaving such a page inside the site starts them
+            (__startTracking, from MetaPixelRouteTracker), once the address no
+            longer holds the token. */}
         <script dangerouslySetInnerHTML={{ __html: `
-          window.__noTrack = /^\\/(account\\/(confirm|reset-password)|admin\\/reset-password|affiliates\\/setup|accountant\\/setup)(\\/|$)/.test(location.pathname);
+          window.__noTrackPath = /^\\/(account\\/(confirm|reset-password)|admin\\/reset-password|affiliates\\/setup|accountant\\/setup)(\\/|$)/;
+          window.__noTrack = window.__noTrackPath.test(location.pathname);
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
@@ -68,6 +71,12 @@ export default function RootLayout({
           n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
           t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
           document,'script','https://connect.facebook.net/en_US/fbevents.js');
+          window.__startTracking = function () {
+            window.__noTrack = false;
+            gtag('config', 'G-LSQXS277DY');
+            fbq('init','${PIXEL_ID}');
+            fbq('track','PageView');
+          };
           if (!window.__noTrack) {
             fbq('init','${PIXEL_ID}');
             fbq('track','PageView');

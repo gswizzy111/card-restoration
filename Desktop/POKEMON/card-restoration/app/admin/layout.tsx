@@ -35,6 +35,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     emailProblemCount = problemCount;
   }
 
+  // Signed out (sign-in, forgot and reset password pages): no admin menu
+  if (!role) return <main className="min-h-screen">{children}</main>;
+
   return (
     <div className="flex min-h-screen">
       <AdminNav openCaseCount={openCaseCount} openUpdateRequestCount={openInquiryCount} emailProblemCount={emailProblemCount} role={role} username={session?.username ?? null} />
