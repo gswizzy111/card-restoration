@@ -13,10 +13,10 @@ const client = new Resend(process.env.RESEND_API_KEY);
 // replies to the customer, for example). The SDK's send() calls create(), so
 // patching create covers both, for single emails and batches.
 const createOne = client.emails.create.bind(client.emails);
-client.emails.create = (payload, options) => createOne({ ...payload, replyTo: payload.replyTo || replyToAddress }, options);
+client.emails.create = (payload, options) => createOne({ ...payload, replyTo: payload.replyTo?.length ? payload.replyTo : replyToAddress }, options);
 const createBatch = client.batch.create.bind(client.batch);
 client.batch.create = ((payload, options) =>
-  createBatch(payload.map((p) => ({ ...p, replyTo: p.replyTo || replyToAddress })), options)) as typeof client.batch.create;
+  createBatch(payload.map((p) => ({ ...p, replyTo: p.replyTo?.length ? p.replyTo : replyToAddress })), options)) as typeof client.batch.create;
 
 export const resend = client;
 

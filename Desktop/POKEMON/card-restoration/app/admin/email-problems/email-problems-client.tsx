@@ -34,6 +34,12 @@ function ProblemLine({ p }: { p: EmailProblem }) {
 export function EmailProblemsClient({ initialProblems }: { initialProblems: EmailProblem[] }) {
   const router = useRouter();
   const [problems, setProblems] = useState(initialProblems);
+  // router.refresh() hands down fresh rows (a problem that arrived meanwhile)
+  const [shownProps, setShownProps] = useState(initialProblems);
+  if (initialProblems !== shownProps) {
+    setShownProps(initialProblems);
+    setProblems(initialProblems);
+  }
   const [busy, setBusy] = useState<string | null>(null);
 
   // ids: for Mark fixed, every open row the card shows
