@@ -19,6 +19,9 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
+  // Makes the share image's URL absolute; without it previews pointed at localhost
+  // (same domain as app/sitemap.ts)
+  metadataBase: new URL("https://thecarddoc1.com"),
   title: "The Card Doc — Card Cleaning Kits & Restoration",
   description:
     "Professional card cleaning kits and PSA prep restoration service for trading card collectors.",
