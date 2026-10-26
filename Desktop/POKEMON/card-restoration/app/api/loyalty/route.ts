@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { likeExact } from "@/lib/like-exact";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -9,7 +10,7 @@ export async function GET(req: Request) {
   const { count } = await admin
     .from("orders")
     .select("id", { count: "exact", head: true })
-    .ilike("customer_email", email)
+    .ilike("customer_email", likeExact(email))
     .eq("payment_status", "paid")
     .neq("status", "awaiting_payment");
 

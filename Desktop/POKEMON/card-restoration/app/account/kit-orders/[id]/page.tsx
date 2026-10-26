@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { LogoutButton } from "../../logout-button";
 import { SubscriptionCancelButton } from "./subscription-cancel-button";
+import { likeExact } from "@/lib/like-exact";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ export default async function KitOrderPage({
   const { data: activeSub } = await admin
     .from("subscriptions")
     .select("id")
-    .ilike("customer_email", user.email!)
+    .ilike("customer_email", likeExact(user.email!))
     .eq("status", "active")
     .maybeSingle();
   const hasActiveSub = !!activeSub;

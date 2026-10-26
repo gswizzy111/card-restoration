@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CONFIRM_SUBJECT, emailConfirmLink, mintConfirmToken, passwordMatches } from "@/lib/account-confirm";
+import { CONFIRM_SUBJECT, checkPassword, emailConfirmLink, mintConfirmToken } from "@/lib/account-confirm";
 import { fromAddress } from "@/lib/resend";
 import { z } from "zod";
 
@@ -51,8 +51,9 @@ export async function POST(request: Request) {
   // the first one (anyone can type any email), so the account is flagged and
   // its confirm links ask for the account's password, or a new one, before
   // confirming. Checked before sending, and nothing is sent if flagging fails.
+  // When Supabase can't say whether the password matched, it's flagged too.
   let check = !!minted.user.app_metadata?.signup_conflict;
-  if (existingAccount && !check && !(await passwordMatches(email, password))) {
+  if (existingAccount && !check && (await checkPassword(email, password)) !== "match") {
     const { error: flagError } = await adminSupabase.auth.admin.updateUserById(minted.user.id, {
       app_metadata: { ...minted.user.app_metadata, signup_conflict: true },
     });
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
   }
 
   const greet = existingAccount ? (minted.user.user_metadata?.name as string | undefined) : name;
-  const sent = await emailConfirmLink(email, minted.tokenHash, greet, check);
+  const sent = await emailConfirmLink(email, minted.tokenHash, greet, check ? minted.user.id : undefined);
   if (!sent) return Response.json({ error: "We couldn't send the confirmation email. Please try again." }, { status: 500 });
   return Response.json({ ok: true, confirmationSent: true, sentFrom: fromAddress, subject: CONFIRM_SUBJECT });
 }
