@@ -16,7 +16,7 @@ const INSTAGRAM_URL = "https://www.instagram.com/the_card_doc";
  */
 export function safeFirstName(name?: string | null): string {
   const first = (name ?? "").trim().split(/\s+/)[0] ?? "";
-  return /^[\p{L}\p{M}'’.-]{1,30}$/u.test(first) ? first : "";
+  return /^[\p{L}\p{M}'’-]{1,30}$/u.test(first) ? first : "";
 }
 
 export function accountEmail(opts: {

@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CONFIRM_SUBJECT, emailConfirmLink, mintConfirmToken } from "@/lib/account-confirm";
+import { CONFIRM_SUBJECT, emailConfirmLink, mintConfirmToken, passwordMatches } from "@/lib/account-confirm";
 import { fromAddress } from "@/lib/resend";
 import { z } from "zod";
 
@@ -46,18 +46,25 @@ export async function POST(request: Request) {
   if (minted.user.email_confirmed_at) {
     return Response.json({ error: "An account with that email already exists. Please sign in instead." }, { status: 400 });
   }
-  // Signed up before but never confirmed: the password stays the one chosen
-  // first, and the account is flagged so whoever confirms it (the owner of the
-  // inbox) chooses a new password then. That stops someone who signs up with a
-  // stranger's email from keeping a way in once the stranger confirms.
-  if (existingAccount) {
-    await adminSupabase.auth.admin.updateUserById(minted.user.id, {
+  // Signed up before but never confirmed. The password stays the one chosen
+  // first. If this sign-up used a different password, someone else may know
+  // the first one (anyone can type any email), so the account is flagged and
+  // its confirm links ask for the account's password, or a new one, before
+  // confirming. Checked before sending, and nothing is sent if flagging fails.
+  let check = !!minted.user.app_metadata?.signup_conflict;
+  if (existingAccount && !check && !(await passwordMatches(email, password))) {
+    const { error: flagError } = await adminSupabase.auth.admin.updateUserById(minted.user.id, {
       app_metadata: { ...minted.user.app_metadata, signup_conflict: true },
     });
+    if (flagError) {
+      console.error("Flagging a repeat sign-up failed:", flagError.message);
+      return Response.json({ error: "We couldn't send the confirmation email. Please try again." }, { status: 500 });
+    }
+    check = true;
   }
 
   const greet = existingAccount ? (minted.user.user_metadata?.name as string | undefined) : name;
-  const sent = await emailConfirmLink(email, minted.tokenHash, greet);
+  const sent = await emailConfirmLink(email, minted.tokenHash, greet, check);
   if (!sent) return Response.json({ error: "We couldn't send the confirmation email. Please try again." }, { status: 500 });
   return Response.json({ ok: true, confirmationSent: true, sentFrom: fromAddress, subject: CONFIRM_SUBJECT });
 }

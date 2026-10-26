@@ -9,9 +9,11 @@ import { CheckEmail, type ConfirmSent } from "./check-email";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Only paths on this site (never another site) after signing in
+  // Only paths on this site after signing in: a single leading slash, and no
+  // backslashes or control characters (browsers drop tabs and newlines, so
+  // "/<tab>/evil.example" would otherwise become "//evil.example")
   const rawNext = searchParams.get("next");
-  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\") ? rawNext : "/account";
+  const next = rawNext && /^\/(?!\/)/.test(rawNext) && !/[\\\u0000-\u001f\u007f]/.test(rawNext) ? rawNext : "/account";
 
   const [tab, setTab] = useState<"login" | "signup">(searchParams.get("tab") === "signup" ? "signup" : "login");
   const [email, setEmail] = useState("");

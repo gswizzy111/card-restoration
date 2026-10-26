@@ -1,4 +1,4 @@
-import type { User } from "@supabase/supabase-js";
+import { createClient as createSupabase, type User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { accountEmail } from "@/lib/account-email";
@@ -28,9 +28,36 @@ export async function mintConfirmToken(email: string): Promise<{ tokenHash: stri
   return { tokenHash, user: data.user };
 }
 
-/** Emails the confirm link for a token from mintConfirmToken. False when the send failed. */
-export async function emailConfirmLink(email: string, tokenHash: string, name?: string | null): Promise<boolean> {
-  const link = `${CONFIRM_URL}?token_hash=${encodeURIComponent(tokenHash)}`;
+/**
+ * Whether `password` is this unconfirmed account's password, checked on a
+ * throwaway client so no session is kept: Supabase answers "Email not
+ * confirmed" only when the password is right.
+ */
+export async function passwordMatches(email: string, password: string): Promise<boolean> {
+  const check = createSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await check.auth.signInWithPassword({ email, password });
+  if (!error) {
+    if (data.session) await check.auth.signOut({ scope: "local" });
+    return true;
+  }
+  return error.code === "email_not_confirmed" || /not confirmed/i.test(error.message);
+}
+
+/**
+ * Emails the confirm link for a token from mintConfirmToken. False when the
+ * send failed. `check`: the account was signed up more than once with
+ * different passwords, so the confirm page (on the new site) asks for its
+ * password, or a new one, before confirming.
+ */
+export async function emailConfirmLink(email: string, tokenHash: string, name?: string | null, check = false): Promise<boolean> {
+  const params = new URLSearchParams({ token_hash: tokenHash });
+  if (check) {
+    params.set("email", email);
+    params.set("check", "1");
+  }
+  const link = `${CONFIRM_URL}?${params.toString()}`;
   const { html, text } = accountEmail({
     heading: "Confirm your email",
     greetingName: name ?? "",
@@ -56,5 +83,6 @@ export async function emailConfirmLink(email: string, tokenHash: string, name?: 
 export async function sendConfirmLink(email: string, name?: string | null): Promise<boolean> {
   const minted = await mintConfirmToken(email);
   if (!minted) return false;
-  return emailConfirmLink(email, minted.tokenHash, name ?? (minted.user.user_metadata?.name as string | undefined));
+  const check = !!minted.user.app_metadata?.signup_conflict;
+  return emailConfirmLink(email, minted.tokenHash, name ?? (minted.user.user_metadata?.name as string | undefined), check);
 }
