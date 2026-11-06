@@ -51,27 +51,28 @@ export default async function AdminAffiliatesPage({
     .order("created_at", { ascending: false });
 
   const now = new Date().toISOString();
-  const rates = await commissionRatesFor((affiliates ?? []).map((a) => a.id));
+  // Rates and both kinds of orders, all at once
+  const [rates, { data: kitOrders }, { data: restorationOrders }] = await Promise.all([
+    commissionRatesFor((affiliates ?? []).map((a) => a.id)),
+    // Kit orders with affiliate codes
+    admin
+      .from("shop_orders")
+      .select("id, items, total_cents, refunded_cents, created_at, status, customer_name, affiliate_code")
+      .not("affiliate_code", "is", null)
+      .order("created_at", { ascending: false }),
+    // Restoration orders with affiliate codes
+    admin
+      .from("orders")
+      .select("id, total_cents, refunded_cents, created_at, customer_name, affiliate_code, status")
+      .not("affiliate_code", "is", null)
+      .order("created_at", { ascending: false }),
+  ]);
   const allAffiliates: Affiliate[] = (affiliates ?? []).map(({ password_hash, setup_token_expires_at, ...a }) => ({
     ...a,
     portal_set_up: !!password_hash,
     setup_link_pending: !!setup_token_expires_at && setup_token_expires_at > now,
     commission_percent: currentRate(rates.get(a.id)),
   }));
-
-  // Fetch kit orders with affiliate codes
-  const { data: kitOrders } = await admin
-    .from("shop_orders")
-    .select("id, items, total_cents, refunded_cents, created_at, status, customer_name, affiliate_code")
-    .not("affiliate_code", "is", null)
-    .order("created_at", { ascending: false });
-
-  // Fetch restoration orders with affiliate codes
-  const { data: restorationOrders } = await admin
-    .from("orders")
-    .select("id, total_cents, refunded_cents, created_at, customer_name, affiliate_code, status")
-    .not("affiliate_code", "is", null)
-    .order("created_at", { ascending: false });
 
   // Build sales map by code
   const salesByCode: Record<string, Sale[]> = {};

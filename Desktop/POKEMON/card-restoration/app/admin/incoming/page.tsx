@@ -12,22 +12,24 @@ export default async function IncomingPackagesPage() {
 
   const admin = createAdminClient();
 
-  // All buy_label orders that haven't arrived yet
-  const { data: incoming } = await admin
-    .from("orders")
-    .select("id, order_number, customer_name, customer_email, customer_phone, created_at, inbound_carrier, inbound_service_level, inbound_tracking_number, total_cents, status")
-    .eq("inbound_method", "buy_label")
-    .eq("status", "awaiting_cards")
-    .order("created_at", { ascending: true });
+  const [{ data: incoming }, { data: arrived }] = await Promise.all([
+    // All buy_label orders that haven't arrived yet
+    admin
+      .from("orders")
+      .select("id, order_number, customer_name, customer_email, customer_phone, created_at, inbound_carrier, inbound_service_level, inbound_tracking_number, total_cents, status")
+      .eq("inbound_method", "buy_label")
+      .eq("status", "awaiting_cards")
+      .order("created_at", { ascending: true }),
 
-  // All buy_label orders that have arrived (recently received/in_progress/completed)
-  const { data: arrived } = await admin
-    .from("orders")
-    .select("id, order_number, customer_name, created_at, inbound_carrier, inbound_tracking_number, status")
-    .eq("inbound_method", "buy_label")
-    .in("status", ["received", "in_progress", "completed", "shipped_back", "delivered"])
-    .order("created_at", { ascending: false })
-    .limit(20);
+    // All buy_label orders that have arrived (recently received/in_progress/completed)
+    admin
+      .from("orders")
+      .select("id, order_number, customer_name, created_at, inbound_carrier, inbound_tracking_number, status")
+      .eq("inbound_method", "buy_label")
+      .in("status", ["received", "in_progress", "completed", "shipped_back", "delivered"])
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
 
   return (
     <div className="min-h-screen bg-secondary/30">

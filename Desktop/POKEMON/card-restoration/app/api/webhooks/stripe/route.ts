@@ -420,6 +420,7 @@ export async function POST(request: Request) {
             if (c.s) row.card_set = c.s;
             if (c.y) row.card_year = c.y;
             if (c.v) row.estimated_value_cents = c.v;
+            if (tierName in RESTORATION_TIERS) row.tier = tierName;
             newCardRows.push(row);
           } catch { /* skip malformed card */ }
         }
@@ -523,6 +524,10 @@ export async function POST(request: Request) {
             })
             .eq("order_id", upgradeOrderId)
             .eq("service_id", oldTier);
+        }
+        // Cards booked under the old tier move with the order
+        if (oldTier && oldTier !== newTier) {
+          await admin.from("cards").update({ tier: newTier }).eq("order_id", upgradeOrderId).eq("tier", oldTier);
         }
 
         await admin.from("order_events").insert({

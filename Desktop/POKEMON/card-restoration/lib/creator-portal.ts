@@ -28,6 +28,22 @@ export function literalCode(code: string) {
   return likeExact(code);
 }
 
+/**
+ * The creator or coupon code a customer typed at checkout, matched literally
+ * and case-insensitively. Checkouts store the returned `code` on the order, so
+ * the sale is credited to that code whatever casing the customer used.
+ */
+export async function findCode(input: string | null | undefined) {
+  const code = input?.trim();
+  if (!code) return null;
+  const { data } = await createAdminClient()
+    .from("affiliates")
+    .select("id, name, code, discount_percent")
+    .ilike("code", literalCode(code))
+    .maybeSingle();
+  return data ? { ...data, discount_percent: data.discount_percent ?? 0 } : null;
+}
+
 export async function createCreatorSession(affiliateId: string, userAgent?: string | null) {
   const token = newToken();
   const admin = createAdminClient();

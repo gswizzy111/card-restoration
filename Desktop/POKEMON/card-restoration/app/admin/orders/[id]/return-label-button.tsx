@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { connectQZ, findPrinter, printLabel, isQZActive, listPrinters } from "@/lib/qz-print";
+import { LabelifePrintButton } from "@/components/admin/labelife-print-button";
 
 type Rate = {
   objectId: string;
@@ -26,6 +27,8 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
   const [errorMsg, setErrorMsg] = useState("");
   const [printing, setPrinting] = useState(false);
   const [needsRepurchase, setNeedsRepurchase] = useState(false);
+  // Set once a label is bought, so it goes straight to Labelife when QZ Tray isn't running
+  const [justPurchased, setJustPurchased] = useState(false);
   const [qzConnected, setQzConnected] = useState(false);
   const [printerName, setPrinterName] = useState<string>(() =>
     typeof window !== "undefined" ? (localStorage.getItem("qz_printer") ?? "D520") : "D520"
@@ -98,7 +101,35 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
     }
   }
 
-  async function purchaseLabel() {
+  /** One tap: buy the cheapest rate (with the customer's insurance, if any) and print it. */
+  async function quickPrint() {
+    setState("fetching");
+    setErrorMsg("");
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/return-label`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to get rates");
+      if (data.labelUrl) {
+        setLabelUrl(data.labelUrl);
+        setJustPurchased(true);
+        setState("idle");
+        return;
+      }
+      const cheapest: Rate | undefined = data.rates?.[0];
+      if (!cheapest) throw new Error("No rates available");
+      if (!confirm(`Buy a ${cheapest.provider} ${cheapest.service} label for $${parseFloat(cheapest.amount).toFixed(2)}${hasRoundTripInsurance ? " (+ insurance)" : ""} and print it?`)) {
+        setState("idle");
+        return;
+      }
+      await purchaseLabel(cheapest);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setState("error");
+    }
+  }
+
+  async function purchaseLabel(rate: Rate | null = selectedRate) {
+    const selectedRate = rate;
     if (!selectedRate) return;
     setState("purchasing");
     // When customer paid for round-trip insurance, always apply their declared value — not overridable
@@ -121,8 +152,9 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
       setLabelUrl(data.labelUrl);
       setState("idle");
       router.refresh();
-      // Auto-print after purchase
-      await handlePrint(data.labelUrl);
+      // Auto-print after purchase: QZ Tray if it's running, otherwise Labelife
+      if (qzConnected || isQZActive()) await handlePrint(data.labelUrl);
+      else setJustPurchased(true);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Unknown error");
       setState("error");
@@ -188,6 +220,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
               >
                 Open PDF
               </a>
+              <LabelifePrintButton labelUrl={labelUrl} autoPrint={justPurchased} />
             </div>
           )}
         </div>
@@ -261,7 +294,7 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
 
           <div className="flex gap-2 mt-1">
             <button
-              onClick={purchaseLabel}
+              onClick={() => purchaseLabel()}
               className="text-sm font-bold px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center gap-1.5"
             >
               🖨 Purchase & Print (${parseFloat(selectedRate.amount).toFixed(2)}{hasRoundTripInsurance ? ` + ins. 🛡` : addInsurance && insuranceValue && parseFloat(insuranceValue) > 0 ? ` + ~$${(parseFloat(insuranceValue) * 0.015).toFixed(2)} ins.` : ""})
@@ -281,12 +314,21 @@ export function ReturnLabelButton({ orderId, existingLabelUrl, insuranceType, in
               🛡 {insuranceType === "return" ? "Return" : "Round-trip"} insurance will auto-apply (${(insuranceDeclaredValueCents! / 100).toLocaleString()} declared)
             </p>
           )}
-          <button
-            onClick={fetchRates}
-            className="text-sm font-bold px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity w-fit"
-          >
-            Create Return Label
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={fetchRates}
+              className="text-sm font-bold px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity w-fit"
+            >
+              Create Return Label
+            </button>
+            <button
+              onClick={quickPrint}
+              title="Buy the cheapest label and print it"
+              className="flex items-center gap-1.5 text-sm font-bold px-4 py-2 bg-foreground text-background rounded-lg hover:opacity-90 transition-opacity"
+            >
+              <span>🖨</span> Print
+            </button>
+          </div>
         </div>
       )}
 

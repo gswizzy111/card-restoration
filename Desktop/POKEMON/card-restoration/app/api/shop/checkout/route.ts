@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       .single();
     if (!affiliate) return Response.json({ error: "Invalid creator code." }, { status: 400 });
     validatedAffiliateCode = affiliate.code;
-    discountPercent = affiliate.discount_percent ?? 0;
+    discountPercent = affiliate.discount_percent;
   }
   // Same math as the cart checkout page: discount on products, tax after discount
   const discountCents = discountPercent > 0 ? Math.round(productSubtotalCents * discountPercent / 100) : 0;

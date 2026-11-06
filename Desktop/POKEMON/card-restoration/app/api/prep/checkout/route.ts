@@ -10,6 +10,8 @@ import { recordConsents, recordSignatures, signingContext, type SignatureInput }
 import { ensureTermsVersion, type TermsVersionRow } from "@/lib/terms-versions";
 import { shippingRate } from "@/lib/inbound-rate";
 import { MAX_CARD_PHOTOS } from "@/lib/site-config";
+import { findCode } from "@/lib/creator-portal";
+import { itemAmounts } from "@/lib/item-pricing";
 
 const CardSchema = z.object({
   card_name: z.string().trim().min(1).max(200),
@@ -43,6 +45,7 @@ const Body = z.object({
   add_insurance: z.boolean().optional().default(false),
   insurance_amount_cents: z.number().int().min(0).max(1_000_000).optional().default(0),
   social_handle: z.string().optional(),
+  affiliate_code: z.string().optional(),
   customer_notes: z.string().optional(),
 }).extend(SigningSchema.shape);
 
@@ -140,8 +143,20 @@ export async function POST(request: Request) {
   const preGradeSubtotal = d.add_pre_grade ? d.cards.length * prices.preGradePriceCents : 0;
   const slabCrackSubtotal = slabCrackCount * prices.slabCrackPriceCents;
   const serviceSubtotal = prepSubtotal + preGradeSubtotal + slabCrackSubtotal;
-  // NJ sales tax only applies to US domestic orders
-  const taxCents = isInternational ? 0 : Math.round(serviceSubtotal * NJ_TAX_RATE);
+
+  // Creator or coupon code: discount looked up server-side, off the service subtotal
+  let validatedAffiliateCode: string | null = null;
+  let discountPercent = 0;
+  if (d.affiliate_code?.trim()) {
+    const affiliate = await findCode(d.affiliate_code);
+    if (!affiliate) return Response.json({ error: "That creator or coupon code isn't valid." }, { status: 400 });
+    validatedAffiliateCode = affiliate.code;
+    discountPercent = affiliate.discount_percent;
+  }
+  const discountCents = discountPercent > 0 ? Math.round(serviceSubtotal * discountPercent / 100) : 0;
+
+  // NJ sales tax only applies to US domestic orders, on the subtotal after discount
+  const taxCents = isInternational ? 0 : Math.round((serviceSubtotal - discountCents) * NJ_TAX_RATE);
 
   // Shipping is priced from the Shippo rate quoted for this address (never the
   // browser's price). The prepaid label's rate (to us) is paid twice, to us and
@@ -163,7 +178,7 @@ export async function POST(request: Request) {
   const hasInsurance = d.insurance_election === "purchased" && (d.insurance_amount_cents ?? 0) > 0;
   const insuranceCents = hasInsurance ? estimateInsuranceCents(d.insurance_amount_cents ?? 0) : 0;
 
-  const totalCents = serviceSubtotal + taxCents + shippingAmountCents + insuranceCents;
+  const totalCents = serviceSubtotal - discountCents + taxCents + shippingAmountCents + insuranceCents;
 
   const shipFromAddress = (d.street1 && d.city) ? {
     name: d.customer_name,
@@ -204,6 +219,8 @@ export async function POST(request: Request) {
     slab_crack_count: slabCrackCount,
     terms_version_id: terms.id,
     insurance_election: d.insurance_election,
+    ...(discountCents > 0 ? { discount_cents: discountCents, discount_percent: discountPercent } : {}),
+    ...(validatedAffiliateCode ? { affiliate_code: validatedAffiliateCode } : {}),
   }).select("id, order_number").single();
 
   if (orderErr || !order) {
@@ -211,11 +228,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "Failed to create order. Please try again." }, { status: 500 });
   }
 
-  // Insert cards (the order's items), each with its prep price and tax
+  // Insert cards (the order's items), each with its prep price and its share
+  // of the discount and tax
   const cardIds = d.cards.map(() => randomUUID());
+  const cardAmounts = itemAmounts(
+    d.cards.map((c) => cardPrepCents(c.declared_value_cents, prices.standardPriceCents)),
+    discountPercent > 0 ? Math.round(prepSubtotal * discountPercent / 100) : 0,
+    undefined,
+    isInternational ? 0 : NJ_TAX_RATE,
+  );
   const { error: cardsErr } = await admin.from("cards").insert(
     d.cards.map((c, i) => {
-      const price = cardPrepCents(c.declared_value_cents, prices.standardPriceCents);
       return {
         id: cardIds[i],
         order_id: order.id,
@@ -235,9 +258,7 @@ export async function POST(request: Request) {
         slab_removal_selected: !!slabSigned[i],
         pregrade_selected: d.add_pre_grade,
         status: "active",
-        service_price_cents: price,
-        discount_cents: 0,
-        tax_cents: isInternational ? 0 : Math.round(price * NJ_TAX_RATE),
+        ...cardAmounts[i],
       };
     })
   );
@@ -254,6 +275,7 @@ export async function POST(request: Request) {
       ],
     })),
     order_lines: [
+      ...(discountCents > 0 ? [{ name: `Discount (${validatedAffiliateCode})`, cents: -discountCents }] : []),
       ...(d.shipping_method === "buy_label"
         ? [{ name: "Prepaid shipping label, to us and back", cents: shippingAmountCents }]
         : [
@@ -391,12 +413,32 @@ export async function POST(request: Request) {
     });
   }
 
+  // The discount goes to Stripe as a fixed-amount coupon (Stripe refuses
+  // negative line items, and a percent coupon would also come off tax and shipping)
+  let discounts: { coupon: string }[] | undefined;
+  if (discountCents > 0) {
+    try {
+      const coupon = await stripe.coupons.create({
+        amount_off: discountCents,
+        currency: "usd",
+        duration: "once",
+        name: `${discountPercent}% Off — ${validatedAffiliateCode}`.slice(0, 40),
+      });
+      discounts = [{ coupon: coupon.id }];
+    } catch (err) {
+      console.error("Failed to create Stripe coupon:", err);
+      await admin.from("orders").delete().eq("id", order.id);
+      return Response.json({ error: "Payment setup failed. Please try again." }, { status: 500 });
+    }
+  }
+
   let session: Awaited<ReturnType<typeof stripe.checkout.sessions.create>>;
   try {
     session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: d.customer_email,
       line_items: lineItems,
+      discounts,
       success_url: `${appUrl}/orders/${order.order_number}?confirmed=1`,
       cancel_url: `${appUrl}/prep/order`,
       metadata: {
@@ -405,6 +447,7 @@ export async function POST(request: Request) {
         slab_crack_count: String(slabCrackCount),
         add_pre_grade: d.add_pre_grade ? "true" : "false",
         is_international: isInternational ? "true" : "false",
+        affiliate_code: validatedAffiliateCode ?? "",
         ...(shippingRateObjectId ? { shipping_rate_object_id: shippingRateObjectId } : {}),
         ...(hasInsurance ? {
           insurance_declared_value_cents: String(d.insurance_amount_cents),

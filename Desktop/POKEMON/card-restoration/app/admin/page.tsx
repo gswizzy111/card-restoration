@@ -17,6 +17,8 @@ import { INQUIRY_TYPE, OPEN_CASE_STATUSES, orderLabel } from "@/lib/card-inquiri
 import { addDays, etToday, getBacklogDays, getBacklogNow, getRevenueSeries } from "@/lib/dashboard-metrics";
 import { syncRefundsQuietly } from "@/lib/refund-ledger";
 import { fetchAll } from "@/lib/fetch-all";
+import { thumbnail } from "@/lib/thumbnail";
+import { pregradeCounts, pregradeLabel } from "@/lib/pregrade";
 
 // Whole days since a customer asked for an update (the page renders per request)
 function daysWaiting(askedAt: string) {
@@ -30,6 +32,8 @@ const TIER_BADGES: Record<string, { label: string; color: string }> = {
   ultra_premium: { label: "Platinum",  color: "bg-blue-100 text-blue-600" },
   elite:         { label: "Diamond",   color: "bg-cyan-100 text-cyan-700" },
   fast_pass:     { label: "Fast Pass", color: "bg-orange-100 text-orange-700" },
+  prep:          { label: "Prep",      color: "bg-emerald-100 text-emerald-700" },
+  prep_standard: { label: "Prep",      color: "bg-emerald-100 text-emerald-700" },
 };
 
 const TIER_STYLES: Record<string, { label: string; cls: string }> = {
@@ -125,7 +129,7 @@ export default async function AdminPage({
   await requireAdmin();
   const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter, sort: sortMode, method: methodFilter } = await searchParams;
   const query = q?.trim() ?? "";
-  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : tab === "gift-cards" ? "gift-cards" : tab === "updates" ? "updates" : "orders";
+  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : tab === "gift-cards" ? "gift-cards" : tab === "updates" ? "updates" : tab === "pregrades" ? "pregrades" : "orders";
   const activePeriod = shippedPeriod === "week" ? "week" : shippedPeriod === "month" ? "month" : shippedPeriod === "all" ? "all" : "today";
 
   const admin = createAdminClient();
@@ -158,6 +162,14 @@ export default async function AdminPage({
     }
     matchedOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+    // Tier chips: counts come from every match, the list shows the chosen tier
+    const searchTier = (t: string | null) => (t === "prep" || t === "prep_standard" ? "prep" : t ?? "none");
+    const tierCounts: Record<string, number> = {};
+    for (const o of matchedOrders) tierCounts[searchTier(o.restoration_tier)] = (tierCounts[searchTier(o.restoration_tier)] ?? 0) + 1;
+    const searchTierFilter = tierFilter && tierFilter !== "all" ? tierFilter : null;
+    const shownOrders = searchTierFilter ? matchedOrders.filter((o) => searchTier(o.restoration_tier) === searchTierFilter) : matchedOrders;
+    const searchHref = (t: string) => `/admin?q=${encodeURIComponent(query)}${t !== "all" ? `&tier=${t}` : ""}`;
+
     const hitsByOrder: Record<string, string[]> = {};
     for (const c of matchingCards ?? []) {
       if (!hitsByOrder[c.order_id]) hitsByOrder[c.order_id] = [];
@@ -188,13 +200,31 @@ export default async function AdminPage({
             </div>
           </div>
 
-          {(!matchedOrders || matchedOrders.length === 0) ? (
+          {matchedOrders.length > 0 && (
+            <div className="flex gap-2 flex-wrap mb-4">
+              {[["all", "All Tiers"], ["fast_pass", "Fast Pass"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"], ["prep", "Prep"], ["none", "No Tier"]].map(([val, label]) => {
+                const count = val === "all" ? matchedOrders.length : tierCounts[val] ?? 0;
+                if (val !== "all" && count === 0 && searchTierFilter !== val) return null;
+                return (
+                  <Link key={val} href={searchHref(val)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                      (searchTierFilter ?? "all") === val
+                        ? "bg-foreground text-background border-foreground"
+                        : "bg-white text-muted-foreground border-border hover:border-foreground"
+                    }`}
+                  >{label} <span className="opacity-60">{count}</span></Link>
+                );
+              })}
+            </div>
+          )}
+
+          {shownOrders.length === 0 ? (
             <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
-              No orders found matching &ldquo;{query}&rdquo;.
+              {matchedOrders.length === 0 ? <>No orders found matching &ldquo;{query}&rdquo;.</> : <>No orders in this tier match &ldquo;{query}&rdquo;.</>}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {matchedOrders.map((order) => (
+              {shownOrders.map((order) => (
                 <Link
                   key={order.id}
                   href={`/admin/orders/${order.id}`}
@@ -252,6 +282,9 @@ export default async function AdminPage({
     : { data: [] };
   const updateOrderMap = new Map((updateOrders ?? []).map((o) => [String(o.order_number), o]));
   const updateKitMap = new Map((updateKits ?? []).map((o) => [`K${o.order_number}`, o]));
+
+  // Pre-grades paid for and sent, per order (lib/pregrade.ts)
+  const pregradesPromise = pregradeCounts();
 
   // ── Fetch data for all tabs in parallel ───────────────────────────────────
   const [
@@ -363,6 +396,18 @@ export default async function AdminPage({
   }
   const filteredShippedOrders = filterByPeriod(shippedOrders, activePeriod);
 
+  // Open orders still owing pre-grades, oldest first (Pre-Grades tab and its badge)
+  const pregradesByOrder = await pregradesPromise;
+  const owesPregrades = [...pregradesByOrder].filter(([, c]) => c.done < c.owed).map(([id]) => id);
+  const { data: pregradeOrders } = owesPregrades.length > 0
+    ? await admin
+        .from("orders")
+        .select("id, order_number, customer_name, customer_email, status, created_at, restoration_tier")
+        .in("id", owesPregrades)
+        .not("status", "in", "(delivered,cancelled,awaiting_payment)")
+        .order("created_at", { ascending: true })
+    : { data: [] };
+
   const orderIds = orders?.map((o) => o.id) ?? [];
   // The list covers nearly every order, so read all cards in pages and keep the listed
   // orders' (a filter naming every order ID makes a URL too long for the API gateway)
@@ -452,7 +497,7 @@ export default async function AdminPage({
   const PAST_STATUSES = ["shipped_back", "delivered"];
   // Orders we consider "done" for grader-notes purposes
   const DONE_STATUSES = ["completed", "shipped_back", "delivered"];
-  const tierMatchFn = (tier: string | null) => !tierFilter || tierFilter === "all" || tier === tierFilter;
+  const tierMatchFn = (tier: string | null) => !tierFilter || tierFilter === "all" || tier === tierFilter || (tierFilter === "prep" && tier === "prep_standard");
   const methodMatchFn = (o: Record<string, unknown>) => {
     if (!methodFilter || methodFilter === "all") return true;
     if (methodFilter === "unset") return !(o as any).payment_method;
@@ -546,6 +591,23 @@ export default async function AdminPage({
             }`}
           >
             All Orders
+          </Link>
+          <Link
+            href="/admin?tab=pregrades"
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors flex items-center gap-2 ${
+              activeTab === "pregrades"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Pre-Grades
+            {(pregradeOrders?.length ?? 0) > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeTab === "pregrades" ? "bg-indigo-100 text-indigo-700" : "bg-indigo-600 text-white"
+              }`}>
+                {pregradeOrders?.length}
+              </span>
+            )}
           </Link>
           <Link
             href="/admin?tab=updates"
@@ -730,7 +792,7 @@ export default async function AdminPage({
               return (
                 <>
                   <div className="flex gap-2 flex-wrap mb-2">
-                    {[["all", "All Tiers"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"]].map(([val, label]) => (
+                    {[["all", "All Tiers"], ["fast_pass", "Fast Pass"], ["elite", "Diamond"], ["ultra_premium", "Platinum"], ["premium", "Gold"], ["expedited", "Silver"], ["regular", "Bronze"], ["prep", "Prep"]].map(([val, label]) => (
                       <Link key={val} href={ordersHref({ tier: val })}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
                           (tierFilter ?? "all") === val
@@ -800,6 +862,11 @@ export default async function AdminPage({
                             Insured ${((order as any).insurance_declared_value_cents / 100).toFixed(0)}
                           </span>
                         )}
+                        {pregradesByOrder.get(order.id) && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                            🔍 {pregradeLabel(pregradesByOrder.get(order.id)!)}
+                          </span>
+                        )}
                         {(order as any).instagram_feature && (
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">
                             🎬 Video
@@ -821,7 +888,7 @@ export default async function AdminPage({
                         <div className="flex gap-1.5 mt-2 flex-wrap">
                           {photosByOrder[order.id].slice(0, 5).map((url, i) => (
                             /* eslint-disable-next-line @next/next/no-img-element */
-                            <img key={i} src={url} alt="Card" className="w-12 h-12 object-cover rounded-lg border border-border" />
+                            <img key={i} src={thumbnail(url, 48)} alt="Card" loading="lazy" decoding="async" className="w-12 h-12 object-cover rounded-lg border border-border" />
                           ))}
                           {photosByOrder[order.id].length > 5 && (
                             <div className="w-12 h-12 rounded-lg border border-border bg-secondary flex items-center justify-center text-xs font-bold text-muted-foreground">
@@ -870,6 +937,11 @@ export default async function AdminPage({
                               Insured ${((order as any).insurance_declared_value_cents / 100).toFixed(0)}
                             </span>
                           )}
+                          {pregradesByOrder.get(order.id) && (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                              🔍 {pregradeLabel(pregradesByOrder.get(order.id)!)}
+                            </span>
+                          )}
                           {videoOrderIds.includes(order.id) && (
                             <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">
                               Video
@@ -890,7 +962,7 @@ export default async function AdminPage({
                           <div className="flex gap-1.5 mt-2 flex-wrap">
                             {photosByOrder[order.id].slice(0, 5).map((url, i) => (
                               /* eslint-disable-next-line @next/next/no-img-element */
-                              <img key={i} src={url} alt="Card" className="w-12 h-12 object-cover rounded-lg border border-border" />
+                              <img key={i} src={thumbnail(url, 48)} alt="Card" loading="lazy" decoding="async" className="w-12 h-12 object-cover rounded-lg border border-border" />
                             ))}
                             {photosByOrder[order.id].length > 5 && (
                               <div className="w-12 h-12 rounded-lg border border-border bg-secondary flex items-center justify-center text-xs font-bold text-muted-foreground">
@@ -955,7 +1027,7 @@ export default async function AdminPage({
                         <div key={i} className="flex items-center gap-3 mb-2">
                           {card.photos[0] && (
                             /* eslint-disable-next-line @next/next/no-img-element */
-                            <img src={card.photos[0]} alt={card.name} className="w-12 h-12 object-cover rounded-lg border border-border flex-shrink-0" />
+                            <img src={thumbnail(card.photos[0], 48)} alt={card.name} loading="lazy" decoding="async" className="w-12 h-12 object-cover rounded-lg border border-border flex-shrink-0" />
                           )}
                           <span className="text-sm font-medium text-foreground">{card.name}</span>
                         </div>
@@ -1083,6 +1155,11 @@ export default async function AdminPage({
                               )}
                               {(order as any).instagram_feature && (
                                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">🎬</span>
+                              )}
+                              {pregradesByOrder.get(order.id) && (
+                                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                                  🔍 {pregradeLabel(pregradesByOrder.get(order.id)!)}
+                                </span>
                               )}
                             </div>
                           </td>
@@ -1367,6 +1444,68 @@ export default async function AdminPage({
         )}
 
         {/* ── GIFT CARDS TAB ── */}
+        {/* ── PRE-GRADES TAB ── */}
+        {activeTab === "pregrades" && (
+          <>
+            {(pregradeOrders ?? []).length === 0 ? (
+              <div className="bg-white rounded-xl border border-border p-16 text-center">
+                <p className="text-2xl mb-2">🔍</p>
+                <p className="font-heading font-black text-lg text-foreground">No pre-grades owed</p>
+                <p className="text-sm text-muted-foreground mt-1">Open orders with a paid pre-grade that hasn&apos;t been sent will appear here.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/40">
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Order</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Customer</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Status</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Tier</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Pre-Grades</th>
+                      <th className="text-left px-4 py-3 font-bold text-muted-foreground text-xs uppercase tracking-wide">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(pregradeOrders ?? []).map((order) => {
+                      const count = pregradesByOrder.get(order.id)!;
+                      const tier = order.restoration_tier ? TIER_BADGES[order.restoration_tier] : null;
+                      return (
+                        <tr key={order.id} className="border-b border-border last:border-0 hover:bg-secondary/30">
+                          <td className="px-4 py-3">
+                            <Link href={`/admin/orders/${order.id}`} className="font-heading font-black text-primary hover:underline">
+                              {/^\d+$/.test(String(order.order_number)) ? `R${order.order_number}` : order.order_number}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-foreground">{order.customer_name}</p>
+                            <p className="text-xs text-muted-foreground">{order.customer_email}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                              {ORDER_STATUSES[order.status as OrderStatus]?.label ?? order.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {tier ? <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tier.color}`}>{tier.label}</span> : <span className="text-xs text-muted-foreground">{order.restoration_tier ?? "—"}</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-bold text-indigo-700">{count.owed - count.done} owed</span>
+                            <span className="text-xs text-muted-foreground"> · {count.done}/{count.owed} done</span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {new Date(order.created_at).toLocaleDateString("en-US", { timeZone: "America/New_York" })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
         {/* ── UPDATE REQUESTS TAB ── */}
         {activeTab === "updates" && (
           <div className="bg-white rounded-xl border border-border overflow-hidden">
@@ -1556,7 +1695,7 @@ export default async function AdminPage({
                               <div key={i} className="flex items-center gap-2">
                                 {card.photo && (
                                   /* eslint-disable-next-line @next/next/no-img-element */
-                                  <img src={card.photo} alt={card.name} className="w-12 h-12 object-cover rounded-lg border border-pink-200 flex-shrink-0" />
+                                  <img src={thumbnail(card.photo, 48)} alt={card.name} loading="lazy" decoding="async" className="w-12 h-12 object-cover rounded-lg border border-pink-200 flex-shrink-0" />
                                 )}
                                 <span className="text-sm font-medium text-foreground">{card.name}</span>
                               </div>

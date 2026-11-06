@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SignedAgreements, type SignedAgreement } from "@/components/agreements/signed-agreements";
+import { STAGE_INFO, friendlyStage, parseStageEvent } from "@/lib/restoration-stages";
 import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
@@ -245,6 +246,25 @@ export default async function OrderDetailPage({
   const { data: signatures } = await admin.from("signatures").select("id, type, document_title, typed_full_name, signed_at, card_snapshot").eq("order_id", order.id).order("signed_at");
   const docUrl = (id: string) => `/api/orders/${encodeURIComponent(String(order.order_number))}/documents/${id}?email=${encodeURIComponent(email)}`;
   const signedDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" });
+  // What we've told the customer along the way, newest first
+  const { data: visibleEvents } = await admin
+    .from("order_events")
+    .select("id, event_type, description, metadata, created_at")
+    .eq("order_id", order.id)
+    .eq("is_customer_visible", true)
+    .order("created_at", { ascending: false });
+  const cardNameById = new Map((cards ?? []).map((c) => [c.id as string, c.card_name as string]));
+  const timeline = (visibleEvents ?? []).map((e) => {
+    const stage = parseStageEvent(e);
+    if (stage) {
+      const card = cardNameById.get(stage.card_id);
+      return { id: e.id, at: e.created_at, text: `${friendlyStage(stage.stage, stage.round)}${card ? ` — ${card}` : ""}`, detail: STAGE_INFO[stage.stage]?.explanation ?? null };
+    }
+    return { id: e.id, at: e.created_at, text: e.description as string, detail: null };
+  });
+  const pregradeResults = (cards ?? [])
+    .filter((c) => c.pregrade_submitted_at)
+    .sort((a, b) => String(a.pregrade_submitted_at).localeCompare(String(b.pregrade_submitted_at)));
 
   // Fetch live inbound tracking from Shippo (only while awaiting cards)
   let inboundTrack: Track | null = null;
@@ -301,6 +321,43 @@ export default async function OrderDetailPage({
           })}
         </div>
       </div>
+
+      {/* Pre-grade results */}
+      {pregradeResults.length > 0 && (
+        <div className="bg-white rounded-xl border border-indigo-200 p-6 mb-5">
+          <h2 className="font-heading font-black text-lg text-foreground mb-4">Pre-Grade Results</h2>
+          <div className="flex flex-col gap-3">
+            {pregradeResults.map((c) => (
+              <div key={c.id} className="p-3 rounded-lg bg-indigo-50">
+                <p className="font-semibold text-foreground text-sm">{c.card_name}</p>
+                <p className="text-xs text-muted-foreground mt-1">Estimated grade</p>
+                <p className="font-heading font-black text-lg text-indigo-700">{c.pregrade_result}</p>
+                {c.pregrade_notes && <p className="text-sm text-foreground whitespace-pre-wrap mt-1">{c.pregrade_notes}</p>}
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">A pre-grade is our estimate, not a guarantee of the grade a grading company will assign.</p>
+        </div>
+      )}
+
+      {/* Updates timeline */}
+      {timeline.length > 0 && (
+        <div className="bg-white rounded-xl border border-border p-6 mb-5">
+          <h2 className="font-heading font-black text-lg text-foreground mb-4">Updates</h2>
+          <ol className="flex flex-col gap-4 border-l-2 border-border ml-1.5">
+            {timeline.map((t) => (
+              <li key={t.id} className="pl-4 relative">
+                <span className="absolute -left-[7px] top-1.5 w-3 h-3 rounded-full bg-primary/60" />
+                <p className="text-sm font-semibold text-foreground">{t.text}</p>
+                {t.detail && <p className="text-sm text-muted-foreground">{t.detail}</p>}
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {new Date(t.at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {/* Cards-added success banner */}
       {added === "1" && (

@@ -51,12 +51,13 @@ function detectCarrier(trackingNumber: string): string {
 }
 
 // Fast auto-sync: only checks the 15 most recent Stripe sessions (single API call).
-async function syncRecentFromStripe() {
+// Returns how many missing orders it added.
+async function syncRecentFromStripe(): Promise<number> {
   const admin = createAdminClient();
 
   const sessions = await stripe.checkout.sessions.list({ limit: 15, status: "complete" });
   const shopSessions = sessions.data.filter((s) => s.metadata?.type === "shop");
-  if (shopSessions.length === 0) return;
+  if (shopSessions.length === 0) return 0;
 
   const { data: existing } = await admin
     .from("shop_orders")
@@ -65,7 +66,7 @@ async function syncRecentFromStripe() {
   const existingIds = new Set((existing ?? []).map((o) => o.stripe_session_id));
 
   const newSessions = shopSessions.filter((s) => !existingIds.has(s.id));
-  if (newSessions.length === 0) return;
+  if (newSessions.length === 0) return 0;
 
   const productIds = [...new Set(newSessions.flatMap((s) => {
     const items: { id: string }[] = JSON.parse(s.metadata?.items ?? "[]");
@@ -114,6 +115,7 @@ async function syncRecentFromStripe() {
   if (toInsert.length > 0) {
     await admin.from("shop_orders").insert(toInsert);
   }
+  return toInsert.length;
 }
 
 function OrderCard({ order }: { order: Record<string, any> }) {
@@ -245,18 +247,25 @@ export default async function ShopOrdersPage({
   const activeTab = tab === "not-scanned" ? "not-scanned" : "all";
 
   const admin = createAdminClient();
-  await syncRecentFromStripe();
-  const revenueSeries = activeTab === "all"
-    ? await syncRefundsQuietly(admin).then(() => getRevenueSeries(admin)).catch((e) => {
-        console.error("[kit orders] revenue_series:", e);
-        return null;
-      })
-    : null;
-
-  const { data: orders } = await admin
+  const loadOrders = () => admin
     .from("shop_orders")
     .select("*")
     .order("created_at", { ascending: false });
+
+  // The Stripe sync runs alongside the load; the orders are read again only
+  // when it added one the webhook missed
+  const synced = syncRecentFromStripe().catch((err) => { console.error("Stripe sync failed:", err); return 0; });
+  const [added, loaded, revenueSeries] = await Promise.all([
+    synced,
+    loadOrders(),
+    activeTab === "all"
+      ? synced.then(() => syncRefundsQuietly(admin)).then(() => getRevenueSeries(admin)).catch((e) => {
+          console.error("[kit orders] revenue_series:", e);
+          return null;
+        })
+      : null,
+  ]);
+  const { data: orders } = added > 0 ? await loadOrders() : loaded;
 
   // For "not-scanned" tab: check Shippo tracking on recently-shipped orders
   type NotScannedRow = { order: Record<string, any>; daysSince: number; labelCreatedAt: string | null };

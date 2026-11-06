@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SignedAgreements, type SignedAgreement } from "@/components/agreements/signed-agreements";
+import { thumbnail } from "@/lib/thumbnail";
 import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, STATUS_TIMELINE, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
@@ -20,8 +21,13 @@ import { AdminCardEditor } from "./admin-card-editor";
 import { AddCardButton } from "./add-card-button";
 import { RefundButton } from "./refund-button";
 import { RestorationStageUpdater } from "./restoration-stage-updater";
+import { PregradePanel } from "./pregrade-panel";
+import { currentStages } from "@/lib/restoration-stages";
+import { PREGRADE_SERVICE_IDS, pregradeCount } from "@/lib/pregrade";
 import { ResendConfirmationButton } from "./resend-confirmation-button";
 import { PaymentMethodEditor } from "./payment-method-editor";
+import { TierSwitcher } from "./tier-switcher";
+import { RESTORATION_TIERS } from "@/lib/restoration-tiers";
 import { RegenerateLabelButton } from "./regenerate-label-button";
 import type { Track } from "shippo/models/components";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -65,18 +71,14 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   let order = orderRes.data;
   if (!order) notFound();
 
-  // Derive per-card restoration stages from stage_update events
-  // Description format: "Stage: <stage> [card:<card_id>]"
-  const stageByCard: Record<string, string> = {};
-  const stageRegex = /^Stage: (.+?) \[card:(.+)\]$/;
-  // events are ordered DESC so first match per card is most recent
-  for (const e of events ?? []) {
-    if (e.event_type !== "stage_update") continue;
-    const m = stageRegex.exec(e.description ?? "");
-    if (!m) continue;
-    const [, stage, cardId] = m;
-    if (!stageByCard[cardId]) stageByCard[cardId] = stage;
-  }
+  // Each card's current restoration stage in its current round (events are newest first)
+  const roundByCard: Record<string, number> = Object.fromEntries((cards ?? []).map((c) => [c.id, c.current_round ?? 1]));
+  const stageByCard = currentStages(events ?? [], roundByCard);
+
+  // Pre-grades paid for on this order, and how many have been sent (lib/pregrade.ts)
+  const pregradesPaidFor = (services ?? []).filter((s) => PREGRADE_SERVICE_IDS.includes(s.service_id)).reduce((n, s) => n + (s.quantity ?? 1), 0);
+  const pregrades = pregradeCount(pregradesPaidFor, cards ?? []);
+  const pregradesOwed = pregrades.owed - pregrades.done;
 
   // Terms of Service v1.0 and later: signatures, consents and each card's work gates
   // ...and emails to this customer that didn't arrive (Resend's webhook, lib/email-problems.ts)
@@ -131,24 +133,17 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
     order = { ...order, status: "shipped_back" };
   }
 
-  // Live inbound tracking
-  let inboundTrack: Track | null = null;
-  if (order.inbound_tracking_number && order.inbound_carrier) {
-    try {
-      inboundTrack = await shippo.trackingStatus.get(
-        order.inbound_tracking_number,
-        shippoCarrierToken(order.inbound_carrier)
-      );
-    } catch { /* fail silently */ }
-  }
+  // Live inbound tracking, and return tracking when shipped back (both at once)
+  const [inboundTrack, returnTrack]: [Track | null, Track | null] = await Promise.all([
+    order.inbound_tracking_number && order.inbound_carrier
+      ? shippo.trackingStatus.get(order.inbound_tracking_number, shippoCarrierToken(order.inbound_carrier)).catch(() => null)
+      : null,
+    order.status === "shipped_back" && order.tracking_number
+      ? shippo.trackingStatus.get(order.tracking_number, "usps").catch(() => null)
+      : null,
+  ]);
 
-  // Live return tracking (when shipped back)
-  let returnTrack: Track | null = null;
   if (order.status === "shipped_back" && order.tracking_number) {
-    try {
-      returnTrack = await shippo.trackingStatus.get(order.tracking_number, "usps");
-    } catch { /* fail silently */ }
-
     // Auto-advance to delivered if Shippo confirms delivery
     if (returnTrack?.trackingStatus?.status === "DELIVERED") {
       await Promise.all([
@@ -220,6 +215,9 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                         premium:       { label: "Gold",     cls: "bg-yellow-100 text-yellow-700 border border-yellow-300" },
                         expedited:     { label: "Silver",   cls: "bg-slate-100 text-slate-600 border border-slate-300" },
                         regular:       { label: "Bronze",   cls: "bg-amber-100 text-amber-700 border border-amber-300" },
+                        fast_pass:     { label: "Fast Pass", cls: "bg-orange-100 text-orange-700 border border-orange-300" },
+                        prep:          { label: "Prep",     cls: "bg-emerald-100 text-emerald-700 border border-emerald-300" },
+                        prep_standard: { label: "Prep",     cls: "bg-emerald-100 text-emerald-700 border border-emerald-300" },
                       };
                       const badge = TIER_BADGE[order.restoration_tier] ?? { label: order.restoration_tier, cls: "bg-gray-100 text-gray-600 border border-gray-200" };
                       return (
@@ -228,10 +226,30 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                     })()}
                   </div>
                   <p className="text-sm text-muted-foreground">{new Date(order.created_at).toLocaleString("en-US", { timeZone: "America/New_York" })}</p>
+                  <TierSwitcher
+                    orderId={order.id}
+                    current={(order.restoration_tier as string | null) ?? null}
+                    placeholder={(cards ?? []).some((c) => c.tier) || (services ?? []).filter((s) => s.service_id && s.service_id in RESTORATION_TIERS).length > 1 ? "Restoration — mixed tiers" : "Restoration — no tier"}
+                  />
                 </div>
                 <span className="font-heading font-black text-2xl text-primary">{formatCurrency(order.total_cents)}</span>
               </div>
             </div>
+
+            {/* Pre-grade owed — same weight as the Instagram banner */}
+            {pregradesOwed > 0 && !["delivered", "cancelled"].includes(order.status) && (
+              <div className="rounded-xl border-4 border-indigo-600 bg-indigo-600 p-6 flex items-center gap-5 shadow-lg">
+                <span className="text-5xl shrink-0">🔍</span>
+                <div>
+                  <p className="font-heading font-black text-2xl text-white leading-tight">PRE-GRADE OWED</p>
+                  <p className="text-base font-bold text-indigo-100 mt-1">
+                    {pregradesOwed} card{pregradesOwed !== 1 ? "s" : ""} on this order paid for a pre-grade assessment
+                    {pregrades.done > 0 ? ` (${pregrades.done} of ${pregrades.owed} already sent)` : ""}.
+                    {(cards ?? []).filter((c) => c.pregrade_selected).length < pregrades.owed && " Mark which cards below."}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Instagram Feature Alert — huge red banner */}
             {((order.instagram_feature as boolean) || services?.some((s) => s.service_id === "instagram_feature")) && (
@@ -260,11 +278,11 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
               <StatusUpdater orderId={order.id} currentStatus={order.status} currentTrackingNumber={order.tracking_number as string | null} />
             </div>
 
-            {/* Restoration stage tracker — only while in progress */}
-            {order.status === "in_progress" && (
+            {/* Restoration stage tracker — while in progress, and once completed (to start another round) */}
+            {(order.status === "in_progress" || order.status === "completed") && (
               <RestorationStageUpdater
                 orderId={order.id}
-                cards={(cards ?? []).map((c) => ({ id: c.id, card_name: c.card_name, completed: !!c.completed }))}
+                cards={(cards ?? []).map((c) => ({ id: c.id, card_name: c.card_name, completed: !!c.completed, round: c.current_round ?? 1 }))}
                 stageByCard={stageByCard}
               />
             )}
@@ -346,6 +364,8 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                     expedited:     { label: "Silver",    cls: "bg-slate-100 text-slate-600 border border-slate-300" },
                     regular:       { label: "Bronze",    cls: "bg-amber-100 text-amber-700 border border-amber-300" },
                     fast_pass:     { label: "Fast Pass", cls: "bg-green-100 text-green-700 border border-green-300" },
+                    prep:          { label: "Prep",      cls: "bg-emerald-100 text-emerald-700 border border-emerald-300" },
+                    prep_standard: { label: "Prep",      cls: "bg-emerald-100 text-emerald-700 border border-emerald-300" },
                   };
                   const cardTier = card.tier ?? order.restoration_tier;
                   const tierBadge = cardTier ? (CARD_TIER_BADGE[cardTier] ?? { label: cardTier, cls: "bg-gray-100 text-gray-600" }) : null;
@@ -375,14 +395,15 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                         <p className={`font-bold ${card.completed ? "text-green-700 line-through decoration-green-400" : "text-foreground"}`}>
                           {i + 1}. {card.card_name}
                         </p>
-                        {tierBadge && (
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${tierBadge.cls}`}>{tierBadge.label}</span>
-                        )}
+                        <TierSwitcher orderId={order.id} cardId={card.id} current={cardTier ?? null} placeholder="Restoration — choose tier" className={`font-bold ${tierBadge?.cls ?? "border border-border bg-white"}`} />
                         {anyChanged && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Edited</span>
                         )}
+                        {(card.current_round ?? 1) > 1 && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-600 text-white">Round {card.current_round}</span>
+                        )}
                       </div>
-                      <CardCompletionToggle cardId={card.id} initialCompleted={!!card.completed} />
+                      <CardCompletionToggle key={`${card.id}:${card.current_round ?? 1}`} cardId={card.id} initialCompleted={!!card.completed} />
                     </div>
 
                     {/* Side-by-side diff — only when admin has edited */}
@@ -403,7 +424,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                               {(orig.photo_urls ?? []).map((url: string, j: number) => (
                                 <a key={j} href={url} target="_blank" rel="noopener noreferrer">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={url} alt="" className="w-12 h-12 object-cover rounded border border-border opacity-70" />
+                                  <img src={thumbnail(url, 48)} alt="" loading="lazy" className="w-12 h-12 object-cover rounded border border-border opacity-70" />
                                 </a>
                               ))}
                             </div>
@@ -441,7 +462,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                               {(card.photo_urls as string[] ?? []).map((url: string, j: number) => (
                                 <a key={j} href={url} target="_blank" rel="noopener noreferrer">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={url} alt="" className={`w-12 h-12 object-cover rounded border ${changed.photos ? "border-red-400 ring-1 ring-red-300" : "border-border"}`} />
+                                  <img src={thumbnail(url, 48)} alt="" loading="lazy" className={`w-12 h-12 object-cover rounded border ${changed.photos ? "border-red-400 ring-1 ring-red-300" : "border-border"}`} />
                                 </a>
                               ))}
                             </div>
@@ -463,11 +484,27 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                             {(card.photo_urls as string[]).map((url: string, j: number) => (
                               <a key={j} href={url} target="_blank" rel="noopener noreferrer">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={url} alt="Card photo" className="w-16 h-16 object-cover rounded border border-border" />
+                                <img src={thumbnail(url, 64)} alt="Card photo" loading="lazy" className="w-16 h-16 object-cover rounded border border-border" />
                               </a>
                             ))}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Pre-grade: on cards that have one, or offered while the order has unassigned pre-grades */}
+                    {(card.pregrade_selected || (cards ?? []).filter((c) => c.pregrade_selected).length < pregrades.owed) && (
+                      <div className={`px-4 py-2 border-t border-border ${card.completed ? "bg-green-50" : "bg-secondary/40"}`}>
+                        <PregradePanel
+                          cardId={card.id}
+                          pregrade={{
+                            selected: !!card.pregrade_selected,
+                            result: card.pregrade_result ?? null,
+                            notes: card.pregrade_notes ?? null,
+                            submittedAt: card.pregrade_submitted_at ?? null,
+                            submittedBy: card.pregrade_submitted_by ?? null,
+                          }}
+                        />
                       </div>
                     )}
 

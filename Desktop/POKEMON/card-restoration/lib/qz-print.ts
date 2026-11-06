@@ -8,13 +8,19 @@ async function getQZ() {
   const mod = await import("qz-tray");
   qz = mod.default ?? mod;
 
-  qz.security.setCertificatePromise((_resolve: (v: string) => void, reject: (e: unknown) => void) => {
-    try { _resolve(""); } catch (e) { reject(e); }
+  // The site's certificate and a server-side signature let QZ Tray remember
+  // "Allow" for this site, so printing doesn't ask every time
+  qz.security.setCertificatePromise((resolve: (v: string) => void, reject: (e: unknown) => void) => {
+    fetch("/api/admin/qz-cert", { cache: "no-store" })
+      .then((res) => (res.ok ? res.text() : ""))
+      .then(resolve, reject);
   });
   qz.security.setSignatureAlgorithm("SHA512");
-  qz.security.setSignaturePromise((_toSign: string) => {
-    return (_resolve: (v: string) => void, reject: (e: unknown) => void) => {
-      try { _resolve(""); } catch (e) { reject(e); }
+  qz.security.setSignaturePromise((toSign: string) => {
+    return (resolve: (v: string) => void, reject: (e: unknown) => void) => {
+      fetch("/api/admin/qz-sign", { method: "POST", body: toSign })
+        .then((res) => (res.ok ? res.text() : ""))
+        .then(resolve, reject);
     };
   });
 
@@ -73,6 +79,12 @@ export async function printLabel(labelUrl: string, printerName: string): Promise
     units: "in",
     scaleContent: true,
     margins: 0,
+    // Thermal printers only do black or white: grey and smoothed edges get
+    // dithered into fuzzy text and barcodes. Let the OS draw the PDF at the
+    // printer's own resolution instead of QZ rasterizing it first.
+    colorType: "blackwhite",
+    interpolation: "nearest-neighbor",
+    rasterize: false,
   });
 
   // format: "file" — QZ Tray desktop app fetches the URL directly at OS level,

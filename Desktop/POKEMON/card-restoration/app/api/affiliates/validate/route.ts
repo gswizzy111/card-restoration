@@ -23,6 +23,7 @@ export async function GET(request: Request) {
   return Response.json({
     ok: true,
     name: affiliate.name,
-    discount_percent: affiliate.discount_percent ?? 0,
+    code: affiliate.code,
+    discount_percent: affiliate.discount_percent,
   });
 }

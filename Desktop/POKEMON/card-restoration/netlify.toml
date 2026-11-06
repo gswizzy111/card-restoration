@@ -7,3 +7,7 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# Lets the image CDN resize card photos for admin thumbnails (lib/thumbnail.ts)
+[images]
+  remote_images = ["https://pnwokbuprjjkmejjamsb\\.supabase\\.co/storage/v1/object/public/.*"]

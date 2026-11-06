@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { SavedLabel } from "@/app/api/admin/shop-orders/[id]/return-label/route";
 import { connectQZ, findPrinter, printLabel, isQZActive, listPrinters } from "@/lib/qz-print";
+import { LabelifePrintButton } from "@/components/admin/labelife-print-button";
 
 type Rate = {
   objectId: string;
@@ -28,6 +29,8 @@ export function ReturnLabelButton({ orderId, existingLabels: initialLabels = [],
   const [qzConnected, setQzConnected] = useState(false);
   const [printingIndex, setPrintingIndex] = useState<number | null>(null);
   const [needsRepurchase, setNeedsRepurchase] = useState<number | null>(null);
+  // The label just bought, which goes straight to Labelife when QZ Tray isn't running
+  const [justPurchased, setJustPurchased] = useState<string | null>(null);
   const [addInsurance, setAddInsurance] = useState(false);
   const [insuranceValue, setInsuranceValue] = useState("");
   const [printerName, setPrinterName] = useState<string>(() =>
@@ -56,7 +59,29 @@ export function ReturnLabelButton({ orderId, existingLabels: initialLabels = [],
     }
   }
 
-  async function purchaseLabel() {
+  /** One tap: buy the cheapest rate and print it. */
+  async function quickPrint() {
+    setState("fetching");
+    setErrorMsg("");
+    try {
+      const res = await fetch(`/api/admin/shop-orders/${orderId}/return-label`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to get rates");
+      const cheapest: Rate | undefined = data.rates?.[0];
+      if (!cheapest) throw new Error("No rates available");
+      if (!confirm(`Buy a ${cheapest.provider} ${cheapest.service} label for $${parseFloat(cheapest.amount).toFixed(2)} and print it?`)) {
+        setState("idle");
+        return;
+      }
+      await purchaseLabel(cheapest);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setState("error");
+    }
+  }
+
+  async function purchaseLabel(rate: Rate | null = selectedRate) {
+    const selectedRate = rate;
     if (!selectedRate) return;
     setState("purchasing");
     const insuranceCents = addInsurance && insuranceValue ? Math.round(parseFloat(insuranceValue) * 100) : 0;
@@ -77,7 +102,8 @@ export function ReturnLabelButton({ orderId, existingLabels: initialLabels = [],
       setLabels(updated);
       setState("idle");
 
-      await handlePrint(newLabel.labelUrl, updated.length - 1);
+      if (qzConnected || isQZActive()) await handlePrint(newLabel.labelUrl, updated.length - 1);
+      else setJustPurchased(newLabel.labelUrl);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Unknown error");
       setState("error");
@@ -190,6 +216,7 @@ export function ReturnLabelButton({ orderId, existingLabels: initialLabels = [],
               >
                 Open PDF
               </a>
+              <LabelifePrintButton labelUrl={label.labelUrl} size="xs" autoPrint={justPurchased === label.labelUrl} />
             </div>
           )}
         </div>
@@ -197,12 +224,23 @@ export function ReturnLabelButton({ orderId, existingLabels: initialLabels = [],
 
       {/* Create new label */}
       {state === "idle" && (
-        <button
-          onClick={fetchRates}
-          className="text-xs font-bold px-3 py-1.5 bg-secondary text-foreground border border-border rounded-lg hover:border-primary/40 transition-colors w-fit"
-        >
-          {labels.length === 0 ? `Create ${labelName} Label` : "+ Create Another Label"}
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={fetchRates}
+            className="text-xs font-bold px-3 py-1.5 bg-secondary text-foreground border border-border rounded-lg hover:border-primary/40 transition-colors w-fit"
+          >
+            {labels.length === 0 ? `Create ${labelName} Label` : "+ Create Another Label"}
+          </button>
+          {labels.length === 0 && (
+            <button
+              onClick={quickPrint}
+              title="Buy the cheapest label and print it"
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 bg-foreground text-background rounded-lg hover:opacity-90 transition-opacity"
+            >
+              <span>🖨</span> Print
+            </button>
+          )}
+        </div>
       )}
 
       {state === "fetching" && <p className="text-xs text-muted-foreground">Getting rates…</p>}
@@ -264,7 +302,7 @@ export function ReturnLabelButton({ orderId, existingLabels: initialLabels = [],
 
           <div className="flex gap-2 mt-1">
             <button
-              onClick={purchaseLabel}
+              onClick={() => purchaseLabel()}
               className="text-xs font-bold px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center gap-1.5"
             >
               🖨 Purchase & Print (${parseFloat(selectedRate.amount).toFixed(2)}{addInsurance && insuranceValue && parseFloat(insuranceValue) > 0 ? ` + ~$${(parseFloat(insuranceValue) * 0.015).toFixed(2)} ins.` : ""})

@@ -38,7 +38,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "Failed to create affiliate." }, { status: 500 });
   }
   if (commission !== DEFAULT_COMMISSION_PERCENT) {
-    await admin.from("affiliate_commission_rates").insert({ affiliate_id: created.id, percent: commission, effective_from: "2000-01-01T00:00:00Z" });
+    const { error: rateError } = await admin.from("affiliate_commission_rates").insert({ affiliate_id: created.id, percent: commission, effective_from: "2000-01-01T00:00:00Z" });
+    if (rateError) {
+      console.error("Insert commission rate error:", rateError);
+      return Response.json({ error: `Code created, but its ${commission}% commission didn't save. Edit the code to set it again.` }, { status: 500 });
+    }
   }
 
   return Response.json({ ok: true });

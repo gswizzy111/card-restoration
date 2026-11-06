@@ -160,12 +160,37 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   const [notes, setNotes] = useState("");
   const [socialHandle, setSocialHandle] = useState("");
 
+  // Creator or coupon code
+  const [codeInput, setCodeInput] = useState("");
+  const [appliedCode, setAppliedCode] = useState("");
+  const [codeStatus, setCodeStatus] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  const [discountPercent, setDiscountPercent] = useState(0);
+
   const isInternational = country !== "US";
 
   function resetAddress() {
     setSelectedRate(null);
     setRates([]);
     setRatesFetchedFor("");
+  }
+
+  async function applyCode() {
+    const trimmed = codeInput.trim();
+    if (!trimmed || trimmed === appliedCode) return;
+    setCodeStatus("checking");
+    try {
+      const res = await fetch(`/api/affiliates/validate?code=${encodeURIComponent(trimmed)}`);
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setAppliedCode(trimmed);
+        setDiscountPercent(data.discount_percent ?? 0);
+        setCodeStatus("valid");
+        return;
+      }
+    } catch {}
+    setAppliedCode("");
+    setDiscountPercent(0);
+    setCodeStatus("invalid");
   }
 
   function addCard() { setCards((p) => [...p, emptyCard()]); }
@@ -213,15 +238,16 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
   const preGradeSubtotal = addPreGrade ? filledCards.length * preGradePriceCents : 0;
   const slabCrackSubtotal = slabCrackCount * slabCrackPriceCents;
   const serviceSubtotal = prepSubtotal + preGradeSubtotal + slabCrackSubtotal;
-  // No NJ tax for international orders
-  const taxCents = isInternational ? 0 : Math.round(serviceSubtotal * NJ_TAX_RATE);
+  const discountCents = discountPercent > 0 ? Math.round(serviceSubtotal * discountPercent / 100) : 0;
+  // No NJ tax for international orders; tax is on the subtotal after discount
+  const taxCents = isInternational ? 0 : Math.round((serviceSubtotal - discountCents) * NJ_TAX_RATE);
   // The prepaid label pays the rate twice (to us and back); shipping your own
   // way pays it once, for the trip back to you
   const shippingTrips = shippingMethod === "buy_label" ? 2 : 1;
   const shippingCents = (selectedRate?.amount_cents ?? 0) * shippingTrips;
   const insuranceDeclaredValueCents = addInsurance ? Math.round((parseFloat(insuranceValueDollars) || 0) * 100) : 0;
   const estimatedInsuranceCents = estimateInsuranceCents(insuranceDeclaredValueCents);
-  const totalEstimate = serviceSubtotal + taxCents + shippingCents + estimatedInsuranceCents;
+  const totalEstimate = serviceSubtotal - discountCents + taxCents + shippingCents + estimatedInsuranceCents;
   const totalDeclaredValueCents = filledCards.reduce((sum, c) => sum + cardValueCents(c), 0);
 
   // Rates are quoted per address and per method (to us, or back to you)
@@ -364,6 +390,7 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
             insurance_amount_cents: insuranceDeclaredValueCents,
           } : {}),
           social_handle: socialHandle.trim() || undefined,
+          affiliate_code: appliedCode || undefined,
           customer_notes: notes.trim() || undefined,
           ...submittedSigning(signing, slabCards),
         }),
@@ -745,6 +772,31 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
           </div>
         </div>
 
+        {/* Creator / coupon code */}
+        <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-2">
+          <label htmlFor="prep-code" className="font-heading font-black text-base text-foreground">
+            Creator or coupon code <span className="text-muted-foreground font-normal text-sm">(optional)</span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="prep-code"
+              className="flex-1 h-10 border border-border rounded-lg px-3 text-sm font-mono uppercase focus:outline-none focus:border-primary transition-colors bg-white"
+              value={codeInput}
+              onChange={(e) => { setCodeInput(e.target.value.toUpperCase()); setAppliedCode(""); setDiscountPercent(0); setCodeStatus("idle"); }}
+              onBlur={applyCode}
+              placeholder="CODE"
+            />
+            <button type="button" onClick={applyCode} disabled={!codeInput.trim()}
+              className="px-4 h-10 bg-secondary text-foreground text-sm font-bold rounded-lg hover:bg-secondary/70 transition-colors whitespace-nowrap disabled:opacity-50">
+              Apply
+            </button>
+          </div>
+          {codeStatus === "checking" && <p className="text-xs text-muted-foreground">Checking...</p>}
+          {codeStatus === "valid" && discountPercent > 0 && <p className="text-xs text-green-600 font-semibold">✓ {discountPercent}% discount applied</p>}
+          {codeStatus === "valid" && discountPercent === 0 && <p className="text-xs text-green-600 font-semibold">✓ Code applied</p>}
+          {codeStatus === "invalid" && <p className="text-xs text-red-600">Invalid code. Please try again.</p>}
+        </div>
+
         {/* Notes */}
         <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-2">
           <label className="font-heading font-black text-base text-foreground">
@@ -776,6 +828,12 @@ export function PrepOrderForm({ standardPriceCents, preGradePriceCents, slabCrac
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Slab Crack × {slabCrackCount}</span>
                 <span className="font-semibold">{fmt(slabCrackSubtotal)}</span>
+              </div>
+            )}
+            {discountCents > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span>{discountPercent}% off — {appliedCode}</span>
+                <span className="font-semibold">−{fmt(discountCents)}</span>
               </div>
             )}
             {taxCents > 0 && (

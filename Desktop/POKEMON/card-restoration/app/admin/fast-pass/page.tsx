@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/constants";
+import { thumbnail } from "@/lib/thumbnail";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -256,7 +257,7 @@ export default async function FastPassPage({
                             <div key={i} className="flex items-center gap-2">
                               {card.photo && (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={card.photo} alt={card.name} className="w-8 h-8 object-cover rounded border border-border shrink-0" />
+                                <img src={thumbnail(card.photo, 32)} alt={card.name} loading="lazy" decoding="async" className="w-8 h-8 object-cover rounded border border-border shrink-0" />
                               )}
                               <span className={`text-xs truncate ${card.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
                                 {card.name}

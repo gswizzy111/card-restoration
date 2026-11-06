@@ -29,7 +29,7 @@ export async function POST(
   // Update and read back the actual persisted value
   const { data: updated, error: updateErr } = await admin
     .from("cards")
-    .update({ completed: newState })
+    .update({ completed: newState, completed_at: newState ? new Date().toISOString() : null })
     .eq("id", id)
     .select("completed")
     .single();
