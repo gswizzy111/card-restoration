@@ -51,12 +51,12 @@ export default function RootLayout({
         <meta name="facebook-domain-verification" content="ihjnpqbitwq29e5kx3x0dujilxh1n9" />
         <script async src="https://www.googletagmanager.com/gtag/js?id=G-LSQXS277DY" />
         {/* Pages whose address holds a one-time link (confirm email, reset
-            password, admin reset, creator and accountant setup) aren't
+            password, admin reset, creator, accountant and support setup) aren't
             reported to analytics or the pixel: both record the full URL,
             token included. They stay off for the rest of that tab: starting
             them later would still report the token page as the referrer. */}
         <script dangerouslySetInnerHTML={{ __html: `
-          window.__noTrackPath = /^\\/(account\\/(confirm|reset-password)|admin\\/reset-password|affiliates\\/setup|accountant\\/setup)(\\/|$)/;
+          window.__noTrackPath = /^\\/(account\\/(confirm|reset-password)|admin\\/reset-password|affiliates\\/setup|accountant\\/setup|support\\/setup)(\\/|$)/;
           window.__noTrack = window.__noTrackPath.test(location.pathname);
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}

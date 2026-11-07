@@ -465,6 +465,7 @@ export default async function AdminPage({
       .select("order_id, created_at")
       .in("order_id", fulfillmentIds)
       .ilike("description", "%Cards Received%")
+      .neq("event_type", "support_note") // a support note can mention it too
       .order("created_at", { ascending: true })
     : { data: [] };
 

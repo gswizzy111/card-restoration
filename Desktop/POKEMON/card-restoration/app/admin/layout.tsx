@@ -12,17 +12,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const session = await getAdminSession();
   const role = session?.role ?? null;
   const isAdmin = role === "admin";
+  const isSupport = role === "support";
 
   let openCaseCount = 0;
   let openInquiryCount = 0;
   let emailProblemCount = 0;
-  if (isAdmin) {
+  if (isAdmin || isSupport) {
     const admin = createAdminClient();
+    // Support staff don't see internal cases, so they aren't in their count
+    const openCases = admin
+      .from("cases")
+      .select("id", { count: "exact", head: true })
+      .in("status", OPEN_CASE_STATUSES);
     const [{ count }, { count: inquiryCount }, problemCount] = await Promise.all([
-      admin
-        .from("cases")
-        .select("id", { count: "exact", head: true })
-        .in("status", OPEN_CASE_STATUSES),
+      isSupport ? openCases.neq("type", "internal") : openCases,
       admin
         .from("cases")
         .select("id", { count: "exact", head: true })
@@ -40,7 +43,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex min-h-screen">
-      <AdminNav openCaseCount={openCaseCount} openUpdateRequestCount={openInquiryCount} emailProblemCount={emailProblemCount} role={role} username={session?.username ?? null} />
+      <AdminNav openCaseCount={openCaseCount} openUpdateRequestCount={openInquiryCount} emailProblemCount={emailProblemCount} role={role} username={session?.name ?? session?.username ?? null} />
       <main className="flex-1 min-w-0 pt-14 lg:pt-0">
         <InquiryAlert count={openInquiryCount} />
         {children}

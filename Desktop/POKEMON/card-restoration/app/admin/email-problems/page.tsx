@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { isAdmin } from "@/lib/admin-auth";
+import { requireAdminOrSupport } from "@/lib/admin-auth";
 import { listEmailProblems } from "@/lib/email-problems";
 import { EmailProblemsClient } from "./email-problems-client";
 
@@ -8,7 +7,7 @@ export const dynamic = "force-dynamic";
 // Emails that didn't reach the customer, recorded from Resend's webhook
 // (lib/email-problems.ts)
 export default async function EmailProblemsPage() {
-  if (!(await isAdmin())) redirect("/admin/login");
+  const role = await requireAdminOrSupport();
 
   const problems = await listEmailProblems();
   // Addresses, like the nav badge and the cards
@@ -22,7 +21,7 @@ export default async function EmailProblemsPage() {
           Emails that didn&apos;t reach the customer: bounced, marked as spam, blocked by Resend or failed · {open} open · newest first · fixed ones stay listed for 90 days
         </p>
       </div>
-      <EmailProblemsClient initialProblems={problems} />
+      <EmailProblemsClient initialProblems={problems} searchPage={role === "support" ? "/admin/support" : "/admin"} />
     </div>
   );
 }

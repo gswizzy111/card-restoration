@@ -1,11 +1,11 @@
-import { cookies, headers } from "next/headers";
-import { redirect, notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { StatusUpdater, AddNoteForm, CopyLinkButton } from "./case-actions";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/constants";
 import { INQUIRY_TYPE, orderLabel } from "@/lib/card-inquiries";
-import { isAdmin } from "@/lib/admin-auth";
+import { requireAdminOrSupport } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,8 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  if (!(await isAdmin())) redirect("/admin/login");
+  const role = await requireAdminOrSupport();
+  const isSupportStaff = role === "support";
 
   const { id } = await params;
   const admin = createAdminClient();
@@ -40,6 +41,8 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   ]);
 
   if (!c) notFound();
+  // Internal cases are the admins' own to-do list
+  if (isSupportStaff && c.type === "internal") notFound();
 
   const isSupport = c.type === "support";
   const isInquiry = c.type === INQUIRY_TYPE;
@@ -133,7 +136,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
                     <span className="text-muted-foreground">
                       {`Placed ${new Date(order.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
                     </span>
-                    <Link href={`/admin/orders/${order.id}`} className="font-semibold text-primary hover:underline">Open order →</Link>
+                    <Link href={isSupportStaff ? `/admin/support/orders/${order.id}` : `/admin/orders/${order.id}`} className="font-semibold text-primary hover:underline">Open order →</Link>
                   </div>
                 ) : kitOrder ? (
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
@@ -142,7 +145,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
                     <span className="text-muted-foreground">
                       {`Placed ${new Date(kitOrder.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
                     </span>
-                    <Link href="/admin/shop-orders" className="font-semibold text-primary hover:underline">Open Kit Orders →</Link>
+                    <Link href={isSupportStaff ? `/admin/support?q=K${kitOrder.order_number}` : "/admin/shop-orders"} className="font-semibold text-primary hover:underline">{isSupportStaff ? "Look it up →" : "Open Kit Orders →"}</Link>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Order #{c.order_ref} wasn&apos;t found.</p>
@@ -192,6 +195,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
                     <span className="text-xs text-muted-foreground">
                       {new Date(note.created_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                     </span>
+                    {note.author && <span className="text-xs font-semibold text-foreground">{note.author}</span>}
                     {note.is_customer_visible && (
                       <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Emailed to customer</span>
                     )}
