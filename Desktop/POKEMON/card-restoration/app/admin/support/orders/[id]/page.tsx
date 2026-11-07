@@ -13,13 +13,17 @@ import { PROBLEM_LABELS, problemAdvice } from "@/lib/email-problem-labels";
 import { MONEY_EVENT_TYPES, etDate, statusLabel, tierLabel, withoutAmounts } from "@/lib/support-view";
 import { ResendConfirmationButton } from "@/app/admin/orders/[id]/resend-confirmation-button";
 import { SupportNoteForm } from "./support-note-form";
+import { RefundRequestPanel, type PanelCard, type PanelRequest } from "./refund-request-panel";
+import { cardGate, gateFacts, type GateCard } from "@/lib/work-gates";
+import { OPEN_REFUND_STATUSES, REQUEST_STATUS_LABELS, type RefundRequest } from "@/lib/refund-requests";
 
 export const dynamic = "force-dynamic";
 
 // The order as customer support sees it: where it is, the cards, the
 // customer's contact details and tracking. Nothing about money (totals,
 // payments, refunds, discounts, codes), card values or signed agreements, and
-// it changes nothing on the order: admins work from /admin/orders/[id].
+// it changes nothing on the order: admins work from /admin/orders/[id]. It
+// doesn't link to the customer's own tracking page, which shows prices.
 const ORDER_COLUMNS = [
   "id", "order_number", "customer_name", "customer_email", "customer_phone", "ship_from_address",
   "status", "restoration_tier", "created_at", "due_date", "customer_notes", "inbound_method",
@@ -81,10 +85,13 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const admin = createAdminClient();
 
-  const [{ data: orderRow }, { data: cardRows }, { data: eventRows }] = await Promise.all([
+  const [{ data: orderRow }, { data: cardRows }, { data: eventRows }, { data: requestRows }, { data: payment }] = await Promise.all([
     admin.from("orders").select(ORDER_COLUMNS).eq("id", id).maybeSingle(),
     admin.from("cards").select(CARD_COLUMNS).eq("order_id", id).order("created_at"),
     admin.from("order_events").select("id, event_type, description, is_customer_visible, metadata, created_at").eq("order_id", id).order("created_at", { ascending: false }),
+    admin.from("refund_requests").select("*").eq("order_id", id).order("created_at", { ascending: false }),
+    // Only whether there's anything left to refund, never the amounts
+    admin.from("orders").select("payment_status").eq("id", id).maybeSingle(),
   ]);
   const order = orderRow as unknown as Order | null;
   if (!order) notFound();
@@ -106,6 +113,34 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
     openProblemsFor(order.customer_email),
   ]);
 
+  // Refund requests: which cards could still be refunded (work not started,
+  // Terms Section 11), worked out here so no prices reach the page
+  const [{ data: gateRows }, facts] = await Promise.all([
+    admin.from("cards").select("id, card_name, estimated_value_cents, status, slab_removal_selected, cleaning_started_at, slab_opening_started_at, service_price_cents, discount_cents, tax_cents, refunded_cents").eq("order_id", id),
+    gateFacts(admin, id),
+  ]);
+  const panelCards: PanelCard[] = (gateRows ?? []).map((c) => ({
+    id: c.id,
+    name: c.card_name,
+    refundable: cardGate(c as GateCard, facts).refundableCents > 0,
+    refunded: c.status === "refunded",
+  }));
+  const panelRequests: PanelRequest[] = ((requestRows ?? []) as RefundRequest[]).map((r) => ({
+    id: r.id,
+    scope: r.scope,
+    cardNames: r.card_ids.map((cid) => cardName.get(cid) ?? "A card"),
+    reason: r.reason,
+    requestedBy: r.requested_by,
+    createdAt: etDate(r.created_at, true),
+    statusLabel: REQUEST_STATUS_LABELS[r.status].label,
+    statusCls: REQUEST_STATUS_LABELS[r.status].cls,
+    isOpen: OPEN_REFUND_STATUSES.includes(r.status),
+    decidedBy: r.decided_by,
+    decidedAt: r.decided_at ? etDate(r.decided_at, true) : null,
+    decisionNote: r.decision_note,
+  }));
+  const paid = payment?.payment_status === "paid" || payment?.payment_status === "partially_refunded";
+
   const address = order.ship_from_address;
   const stepIndex = STATUS_TIMELINE.indexOf(order.status as (typeof STATUS_TIMELINE)[number]);
   const done = cards.filter((c) => c.completed).length;
@@ -119,9 +154,6 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
         : withoutAmounts(e.description ?? e.event_type.replace(/_/g, " "));
       return { ...e, text };
     });
-  const customerViewUrl = order.customer_email
-    ? `/orders/${order.order_number}?email=${encodeURIComponent(order.customer_email)}`
-    : null;
 
   const box = "bg-white rounded-xl border border-border p-5 sm:p-6";
   const h2 = "font-heading font-black text-lg text-foreground mb-3";
@@ -132,11 +164,6 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <Link href="/admin/support" className="text-sm text-muted-foreground hover:text-primary transition-colors">← Order lookup</Link>
           <div className="flex flex-wrap items-center gap-2">
-            {customerViewUrl && (
-              <a href={customerViewUrl} target="_blank" rel="noopener noreferrer" className="h-9 px-3 flex items-center rounded-lg border border-border bg-white text-xs font-bold text-foreground hover:border-primary/40">
-                Customer&apos;s tracking page ↗
-              </a>
-            )}
             <ResendConfirmationButton orderId={order.id} />
             {role === "admin" && (
               <Link href={`/admin/orders/${order.id}`} className="h-9 px-3 flex items-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">Full admin view →</Link>
@@ -191,7 +218,9 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {c.tier && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary">{tierLabel(c.tier)}</span>}
-                          {c.status && c.status !== "active" && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 capitalize">{c.status.replace(/_/g, " ")}</span>}
+                          {c.status && c.status !== "active" && c.status !== "in_progress" && (
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full capitalize ${c.status === "refunded" || c.status === "cancelled" ? "bg-red-100 text-red-700" : "bg-secondary text-foreground"}`}>{c.status.replace(/_/g, " ")}</span>
+                          )}
                           {c.completed ? (
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">Done{c.completed_at ? ` ${etDate(c.completed_at)}` : ""}</span>
                           ) : stage ? (
@@ -316,8 +345,16 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
               )}
             </div>
 
+            <RefundRequestPanel
+              orderId={order.id}
+              requests={panelRequests}
+              cards={panelCards}
+              canRequest={paid}
+              cannotRequestReason={paid ? null : "There's nothing to refund on this order (it isn't paid, or it's already fully refunded)."}
+            />
+
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 leading-relaxed">
-              Refunds, payment questions, changing the order or the address, and damaged cards go to an admin. Add a note here saying what the customer asked.
+              Payment questions, changing the order or the address, and damaged cards go to an admin. Add a note here saying what the customer asked.
             </div>
           </div>
         </div>

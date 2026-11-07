@@ -26,6 +26,7 @@ const CAN = [
   "See inbound and return tracking with live carrier status",
   "Answer Update Requests and support cases (emails the customer) and change a case's status",
   "Open new support cases, add internal notes to an order, resend an order confirmation email",
+  "Ask for a refund on an order: it waits in Refund Requests on your Orders page until you approve or deny it",
   "See Email Problems (emails that bounced) and mark them fixed",
 ];
 
@@ -33,7 +34,7 @@ const CANNOT = [
   "Any money: order totals, payments, refunds, discounts, coupon and gift card codes",
   "Card values, insurance amounts, signed agreements and IP addresses",
   "Dashboards, Backlog, P&L, Statement and Tax Reports",
-  "Change order status, tiers, cards or addresses; buy labels; issue refunds",
+  "Change order status, tiers, cards or addresses; buy labels; issue a refund themselves",
   "Customers list and export, Email Blast, Products, Settings, Affiliates, Partners",
   "Internal cases, and deleting any case",
 ];

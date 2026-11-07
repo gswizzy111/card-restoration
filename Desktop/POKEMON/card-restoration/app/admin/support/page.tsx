@@ -154,16 +154,6 @@ export default async function SupportHomePage({ searchParams }: { searchParams: 
                         {k.tracking_number ? `${k.carrier ?? "Tracking"} ${k.tracking_number}` : "Not shipped yet"}
                         {k.shipped_at ? ` · shipped ${etDate(k.shipped_at)}` : ""}
                       </span>
-                      {k.customer_email && (
-                        <a
-                          href={`/orders/K${k.order_number}?email=${encodeURIComponent(k.customer_email)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-semibold text-primary hover:underline"
-                        >
-                          Customer&apos;s view ↗
-                        </a>
-                      )}
                     </div>
                   ))}
                 </div>

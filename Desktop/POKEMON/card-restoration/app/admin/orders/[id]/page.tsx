@@ -82,11 +82,13 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
 
   // Terms of Service v1.0 and later: signatures, consents and each card's work gates
   // ...and emails to this customer that didn't arrive (Resend's webhook, lib/email-problems.ts)
-  const [{ data: sigRows }, { data: consentRows }, facts, emailProblems] = await Promise.all([
+  const [{ data: sigRows }, { data: consentRows }, facts, emailProblems, { data: openRefundRequest }] = await Promise.all([
     admin.from("signatures").select("id, type, order_item_id, typed_full_name, signed_at, email_verified, terms_version_id").eq("order_id", id).order("signed_at"),
     admin.from("consents").select("type, granted, granted_at").eq("order_id", id).order("granted_at"),
     gateFacts(admin, id),
     openProblemsFor(order.customer_email),
+    // A refund support asked for, waiting on an admin (Refund Requests tab)
+    admin.from("refund_requests").select("requested_by, reason, created_at").eq("order_id", id).in("status", ["pending", "processing"]).maybeSingle(),
   ]);
   const versionIds = [...new Set((sigRows ?? []).map((s) => s.terms_version_id))];
   const { data: versionRows } = versionIds.length ? await admin.from("terms_versions").select("id, version").in("id", versionIds) : { data: [] };
@@ -174,6 +176,14 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
             <DeleteOrderButton orderId={order.id} orderNumber={order.order_number} />
           </div>
         </div>
+
+        {openRefundRequest && (
+          <Link href="/admin?tab=refunds" className="block rounded-xl border-2 border-amber-300 bg-amber-50 p-4 mb-3 hover:bg-amber-100 transition-colors">
+            <p className="font-heading font-black text-amber-900">💸 Refund requested by {openRefundRequest.requested_by}</p>
+            <p className="text-sm text-amber-800 mt-0.5 line-clamp-2">{openRefundRequest.reason}</p>
+            <p className="text-xs font-semibold text-amber-900 mt-1 underline">Approve or deny in Refund Requests →</p>
+          </Link>
+        )}
 
         {/* Refund banner — shown prominently when any refund has been issued */}
         {((order.refunded_cents as number) ?? 0) > 0 && (() => {

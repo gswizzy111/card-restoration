@@ -3,6 +3,8 @@ import { shippo } from "@/lib/shippo";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/constants";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { RefundRequestsTab } from "./refund-requests-tab";
+import { pendingRefundRequestCount } from "@/lib/refund-requests";
 import { RevenueChart } from "./revenue-chart";
 import { BacklogChart } from "./backlog-chart";
 import { CardSearch } from "./card-search";
@@ -129,7 +131,7 @@ export default async function AdminPage({
   await requireAdmin();
   const { q, tab, tier: tierFilter, period: shippedPeriod, notes: notesFilter, sort: sortMode, method: methodFilter } = await searchParams;
   const query = q?.trim() ?? "";
-  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : tab === "gift-cards" ? "gift-cards" : tab === "updates" ? "updates" : tab === "pregrades" ? "pregrades" : "orders";
+  const activeTab = tab === "fulfillment" ? "fulfillment" : tab === "shipped" ? "shipped" : tab === "awaiting" ? "awaiting" : tab === "insured" ? "insured" : tab === "videos" ? "videos" : tab === "gift-cards" ? "gift-cards" : tab === "updates" ? "updates" : tab === "pregrades" ? "pregrades" : tab === "refunds" ? "refunds" : "orders";
   const activePeriod = shippedPeriod === "week" ? "week" : shippedPeriod === "month" ? "month" : shippedPeriod === "all" ? "all" : "today";
 
   const admin = createAdminClient();
@@ -285,6 +287,8 @@ export default async function AdminPage({
 
   // Pre-grades paid for and sent, per order (lib/pregrade.ts)
   const pregradesPromise = pregradeCounts();
+  // Refunds support asked for, waiting on an admin (Refund Requests tab)
+  const refundRequestCount = await pendingRefundRequestCount(admin);
 
   // ── Fetch data for all tabs in parallel ───────────────────────────────────
   const [
@@ -607,6 +611,23 @@ export default async function AdminPage({
                 activeTab === "pregrades" ? "bg-indigo-100 text-indigo-700" : "bg-indigo-600 text-white"
               }`}>
                 {pregradeOrders?.length}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/admin?tab=refunds"
+            className={`px-3 py-2.5 text-sm font-semibold rounded-t-lg border border-b-0 relative z-10 shrink-0 whitespace-nowrap transition-colors flex items-center gap-2 ${
+              activeTab === "refunds"
+                ? "bg-white border-border text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Refund Requests
+            {refundRequestCount > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeTab === "refunds" ? "bg-red-100 text-red-700" : "bg-red-600 text-white"
+              }`}>
+                {refundRequestCount}
               </span>
             )}
           </Link>
@@ -1506,6 +1527,9 @@ export default async function AdminPage({
             )}
           </>
         )}
+
+        {/* ── REFUND REQUESTS TAB ── */}
+        {activeTab === "refunds" && <RefundRequestsTab />}
 
         {/* ── UPDATE REQUESTS TAB ── */}
         {activeTab === "updates" && (
