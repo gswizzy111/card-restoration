@@ -6,6 +6,7 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/admin",              label: "Orders",       icon: "📋" },
+  { href: "/admin/support",      label: "Customer Support", icon: "🎧" },
   { href: "/admin/email-problems", label: "Email Problems", icon: "📭" },
   { href: "/admin/backlog",      label: "Backlog",      icon: "📈" },
   { href: "/admin/services",     label: "Prep vs Restoration", icon: "⚖️" },
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { href: "/admin/gift-cards",     label: "Gift Cards",    icon: "🎁" },
   { href: "/admin/testimonials",     label: "Reviews",         icon: "⭐" },
   { href: "/admin/accountant",      label: "Accountant Access", icon: "🔐" },
+  { href: "/admin/support-team",    label: "Support Access", icon: "🪪" },
   { href: "/admin/checkout-errors", label: "Checkout Errors", icon: "🚨" },
 ];
 
@@ -38,10 +40,18 @@ const ACCOUNTANT_NAV_ITEMS = [
   { href: "/admin/tax", label: "Tax Reports", icon: "🧾" },
 ];
 
+// Customer support staff (see SUPPORT_PAGES in lib/admin-session.ts)
+const SUPPORT_NAV_ITEMS = [
+  { href: "/admin/support", label: "Order Lookup", icon: "🔎" },
+  { href: "/admin/cases?filter=open&type=inquiry", label: "Update Requests", icon: "🔔" },
+  { href: "/admin/cases", label: "Cases", icon: "🗂️" },
+  { href: "/admin/email-problems", label: "Email Problems", icon: "📭" },
+];
+
 function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, emailProblemCount, role }: { onNavigate?: () => void; openCaseCount?: number; openUpdateRequestCount?: number; emailProblemCount?: number; role?: string | null }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const items = role === "accountant" ? ACCOUNTANT_NAV_ITEMS : NAV_ITEMS;
+  const items = role === "accountant" ? ACCOUNTANT_NAV_ITEMS : role === "support" ? SUPPORT_NAV_ITEMS : NAV_ITEMS;
 
   // A filtered view of another page (Update Requests = cases of one type) is
   // active on that page with that type; the page's own item steps aside
@@ -55,7 +65,8 @@ function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, emailProb
     if (href === "/admin") return pathname === "/admin";
     if (href.includes("?")) return href === activeFilter;
     if (activeFilter?.startsWith(`${href}?`)) return false;
-    return pathname.startsWith(href);
+    // /admin/support is active on its own pages, not on /admin/support-team
+    return pathname === href || pathname.startsWith(`${href}/`);
   }
 
   // Red count badges: open cases, update requests waiting on a reply, and
@@ -89,7 +100,7 @@ function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, emailProb
           ) : null}
         </Link>
       ))}
-      <a
+      {role !== "support" && <a
         href="https://analytics.google.com"
         target="_blank"
         rel="noopener noreferrer"
@@ -98,7 +109,7 @@ function NavLinks({ onNavigate, openCaseCount, openUpdateRequestCount, emailProb
       >
         <span>📊</span>
         Analytics
-      </a>
+      </a>}
     </>
   );
 }
@@ -134,8 +145,8 @@ export function AdminNav({ openCaseCount, openUpdateRequestCount, emailProblemCo
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 flex flex-col gap-1">
           <NavLinks openCaseCount={openCaseCount} openUpdateRequestCount={openUpdateRequestCount} emailProblemCount={emailProblemCount} role={role} />
-          {role === "accountant" && (
-            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest px-3 pt-4">Accountant View</p>
+          {(role === "accountant" || role === "support") && (
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest px-3 pt-4">{role === "support" ? "Support View" : "Accountant View"}</p>
           )}
         </nav>
         <div className="px-3 py-4 border-t border-border">

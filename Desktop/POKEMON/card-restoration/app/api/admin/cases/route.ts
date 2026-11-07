@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
-import { isAdmin } from "@/lib/admin-auth";
+import { getAdminRole } from "@/lib/admin-auth";
 
 const CreateSchema = z.object({
   type: z.enum(["internal", "support"]),
@@ -13,23 +13,32 @@ const CreateSchema = z.object({
   order_ref: z.string().optional().default(""),
 });
 
-async function requireAdmin() {
-  return isAdmin();
+// Admins and support staff; support staff never see or open internal cases
+async function staffRole() {
+  const role = await getAdminRole();
+  return role === "admin" || role === "support" ? role : null;
 }
 
 export async function GET() {
-  if (!await requireAdmin()) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const role = await staffRole();
+  if (!role) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const admin = createAdminClient();
-  const { data, error } = await admin.from("cases").select("*").order("created_at", { ascending: false });
+  let query = admin.from("cases").select("*").order("created_at", { ascending: false });
+  if (role === "support") query = query.neq("type", "internal");
+  const { data, error } = await query;
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json(data);
 }
 
 export async function POST(request: Request) {
-  if (!await requireAdmin()) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const role = await staffRole();
+  if (!role) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json();
   const parsed = CreateSchema.safeParse(body);
   if (!parsed.success) return Response.json({ error: "Invalid data" }, { status: 400 });
+  if (role === "support" && parsed.data.type !== "support") {
+    return Response.json({ error: "Support staff can open customer cases only." }, { status: 403 });
+  }
 
   const d = parsed.data;
   const token = d.type === "support"

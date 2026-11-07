@@ -1,4 +1,4 @@
-import { isAdmin } from "@/lib/admin-auth";
+import { isAdminOrSupport } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 
@@ -12,7 +12,7 @@ const Body = z.object({
 // The Email Problems page: "Mark fixed" settles the address's problems the
 // admin saw; "Open again" reopens just that row.
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await isAdmin())) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isAdminOrSupport())) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   const parsed = Body.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success || !z.string().uuid().safeParse(id).success) return Response.json({ error: "Invalid request" }, { status: 400 });

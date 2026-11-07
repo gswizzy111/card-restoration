@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { ADMIN_SESSION_COOKIE, LEGACY_ADMIN_COOKIE, endAdminSession } from "@/lib/admin-session";
+import { ADMIN_SESSION_COOKIE, LEGACY_ADMIN_COOKIE, VIEW_AS_COOKIE, endAdminSession } from "@/lib/admin-session";
 
 // Signs out the admin or accountant session: ends it in the database and
 // clears the cookie. A 303 so the browser follows the form post with a GET,
@@ -12,5 +12,6 @@ export async function POST() {
   const res = new NextResponse(null, { status: 303, headers: { Location: "/admin/login" } });
   res.cookies.delete(ADMIN_SESSION_COOKIE);
   res.cookies.delete(LEGACY_ADMIN_COOKIE);
+  res.cookies.delete(VIEW_AS_COOKIE);
   return res;
 }

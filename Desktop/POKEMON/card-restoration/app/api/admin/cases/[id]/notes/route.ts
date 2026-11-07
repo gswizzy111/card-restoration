@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resend, fromEmail, businessName } from "@/lib/resend";
 import { INQUIRY_TYPE, escapeHtml, orderLabel } from "@/lib/card-inquiries";
 import { z } from "zod";
-import { isAdmin } from "@/lib/admin-auth";
+import { getAdminRole, staffName } from "@/lib/admin-auth";
 
 const NoteSchema = z.object({
   body: z.string().min(1),
@@ -10,7 +10,8 @@ const NoteSchema = z.object({
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await isAdmin())) {
+  const role = await getAdminRole();
+  if (role !== "admin" && role !== "support") {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -26,7 +27,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .select("type, title, customer_name, customer_email, order_ref")
     .eq("id", id)
     .single();
-  if (!caseRow) return Response.json({ error: "Case not found" }, { status: 404 });
+  // Support staff work customer cases only, not the internal to-do list
+  if (!caseRow || (role === "support" && caseRow.type === "internal")) {
+    return Response.json({ error: "Case not found" }, { status: 404 });
+  }
 
   const isInquiry = caseRow.type === INQUIRY_TYPE;
   const emailed = parsed.data.is_customer_visible && !!caseRow.customer_email;
@@ -71,7 +75,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { data: note, error } = await admin
     .from("case_notes")
-    .insert({ case_id: id, body: parsed.data.body, is_customer_visible: emailed })
+    .insert({ case_id: id, body: parsed.data.body, is_customer_visible: emailed, author: await staffName() })
     .select("id, created_at")
     .single();
 

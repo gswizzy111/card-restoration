@@ -40,7 +40,7 @@ export default function AdminForgotPasswordPage() {
       ) : (
         <form onSubmit={submit} className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Enter your admin username, or your email if you sign in as an accountant. We&apos;ll email you a reset link. Admins get it at the recovery email saved on their Profile page.
+            Enter your admin username, or your email if you sign in as an accountant or support. We&apos;ll email you a reset link. Admins get it at the recovery email saved on their Profile page.
           </p>
           <input
             type="text"

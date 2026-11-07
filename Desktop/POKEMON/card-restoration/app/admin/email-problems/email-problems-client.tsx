@@ -31,7 +31,9 @@ function ProblemLine({ p }: { p: EmailProblem }) {
   );
 }
 
-export function EmailProblemsClient({ initialProblems }: { initialProblems: EmailProblem[] }) {
+// `searchPage` is where "find their orders" goes: the admin Orders search, or
+// support's Order lookup
+export function EmailProblemsClient({ initialProblems, searchPage = "/admin" }: { initialProblems: EmailProblem[]; searchPage?: string }) {
   const router = useRouter();
   const [problems, setProblems] = useState(initialProblems);
   // router.refresh() hands down fresh rows (a problem that arrived meanwhile)
@@ -95,7 +97,7 @@ export function EmailProblemsClient({ initialProblems }: { initialProblems: Emai
                 </div>
               </div>
               <div className="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
-                <Link href={`/admin?q=${encodeURIComponent(email)}`} className="text-xs font-semibold text-primary hover:underline">
+                <Link href={`${searchPage}?q=${encodeURIComponent(email)}`} className="text-xs font-semibold text-primary hover:underline">
                   Find their orders
                 </Link>
                 <button

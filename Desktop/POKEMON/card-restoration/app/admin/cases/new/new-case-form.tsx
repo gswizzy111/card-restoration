@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function NewCaseForm() {
+// Support staff open customer cases only (supportOnly): no internal cases.
+export function NewCaseForm({ supportOnly = false }: { supportOnly?: boolean }) {
   const router = useRouter();
-  const [type, setType] = useState<"internal" | "support">("internal");
+  const [type, setType] = useState<"internal" | "support">(supportOnly ? "support" : "internal");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
@@ -43,7 +44,7 @@ export function NewCaseForm() {
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
 
       {/* Type toggle */}
-      <div className="bg-white rounded-xl border border-border p-6">
+      {!supportOnly && <div className="bg-white rounded-xl border border-border p-6">
         <p className={labelClass}>Case Type</p>
         <div className="flex gap-2 mt-1">
           {(["internal", "support"] as const).map((t) => (
@@ -60,7 +61,7 @@ export function NewCaseForm() {
         <p className="text-xs text-muted-foreground mt-2">
           {type === "internal" ? "Private note for your team — not shared with any customer." : "Linked to a customer — they get email updates when you add visible notes."}
         </p>
-      </div>
+      </div>}
 
       {/* Core fields */}
       <div className="bg-white rounded-xl border border-border p-6 flex flex-col gap-4">

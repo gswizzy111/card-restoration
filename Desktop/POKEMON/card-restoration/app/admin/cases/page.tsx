@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { INQUIRY_TYPE } from "@/lib/card-inquiries";
 import { PROBLEM_TYPE } from "@/lib/problem-reports";
-import { isAdmin } from "@/lib/admin-auth";
+import { requireAdminOrSupport } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +28,9 @@ const PRIORITY_STYLES: Record<string, string> = {
 };
 
 export default async function CasesPage({ searchParams }: { searchParams: Promise<{ filter?: string; type?: string }> }) {
-  if (!(await isAdmin())) redirect("/admin/login");
+  // Support staff see customer cases only, not the internal to-do list
+  const role = await requireAdminOrSupport();
+  const isSupportStaff = role === "support";
 
   const sp = await searchParams;
   const filter = sp.filter ?? "open";
@@ -41,6 +42,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
   if (filter === "open") query = query.in("status", ["open", "in_progress"]);
   else if (filter === "resolved") query = query.in("status", ["resolved", "closed"]);
 
+  if (isSupportStaff) query = query.neq("type", "internal");
   if (typeFilter === "internal") query = query.eq("type", "internal");
   else if (typeFilter === "support") query = query.eq("type", "support");
   else if (typeFilter === "inquiry") query = query.eq("type", INQUIRY_TYPE);
@@ -86,7 +88,7 @@ export default async function CasesPage({ searchParams }: { searchParams: Promis
           </div>
           <div className="flex flex-wrap gap-1.5">
             {filterBtn("All Types", "all", "type", typeFilter)}
-            {filterBtn("Internal", "internal", "type", typeFilter)}
+            {!isSupportStaff && filterBtn("Internal", "internal", "type", typeFilter)}
             {filterBtn("Support", "support", "type", typeFilter)}
             {filterBtn("Update Requests", "inquiry", "type", typeFilter)}
             {filterBtn("Problem Reports", "problem", "type", typeFilter)}

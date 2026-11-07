@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { ADMIN_SESSION_COOKIE, lookupAdminSession } from "@/lib/admin-session";
+import { ADMIN_SESSION_COOKIE, SUPPORT_APIS, SUPPORT_PAGES, VIEW_AS_COOKIE, lookupAdminSession, withViewAs } from "@/lib/admin-session";
 
 // ─── COMING SOON MODE ───────────────────────────────────────────────────────
 // Set to false and push to bring the full site back.
@@ -10,23 +10,25 @@ const COMING_SOON = false;
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Admin and accountant sign-in sessions (lib/admin-session.ts), looked up
+  // Admin, accountant and support sign-in sessions (lib/admin-session.ts), looked up
   // only on admin paths. Each page and route checks the role again itself.
   const onAdminPath = pathname === "/admin" || pathname.startsWith("/admin/") || pathname.startsWith("/api/admin/");
   // Signing in and recovering a forgotten password work without a session
   const isAuthRoute = ["/api/admin/login", "/api/admin/logout", "/api/admin/forgot-password", "/api/admin/reset-password"].includes(pathname);
   const isAuthPage = ["/admin/login", "/admin/forgot-password", "/admin/reset-password"].some((p) => pathname === p || pathname.startsWith(p + "/"));
+  // An admin in "View as Support" is treated as support everywhere
   const adminSession = onAdminPath
-    ? await lookupAdminSession(request.cookies.get(ADMIN_SESSION_COOKIE)?.value)
+    ? withViewAs(await lookupAdminSession(request.cookies.get(ADMIN_SESSION_COOKIE)?.value), request.cookies.get(VIEW_AS_COOKIE)?.value)
     : null;
   const isFullAdmin = adminSession?.role === "admin";
   const isAccountantSession = adminSession?.role === "accountant";
+  const isSupportSession = adminSession?.role === "support";
+  const within = (base: string) => pathname === base || pathname.startsWith(base + "/");
 
   // Accountants get the tax reports and nothing else: no orders, customers or
   // settings. Any other admin page sends them back to the tax reports, and any
   // other admin API refuses them (the tax page re-checks the account itself).
   if (isAccountantSession) {
-    const within = (base: string) => pathname === base || pathname.startsWith(base + "/");
     if (pathname.startsWith("/api/admin/") && !isAuthRoute && !within("/api/admin/tax/export")) {
       return NextResponse.json({ error: "Not available to accountants" }, { status: 403 });
     }
@@ -35,10 +37,22 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Customer support staff get order lookup, cases and email problems: no
+  // money, dashboards, settings or labels. Any other admin page sends them to
+  // order lookup, and any other admin API refuses them.
+  if (isSupportSession) {
+    if (pathname.startsWith("/api/admin/") && !isAuthRoute && !SUPPORT_APIS.some(within)) {
+      return NextResponse.json({ error: "Not available to support staff" }, { status: 403 });
+    }
+    if (within("/admin") && !isAuthPage && !SUPPORT_PAGES.some(within)) {
+      return NextResponse.redirect(new URL("/admin/support", request.url));
+    }
+  }
+
   // Admin APIs: each route checks its own role too; this backstop keeps a
   // route that forgets from being open to everyone.
   if (pathname.startsWith("/api/admin/")) {
-    const isAdminSession = isFullAdmin || isAccountantSession;
+    const isAdminSession = isFullAdmin || isAccountantSession || isSupportSession;
     if (!isAuthRoute && !isAdminSession) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -48,7 +62,7 @@ export async function middleware(request: NextRequest) {
   // Admin auth (always runs)
   if (pathname.startsWith("/admin")) {
     if (isAuthPage) return NextResponse.next();
-    if (!isFullAdmin && !isAccountantSession) {
+    if (!isFullAdmin && !isAccountantSession && !isSupportSession) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
     return NextResponse.next();

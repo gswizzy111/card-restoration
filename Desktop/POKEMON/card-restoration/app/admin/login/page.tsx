@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 
 export default function AdminLoginPage() {
-  const [mode, setMode] = useState<"admin" | "accountant">("admin");
+  const [mode, setMode] = useState<"admin" | "accountant" | "support">("admin");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,16 +15,16 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const body = mode === "accountant"
-      ? { email: email.trim(), password }
-      : { username: username.trim(), password };
+    const body = mode === "admin"
+      ? { username: username.trim(), password }
+      : { email: email.trim(), password, as: mode };
     const res = await fetch("/api/admin/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     if (res.ok) {
-      window.location.href = mode === "accountant" ? "/admin/tax" : "/admin";
+      window.location.href = mode === "accountant" ? "/admin/tax" : mode === "support" ? "/admin/support" : "/admin";
     } else {
       const data = await res.json().catch(() => ({}));
       setError(data.error ?? "Incorrect credentials.");
@@ -54,10 +54,17 @@ export default function AdminLoginPage() {
           >
             Accountant
           </button>
+          <button
+            type="button"
+            onClick={() => { setMode("support"); setError(""); }}
+            className={`flex-1 text-xs font-bold py-1.5 rounded-md transition-colors ${mode === "support" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground"}`}
+          >
+            Support
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {mode === "accountant" ? (
+          {mode !== "admin" ? (
             <input
               key="email"
               type="email"

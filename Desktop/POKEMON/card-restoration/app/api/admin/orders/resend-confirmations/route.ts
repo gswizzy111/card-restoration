@@ -1,17 +1,22 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendOrderConfirmationEmail } from "@/lib/confirmation-email";
-import { isAdmin } from "@/lib/admin-auth";
+import { getAdminRole } from "@/lib/admin-auth";
 
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  if (!(await isAdmin())) {
+  const role = await getAdminRole();
+  if (role !== "admin" && role !== "support") {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json().catch(() => ({}));
   // Optional: pass specific order IDs, or default to today's paid orders
   const orderIds: string[] | undefined = Array.isArray(body.orderIds) ? body.orderIds : undefined;
+  // Support staff resend one order's confirmation at a time, never the day's batch
+  if (role === "support" && orderIds?.length !== 1) {
+    return Response.json({ error: "Resend one order at a time." }, { status: 403 });
+  }
 
   const admin = createAdminClient();
 
