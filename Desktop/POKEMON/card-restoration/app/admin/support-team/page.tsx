@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { ViewAsButton } from "../view-as-button";
 
 type Member = {
   id: string;
@@ -103,6 +104,9 @@ export default function SupportTeamPage() {
           <p className="text-sm text-muted-foreground mt-1">
             Give your customer support team their own logins. Each person gets an email to set a password, then signs in on the admin login under <strong>Support</strong>.
           </p>
+          <ViewAsButton to="support" className="mt-4 h-10 px-5 rounded-lg bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 disabled:opacity-60">
+            👀 View as Support: see exactly what they see
+          </ViewAsButton>
         </div>
 
         <div className="bg-white rounded-xl border border-border p-6 mb-6">

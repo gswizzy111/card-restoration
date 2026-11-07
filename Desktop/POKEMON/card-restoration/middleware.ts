@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { ADMIN_SESSION_COOKIE, SUPPORT_APIS, SUPPORT_PAGES, lookupAdminSession } from "@/lib/admin-session";
+import { ADMIN_SESSION_COOKIE, SUPPORT_APIS, SUPPORT_PAGES, VIEW_AS_COOKIE, lookupAdminSession, withViewAs } from "@/lib/admin-session";
 
 // ─── COMING SOON MODE ───────────────────────────────────────────────────────
 // Set to false and push to bring the full site back.
@@ -16,8 +16,9 @@ export async function middleware(request: NextRequest) {
   // Signing in and recovering a forgotten password work without a session
   const isAuthRoute = ["/api/admin/login", "/api/admin/logout", "/api/admin/forgot-password", "/api/admin/reset-password"].includes(pathname);
   const isAuthPage = ["/admin/login", "/admin/forgot-password", "/admin/reset-password"].some((p) => pathname === p || pathname.startsWith(p + "/"));
+  // An admin in "View as Support" is treated as support everywhere
   const adminSession = onAdminPath
-    ? await lookupAdminSession(request.cookies.get(ADMIN_SESSION_COOKIE)?.value)
+    ? withViewAs(await lookupAdminSession(request.cookies.get(ADMIN_SESSION_COOKIE)?.value), request.cookies.get(VIEW_AS_COOKIE)?.value)
     : null;
   const isFullAdmin = adminSession?.role === "admin";
   const isAccountantSession = adminSession?.role === "accountant";

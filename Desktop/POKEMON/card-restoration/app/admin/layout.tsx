@@ -6,6 +6,7 @@ import { pendingRefundRequestCount } from "@/lib/refund-requests";
 import { getAdminSession } from "@/lib/admin-auth";
 import { INQUIRY_TYPE, OPEN_CASE_STATUSES } from "@/lib/card-inquiries";
 import { openProblemCount } from "@/lib/email-problems";
+import { ViewAsButton } from "./view-as-button";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex min-h-screen">
       <AdminNav openCaseCount={openCaseCount} openUpdateRequestCount={openInquiryCount} emailProblemCount={emailProblemCount} role={role} username={session?.name ?? session?.username ?? null} />
       <main className="flex-1 min-w-0 pt-14 lg:pt-0">
+        {session?.preview && (
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-gray-900 px-6 py-3 text-sm font-semibold text-white">
+            <span>👀 You&apos;re seeing the admin exactly as your support team does. Anything you do here is signed &ldquo;{session.username} (admin, viewing as support)&rdquo;.</span>
+            <ViewAsButton to="admin" className="shrink-0 h-8 px-3 rounded-lg bg-white text-gray-900 text-xs font-bold disabled:opacity-60">
+              Exit support view
+            </ViewAsButton>
+          </div>
+        )}
         {isAdmin && <RefundRequestAlert count={refundRequestCount} />}
         <InquiryAlert count={openInquiryCount} />
         {children}

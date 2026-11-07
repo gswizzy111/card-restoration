@@ -1,15 +1,22 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ADMIN_SESSION_COOKIE, lookupAdminSession, type AdminRole, type AdminSession } from "@/lib/admin-session";
+import { ADMIN_SESSION_COOKIE, VIEW_AS_COOKIE, lookupAdminSession, withViewAs, type AdminRole, type AdminSession } from "@/lib/admin-session";
 
 export type { AdminRole } from "@/lib/admin-session";
 
 /** The admin, accountant or support member signed in on this request, if any (looked up once per request). */
+// An admin in "View as Support" gets the support role here, like everywhere else.
 export const getAdminSession = cache(async (): Promise<AdminSession | null> => {
   const jar = await cookies();
-  return lookupAdminSession(jar.get(ADMIN_SESSION_COOKIE)?.value);
+  return withViewAs(await lookupAdminSession(jar.get(ADMIN_SESSION_COOKIE)?.value), jar.get(VIEW_AS_COOKIE)?.value);
 });
+
+/** The signed-in person as they really are, ignoring "View as Support". */
+export async function getRealAdminSession(): Promise<AdminSession | null> {
+  const jar = await cookies();
+  return lookupAdminSession(jar.get(ADMIN_SESSION_COOKIE)?.value);
+}
 
 export async function getAdminRole(): Promise<AdminRole | null> {
   return (await getAdminSession())?.role ?? null;
@@ -57,6 +64,7 @@ export async function requireAdminOrSupport(): Promise<"admin" | "support"> {
 export async function staffName(): Promise<string | null> {
   const session = await getAdminSession();
   if (!session) return null;
+  if (session.preview) return `${session.username} (admin, viewing as support)`;
   return session.role === "support" ? `${session.name ?? session.username} (support)` : session.username;
 }
 

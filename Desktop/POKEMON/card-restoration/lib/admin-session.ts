@@ -27,7 +27,21 @@ export type AdminSession = {
   /** support_access.id and the person's name (support staff only) */
   supportId?: string;
   name?: string;
+  /** An admin looking at the admin as support sees it ("View as Support") */
+  preview?: boolean;
 };
+
+/**
+ * "View as Support": an admin can switch their own session to see exactly
+ * what support staff see. The cookie only ever narrows an admin session to
+ * the support role; on any other session it does nothing. It ends with the
+ * browser, on sign-out, or from the banner's Exit button.
+ */
+export const VIEW_AS_COOKIE = "admin_view_as";
+export function withViewAs(session: AdminSession | null, viewAs: string | null | undefined): AdminSession | null {
+  if (session?.role !== "admin" || viewAs !== "support") return session;
+  return { ...session, role: "support", name: session.username, preview: true };
+}
 
 /** Who signed in: the argument createAdminSession and endSessionsFor take. */
 export type SessionOwner =

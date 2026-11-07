@@ -5,6 +5,7 @@ import { likeExact } from "@/lib/like-exact";
 import { INQUIRY_TYPE, OPEN_CASE_STATUSES, orderLabel } from "@/lib/card-inquiries";
 import { PROBLEM_TYPE } from "@/lib/problem-reports";
 import { openProblemCount } from "@/lib/email-problems";
+import { ViewAsButton } from "@/app/admin/view-as-button";
 import { cleanSearch, etDate, orderNumberFrom, statusLabel, tierLabel } from "@/lib/support-view";
 
 export const dynamic = "force-dynamic";
@@ -89,8 +90,13 @@ export default async function SupportHomePage({ searchParams }: { searchParams: 
         <div className="mb-6">
           <h1 className="font-heading font-black text-3xl text-foreground">Customer Support</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Look up an order to answer a customer.{role === "admin" ? " This is what your support team sees." : ""}
+            Look up an order to answer a customer.
           </p>
+          {role === "admin" && (
+            <ViewAsButton to="support" className="mt-3 h-9 px-4 rounded-lg bg-gray-900 text-white text-sm font-bold disabled:opacity-60">
+              👀 View as Support
+            </ViewAsButton>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
