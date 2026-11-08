@@ -51,7 +51,7 @@ const TRACKING_BADGE: Record<string, { label: string; cls: string }> = {
 };
 
 type Order = {
-  id: string; order_number: number; customer_name: string | null; customer_email: string | null; customer_phone: string | null;
+  id: string; order_number: string; customer_name: string | null; customer_email: string | null; customer_phone: string | null;
   ship_from_address: Record<string, string> | null; status: string; restoration_tier: string | null; created_at: string;
   due_date: string | null; customer_notes: string | null; inbound_method: string | null; inbound_carrier: string | null;
   inbound_service_level: string | null; inbound_tracking_number: string | null; tracking_number: string | null;

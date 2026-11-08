@@ -39,12 +39,19 @@ export function cleanSearch(q: string | undefined) {
   return (q ?? "").replace(/[^\p{L}\p{N}\s@.'+\-_]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 100);
 }
 
-/** "R1234", "#1234" or "1234" → 1234; "K56" → kit order 56. */
-export function orderNumberFrom(q: string): { restoration?: number; kit?: number } {
+/**
+ * An order number typed into the search. Restoration orders are numbered
+ * "CD-2082" (orders.order_number is text) and kit orders 566, shown as K566.
+ * "CD-2082", "cd2082" or "CD 2082" → CD-2082; "K566" → kit 566; a bare
+ * "2082" or "#2082" could be either, so both are looked up.
+ */
+export function orderNumberFrom(q: string): { restoration?: string; kit?: number } {
   const kit = /^k\s?(\d{1,9})$/i.exec(q);
   if (kit) return { kit: Number(kit[1]) };
-  const r = /^(?:r|#)?\s?(\d{1,9})$/i.exec(q);
-  return r ? { restoration: Number(r[1]) } : {};
+  const cd = /^cd[\s-]?(\d{1,9})$/i.exec(q);
+  if (cd) return { restoration: `CD-${cd[1]}` };
+  const bare = /^#?\s?(\d{1,9})$/.exec(q);
+  return bare ? { restoration: `CD-${bare[1]}`, kit: Number(bare[1]) } : {};
 }
 
 export function etDate(iso: string | null | undefined, withTime = false) {
