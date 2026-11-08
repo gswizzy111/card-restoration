@@ -25,7 +25,7 @@ const STATUS_STYLES: Record<string, string> = {
 const ORDER_COLUMNS = "id, order_number, customer_name, customer_email, status, restoration_tier, created_at";
 const LIMIT = 50;
 
-type OrderRow = { id: string; order_number: number; customer_name: string | null; customer_email: string | null; status: string; restoration_tier: string | null; created_at: string };
+type OrderRow = { id: string; order_number: string; customer_name: string | null; customer_email: string | null; status: string; restoration_tier: string | null; created_at: string };
 type KitRow = { id: string; order_number: number; customer_name: string | null; customer_email: string | null; status: string; tracking_number: string | null; carrier: string | null; created_at: string; shipped_at: string | null };
 
 /**
@@ -55,7 +55,7 @@ export default async function SupportHomePage({ searchParams }: { searchParams: 
       admin.from("orders").select(ORDER_COLUMNS).ilike("customer_name", pattern).order("created_at", { ascending: false }).limit(LIMIT),
       admin.from("orders").select(ORDER_COLUMNS).ilike("customer_email", pattern).order("created_at", { ascending: false }).limit(LIMIT),
       admin.from("cards").select("order_id").ilike("card_name", pattern).limit(LIMIT),
-      n.kit ?? n.restoration ? admin.from("shop_orders").select(KIT_COLUMNS).eq("order_number", (n.kit ?? n.restoration)!) : { data: [] },
+      n.kit ? admin.from("shop_orders").select(KIT_COLUMNS).eq("order_number", n.kit) : { data: [] },
       admin.from("shop_orders").select(KIT_COLUMNS).ilike("customer_name", pattern).order("created_at", { ascending: false }).limit(LIMIT),
       admin.from("shop_orders").select(KIT_COLUMNS).ilike("customer_email", pattern).order("created_at", { ascending: false }).limit(LIMIT),
     ]);
@@ -111,7 +111,7 @@ export default async function SupportHomePage({ searchParams }: { searchParams: 
             id="q"
             name="q"
             defaultValue={query}
-            placeholder="Order number (R1234 or K56), customer name, email or card name"
+            placeholder="Order number (CD-2082 or K566), customer name, email or card name"
             className="flex-1 min-w-0 h-11 px-4 rounded-lg border border-border bg-white text-sm outline-none focus:border-primary transition-colors"
             autoFocus
           />
