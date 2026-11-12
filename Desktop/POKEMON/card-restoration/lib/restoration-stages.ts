@@ -15,12 +15,21 @@ export const STAGE_INFO: Record<string, { name: string; explanation: string }> =
   "Ready for Slab Crack": { name: "Slab cracking", explanation: "We're carefully removing your card from its graded slab." },
   "Humidor": { name: "Humidity treatment", explanation: "Your card is in a controlled humidity environment to relax the card stock." },
   "Humidity Press": { name: "Humidity press", explanation: "Your card is being gently pressed under humidity to work out bends and creases." },
-  "Book": { name: "Pressing", explanation: "Your card is being pressed flat." },
+  "Book": { name: "Drying", explanation: "Your card is drying." },
   "Heat Press": { name: "Heat press", explanation: "A careful heat press pass to finish flattening and surface work." },
   "Clamp Work": { name: "Clamp work", explanation: "Your card is clamped for detailed edge and corner work." },
   "Book with Weights": { name: "Weighted press", explanation: "Your card is under weights for a final flattening." },
   "Final Dry": { name: "Final drying", explanation: "Your card is drying and settling before final inspection." },
 };
+
+// What the admin stage buttons read when it differs from the internal name.
+// "Book" stays the stored name so stage events already recorded still match.
+const ADMIN_LABELS: Record<string, string> = { "Book": "Drying" };
+
+/** The stage's name on the admin buttons. */
+export function adminStageLabel(stage: string) {
+  return ADMIN_LABELS[stage] ?? stage;
+}
 
 /** "Humidity treatment", or "Round 2 — humidity treatment" after the first round. */
 export function friendlyStage(stage: string, round = 1) {

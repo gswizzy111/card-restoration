@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CardCompletionToggle } from "./card-completion-toggle";
 
-import { STAGES } from "@/lib/restoration-stages";
+import { STAGES, adminStageLabel } from "@/lib/restoration-stages";
 
 export { STAGES };
 
@@ -104,7 +104,7 @@ export function RestorationStageUpdater({
                       key={stage}
                       onClick={() => setStage(card.id, stage)}
                       disabled={loading !== null}
-                      title={stage}
+                      title={adminStageLabel(stage)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors disabled:opacity-60 ${
                         isCurrent
                           ? "bg-purple-600 text-white border-purple-600"
@@ -118,7 +118,7 @@ export function RestorationStageUpdater({
                       }`}>
                         {isDone ? "✓" : i + 1}
                       </span>
-                      {loading === key ? "…" : stage}
+                      {loading === key ? "…" : adminStageLabel(stage)}
                     </button>
                   );
                 })}
