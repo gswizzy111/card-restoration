@@ -8,7 +8,13 @@ export const businessName =
  * people to write to this address. */
 export const replyToAddress = process.env.CONTACT_EMAIL?.trim() || "thecarddoc1@gmail.com";
 
-const client = new Resend(process.env.RESEND_API_KEY);
+// The SDK throws when it is constructed without a key, which stops any build
+// that has no RESEND_API_KEY (Netlify deploy previews) at the first route that
+// imports this file. Without a key the client still loads; sends then fail
+// with Resend's own "API key is invalid" error.
+const apiKey = process.env.RESEND_API_KEY?.trim();
+if (!apiKey) console.warn("RESEND_API_KEY is not set: emails will not send.");
+const client = new Resend(apiKey || "re_missing_api_key");
 // Every email gets that reply-to unless it sets its own (a problem report
 // replies to the customer, for example). The SDK's send() calls create(), so
 // patching create covers both, for single emails and batches.
