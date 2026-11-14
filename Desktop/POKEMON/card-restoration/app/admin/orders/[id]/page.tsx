@@ -35,6 +35,7 @@ import { openProblemsFor } from "@/lib/email-problems";
 import { PROBLEM_LABELS, problemAdvice } from "@/lib/email-problem-labels";
 import { AgreementsPanel, type PanelCard } from "./agreements-panel";
 import { cardGate, gateFacts, type GateCard } from "@/lib/work-gates";
+import { labelHref } from "@/lib/label-link";
 
 export const dynamic = "force-dynamic";
 
@@ -751,7 +752,7 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 </p>
                 {order.inbound_method === "buy_label" && order.shipping_label_url && (
                   <a
-                    href={order.shipping_label_url as string}
+                    href={labelHref(order.id)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors"

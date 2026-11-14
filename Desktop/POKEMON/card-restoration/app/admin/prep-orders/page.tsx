@@ -4,6 +4,7 @@ import { thumbnail } from "@/lib/thumbnail";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
+import { labelHref } from "@/lib/label-link";
 
 export const dynamic = "force-dynamic";
 
@@ -277,7 +278,7 @@ export default async function PrepOrdersPage({
                     </div>
                     {hasLabel && (
                       <a
-                        href={order.shipping_label_url!}
+                        href={labelHref(order.id)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
