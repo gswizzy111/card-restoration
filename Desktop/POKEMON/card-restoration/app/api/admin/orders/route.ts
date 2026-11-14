@@ -62,6 +62,7 @@ export async function POST(request: Request) {
   // Generate prepaid Shippo label for online + buy_label orders
   let shippingLabelUrl: string | null = null;
   let inboundTrackingNumber: string | null = null;
+  let inboundTransactionId: string | null = null;
   let labelWarning: string | null = null;
 
   if (d.order_type === "online" && d.inbound_method === "buy_label" && d.street1 && d.city && d.state && d.zip) {
@@ -130,6 +131,7 @@ export async function POST(request: Request) {
         if (transaction.status === "SUCCESS" && transaction.label_url) {
           shippingLabelUrl = transaction.label_url as string;
           inboundTrackingNumber = (transaction.tracking_number as string) ?? null;
+          inboundTransactionId = (transaction.object_id as string) ?? null;
         } else {
           console.error("Shippo label purchase failed:", transaction.messages ?? transaction);
           labelWarning = "Label generation failed — order created, but generate label manually.";
@@ -185,6 +187,7 @@ export async function POST(request: Request) {
   }
   if (shippingLabelUrl) orderPayload.shipping_label_url = shippingLabelUrl;
   if (inboundTrackingNumber) orderPayload.inbound_tracking_number = inboundTrackingNumber;
+  if (inboundTransactionId) orderPayload.inbound_shippo_transaction_id = inboundTransactionId;
 
   const { data: order, error: orderErr } = await admin
     .from("orders")

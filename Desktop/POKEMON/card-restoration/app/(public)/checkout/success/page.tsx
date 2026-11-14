@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 import { PurchasePixel } from "./purchase-pixel";
+import { labelHref } from "@/lib/label-link";
 
 export default async function CheckoutSuccessPage({
   searchParams,
@@ -93,7 +94,7 @@ export default async function CheckoutSuccessPage({
                   Print this label, attach it to your package, and drop it off at the carrier.
                 </p>
                 <a
-                  href={order.shipping_label_url}
+                  href={labelHref(order.id)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"

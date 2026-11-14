@@ -111,6 +111,7 @@ export async function POST(
     .from("orders")
     .update({
       shipping_label_url: labelUrl,
+      ...(typeof tx.object_id === "string" ? { inbound_shippo_transaction_id: tx.object_id } : {}),
       ...(trackingNumber ? { inbound_tracking_number: trackingNumber } : {}),
     })
     .eq("id", id);
@@ -129,6 +130,7 @@ export async function POST(
   if (order.customer_email) {
     try {
       await sendOrderConfirmationEmail({
+        id: order.id as string,
         order_number: order.order_number as string,
         customer_name: (order.customer_name as string | null) ?? null,
         customer_email: order.customer_email as string,

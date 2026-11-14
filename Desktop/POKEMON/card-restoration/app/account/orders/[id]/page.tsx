@@ -10,6 +10,7 @@ import type { OrderStatus } from "@/lib/constants";
 import Link from "next/link";
 import { LogoutButton } from "../../logout-button";
 import { CardEditor } from "./card-editor";
+import { labelHref } from "@/lib/label-link";
 
 export const dynamic = "force-dynamic";
 
@@ -216,7 +217,7 @@ export default async function AccountOrderPage({
                 <h2 className="font-heading font-black text-sm uppercase tracking-wide text-muted-foreground mb-3">Shipping Label</h2>
                 <p className="text-xs text-muted-foreground mb-3">Print and attach to your package.</p>
                 <a
-                  href={order.shipping_label_url}
+                  href={labelHref(order.id)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 bg-primary text-primary-foreground text-xs font-bold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"

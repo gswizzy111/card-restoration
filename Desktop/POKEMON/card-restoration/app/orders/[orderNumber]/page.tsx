@@ -12,6 +12,7 @@ import { AddCardsSection } from "./add-cards-section";
 import type { RestorationTierId } from "@/lib/restoration-tiers";
 import { ReportProblem } from "@/components/orders/report-problem";
 import { FileDown } from "lucide-react";
+import { labelHref } from "@/lib/label-link";
 
 function EmailMismatch() {
   return (
@@ -436,7 +437,7 @@ export default async function OrderDetailPage({
           <h2 className="font-heading font-black text-lg text-blue-900 mb-2">Your Prepaid Shipping Label</h2>
           <p className="text-sm text-blue-800 mb-4">Print this label, attach it to your package, and drop it off at the carrier.</p>
           <a
-            href={order.shipping_label_url}
+            href={labelHref(order.id)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"

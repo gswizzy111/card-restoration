@@ -548,6 +548,7 @@ export async function POST(request: Request) {
     let shippingLabelUrl: string | null = null;
     let inboundCustomsFormUrl: string | null = null;
     let inboundTrackingNumber: string | null = null;
+    let inboundTransactionId: string | null = null;
     let inboundTrackingUrl: string | null = null;
     let inboundEta: string | null = null;
     // Why the prepaid label could not be bought, for the admin (order timeline + email)
@@ -595,6 +596,7 @@ export async function POST(request: Request) {
         if (transaction.status === "SUCCESS" && transaction.label_url) {
           shippingLabelUrl = transaction.label_url as string;
           inboundTrackingNumber = (transaction.tracking_number as string) ?? null;
+          inboundTransactionId = (transaction.object_id as string) ?? null;
           inboundTrackingUrl = (transaction.tracking_url_provider as string) ?? null;
           // For international shipments, extract customs form URL
           if (isInternational) {
@@ -630,6 +632,8 @@ export async function POST(request: Request) {
     if (paidIntent) updatePayload.stripe_payment_intent_id = paidIntent;
     if (shippingLabelUrl) updatePayload.shipping_label_url = shippingLabelUrl;
     if (inboundTrackingNumber) updatePayload.inbound_tracking_number = inboundTrackingNumber;
+    // Lets the permanent label link re-sign the label later (lib/label-link.ts)
+    if (inboundTransactionId) updatePayload.inbound_shippo_transaction_id = inboundTransactionId;
     if (inboundCustomsFormUrl) updatePayload.inbound_customs_form_url = inboundCustomsFormUrl;
 
     // Save insurance, signature, slab crack, and instagram so the admin breakdown can display them
