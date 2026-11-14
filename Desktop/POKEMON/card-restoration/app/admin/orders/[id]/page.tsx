@@ -35,7 +35,7 @@ import { openProblemsFor } from "@/lib/email-problems";
 import { PROBLEM_LABELS, problemAdvice } from "@/lib/email-problem-labels";
 import { AgreementsPanel, type PanelCard } from "./agreements-panel";
 import { cardGate, gateFacts, type GateCard } from "@/lib/work-gates";
-import { labelHref } from "@/lib/label-link";
+import { labelHref, labelExpiresAt } from "@/lib/label-link";
 
 export const dynamic = "force-dynamic";
 
@@ -765,6 +765,13 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
                 <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
                   <p className="text-xs font-bold text-amber-800">⚠️ Label not generated</p>
                   <p className="text-xs text-amber-700 mt-0.5">The Shippo purchase failed at checkout time. Customer paid but has no label.</p>
+                  <RegenerateLabelButton orderId={order.id} />
+                </div>
+              )}
+              {order.inbound_method === "buy_label" && order.shipping_label_url && (labelExpiresAt(order.shipping_label_url as string)?.getTime() ?? Infinity) < Date.now() && (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-xs font-bold text-amber-800">⚠️ Label link expired</p>
+                  <p className="text-xs text-amber-700 mt-0.5">Shippo&apos;s link to this label stopped working, so the customer can&apos;t open it. Regenerate to buy a new label and email it to them.</p>
                   <RegenerateLabelButton orderId={order.id} />
                 </div>
               )}
