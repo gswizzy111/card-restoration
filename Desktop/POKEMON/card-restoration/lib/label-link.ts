@@ -14,6 +14,12 @@ export function labelHref(orderId: string, absolute = false) {
   return `${appUrl}${path}`;
 }
 
+/** Whether a signed Shippo link has stopped working. */
+export function labelExpired(url: string) {
+  const at = labelExpiresAt(url);
+  return !!at && at.getTime() <= Date.now();
+}
+
 /** When a signed Shippo link stops working, or null when it doesn't say. */
 export function labelExpiresAt(url: string): Date | null {
   const m = /[?&]Expires=(\d+)/.exec(url);
@@ -87,6 +93,8 @@ export async function workingLabelUrl(orderId: string): Promise<string | null> {
   if (!expires || expires.getTime() > Date.now() + 60 * 60 * 1000) return order.shipping_label_url;
 
   const tx = await findTransaction(order);
+  // Shippo hands back the same link for some labels instead of re-signing
+  // it; the caller then tells the customer the label has expired.
   if (!tx?.label_url) return order.shipping_label_url; // nothing better to offer
   await admin
     .from("orders")
